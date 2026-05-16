@@ -38,137 +38,174 @@ jobs:
       - name: Build Next.js
         run: pnpm build
 
-      - name: Prepare deploy package
+      - name: Deploy via FTP
         shell: python
+        env:
+          FTP_HOST: ${{ secrets.FTP_HOST }}
+          FTP_USER: ${{ secrets.FTP_USERNAME }}
+          FTP_PASS: ${{ secrets.FTP_PASSWORD }}
         run: |
-          import os, shutil, re, json, glob
+          import os, re, glob, ftplib, shutil, time, hashlib
+          from io import BytesIO
 
           base = os.getcwd()
-          deploy = os.path.join(base, 'deploy')
+          FTP_HOST = os.environ['FTP_HOST']
+          FTP_USER = os.environ['FTP_USER']
+          FTP_PASS = os.environ['FTP_PASS']
+          REMOTE_DIR = '/httpdocs'
 
-          # Dynamically find the standalone directory (path varies by workspace root detection)
+          # --- Find standalone dir ---
           server_candidates = glob.glob(os.path.join(base, '.next', 'standalone', '**', 'server.js'), recursive=True)
           if not server_candidates:
-              raise FileNotFoundError(f"server.js not found in .next/standalone — build may have failed")
+              raise FileNotFoundError('server.js not found in .next/standalone')
           standalone = os.path.dirname(server_candidates[0])
-          print(f"Found standalone at: {standalone}")
+          print(f'Standalone: {standalone}')
 
-          # Copy standalone .next into deploy/.next
-          src_next = os.path.join(standalone, '.next')
-          dst_next = os.path.join(deploy, '.next')
-          shutil.copytree(src_next, dst_next)
-
-          # Copy static into deploy/.next/static
+          # --- Copy static into standalone .next ---
           static_src = os.path.join(base, '.next', 'static')
-          static_dst = os.path.join(dst_next, 'static')
+          static_dst = os.path.join(standalone, '.next', 'static')
           if os.path.isdir(static_dst):
               shutil.rmtree(static_dst)
           shutil.copytree(static_src, static_dst)
+          print('Static assets merged into standalone')
 
-          # Copy public
-          shutil.copytree(os.path.join(base, 'public'), os.path.join(deploy, 'public'))
-
-          # Copy web.config with deploy timestamp (triggers iisnode restart)
-          import time as _time
-          wc_src = os.path.join(base, 'web.config')
-          with open(wc_src, 'r') as f:
-              wc = f.read()
-          wc = re.sub(r'\s*<!-- deployed:.*?-->\s*', '', wc)
-          wc = wc.replace('</configuration>', f'  <!-- deployed: {_time.strftime("%Y-%m-%d %H:%M:%S")} -->\n</configuration>')
-          with open(os.path.join(deploy, 'web.config'), 'w') as f:
-              f.write(wc)
-
-          # Copy iisnode-entry.js (required entry point for IIS)
-          shutil.copy2(os.path.join(base, 'iisnode-entry.js'), deploy)
-
-          # Copy node_modules from standalone root
-          src_nm = os.path.join(standalone, 'node_modules')
-          if os.path.isdir(src_nm):
-              shutil.copytree(src_nm, os.path.join(deploy, 'node_modules'))
-
-          # Copy package.json from standalone
-          pkg = os.path.join(standalone, 'package.json')
-          if os.path.isfile(pkg):
-              shutil.copy2(pkg, deploy)
-
-          # Generate iisnode-compatible server.js
-          server_path = os.path.join(standalone, 'server.js')
-          with open(server_path, 'r') as f:
+          # --- Generate iisnode-compatible server.js ---
+          with open(os.path.join(standalone, 'server.js'), 'r') as f:
               content = f.read()
           match = re.search(r'const nextConfig = ({.*?})\n', content, re.DOTALL)
           if match:
-              next_config_json = match.group(1)
               iis_server = (
                   "const path = require('path')\n"
-                  "const { createServer } = require('http')\n"
-                  "\n"
+                  "const { createServer } = require('http')\n\n"
                   "const dir = path.join(__dirname)\n"
                   "process.env.NODE_ENV = 'production'\n"
-                  "process.chdir(__dirname)\n"
-                  "\n"
-                  "const nextConfig = " + next_config_json + "\n"
-                  "\n"
-                  "process.env.__NEXT_PRIVATE_STANDALONE_CONFIG = JSON.stringify(nextConfig)\n"
-                  "\n"
+                  "process.chdir(__dirname)\n\n"
+                  "const nextConfig = " + match.group(1) + "\n\n"
+                  "process.env.__NEXT_PRIVATE_STANDALONE_CONFIG = JSON.stringify(nextConfig)\n\n"
                   "const next = require('next')\n"
                   "const app = next({ dev: false, dir, conf: nextConfig })\n"
-                  "const handle = app.getRequestHandler()\n"
-                  "\n"
+                  "const handle = app.getRequestHandler()\n\n"
                   "app.prepare().then(() => {\n"
-                  "  const server = createServer((req, res) => {\n"
-                  "    handle(req, res)\n"
-                  "  })\n"
+                  "  const server = createServer((req, res) => { handle(req, res) })\n"
                   "  const port = process.env.PORT || 3000\n"
-                  "  server.listen(port, () => {\n"
-                  "    console.log('> Ready on', port)\n"
-                  "  })\n"
+                  "  server.listen(port, () => console.log('> Ready on', port))\n"
                   "})\n"
               )
-              with open(os.path.join(deploy, 'server.js'), 'w') as f:
-                  f.write(iis_server)
-              print("Generated iisnode-compatible server.js")
           else:
-              shutil.copy2(server_path, deploy)
-              print("WARNING: Could not extract nextConfig, using original server.js")
+              iis_server = content
+              print('WARNING: could not extract nextConfig, using original server.js')
 
-          # Sync Prisma client from pnpm store
-          import glob
-          prisma_pattern = os.path.join(base, 'node_modules', '.pnpm',
-              '@prisma+client@*', 'node_modules', '.prisma', 'client')
-          prisma_dirs = glob.glob(prisma_pattern)
-          if prisma_dirs:
-              prisma_src = prisma_dirs[0]
-              prisma_dst = os.path.join(deploy, 'node_modules', '.prisma', 'client')
-              os.makedirs(prisma_dst, exist_ok=True)
-              for fname in os.listdir(prisma_src):
-                  fpath = os.path.join(prisma_src, fname)
-                  if os.path.isfile(fpath):
-                      shutil.copy2(fpath, prisma_dst)
-              print("Prisma client synced")
+          # --- FTP helpers ---
+          def ftp_connect():
+              ftp = ftplib.FTP(FTP_HOST, timeout=60)
+              ftp.login(FTP_USER, FTP_PASS)
+              return ftp
 
-          total = sum(len(files) for _, _, files in os.walk(deploy))
-          print(f"Deploy package ready: {total} files")
+          def ensure_dir(ftp, path):
+              parts = [p for p in path.replace('\\', '/').split('/') if p]
+              cur = ''
+              for p in parts:
+                  cur += '/' + p
+                  try:
+                      ftp.cwd(cur)
+                  except:
+                      ftp.mkd(cur)
 
-      - name: Create .env on deploy
-        shell: bash
-        run: |
-          echo "DATABASE_URL=${DATABASE_URL}" > deploy/.env
-          echo "AUTH_SECRET=${AUTH_SECRET}" >> deploy/.env
-          echo "AUTH_URL=${AUTH_URL}" >> deploy/.env
-          echo "AUTH_TRUST_HOST=true" >> deploy/.env
-          echo "SENDGRID_API_KEY=${SENDGRID_API_KEY}" >> deploy/.env
-          echo "SMS_API_URL=${SMS_API_URL}" >> deploy/.env
-          echo "SMS_USERNAME=${SMS_USERNAME}" >> deploy/.env
-          echo "SMS_PASSWORD=${SMS_PASSWORD}" >> deploy/.env
-          echo "NEXT_PUBLIC_APP_NAME=PulseBC" >> deploy/.env
-          echo "NODE_ENV=production" >> deploy/.env
+          def delete_dir(ftp, path):
+              try:
+                  items = ftp.mlsd(path)
+                  for name, facts in items:
+                      if name in ('.', '..'):
+                          continue
+                      full = f'{path}/{name}'
+                      if facts.get('type') == 'dir':
+                          delete_dir(ftp, full)
+                      else:
+                          try:
+                              ftp.delete(full)
+                          except:
+                              pass
+                  try:
+                      ftp.rmd(path)
+                  except:
+                      pass
+              except:
+                  pass
 
-      - name: Deploy via FTP
-        uses: SamKirkland/FTP-Deploy-Action@v4.3.5
-        with:
-          server: ${{ secrets.FTP_HOST }}
-          username: ${{ secrets.FTP_USERNAME }}
-          password: ${{ secrets.FTP_PASSWORD }}
-          local-dir: ./deploy/
-          server-dir: /httpdocs/
-          dangerous-clean-slate: true
+          def upload_file(ftp, local, remote):
+              ensure_dir(ftp, '/'.join(remote.split('/')[:-1]))
+              with open(local, 'rb') as f:
+                  ftp.storbinary(f'STOR {remote}', f)
+
+          def upload_dir(ftp, local_base, remote_base, label=''):
+              files = [(os.path.join(r, f), f'{remote_base}/{os.path.relpath(os.path.join(r, f), local_base).replace(chr(92), "/")}')
+                       for r, _, fs in os.walk(local_base) for f in fs]
+              print(f'Uploading {label}: {len(files)} files')
+              for i, (lp, rp) in enumerate(files, 1):
+                  if i % 100 == 0:
+                      print(f'  {i}/{len(files)}')
+                  try:
+                      upload_file(ftp, lp, rp)
+                  except Exception as e:
+                      print(f'  RETRY {rp}: {e}')
+                      try:
+                          ftp2 = ftp_connect()
+                          ftp.__dict__.update(ftp2.__dict__)
+                          upload_file(ftp, lp, rp)
+                      except Exception as e2:
+                          print(f'  FAILED {rp}: {e2}')
+
+          # --- Connect ---
+          print('Connecting to FTP...')
+          ftp = ftp_connect()
+          print('Connected')
+
+          # --- Delete old .next and re-upload ---
+          print('Deleting old .next on server...')
+          delete_dir(ftp, f'{REMOTE_DIR}/.next')
+          print('Deleted. Uploading new .next...')
+          upload_dir(ftp, os.path.join(standalone, '.next'), f'{REMOTE_DIR}/.next', '.next')
+
+          # --- Upload public ---
+          print('Uploading public/...')
+          upload_dir(ftp, os.path.join(base, 'public'), f'{REMOTE_DIR}/public', 'public')
+
+          # --- Upload critical files ---
+          ts = time.strftime('%Y-%m-%d %H:%M:%S')
+
+          # server.js
+          ftp.storbinary(f'STOR {REMOTE_DIR}/server.js', BytesIO(iis_server.encode()))
+          print('Uploaded server.js')
+
+          # iisnode-entry.js
+          with open(os.path.join(base, 'iisnode-entry.js'), 'rb') as f:
+              ftp.storbinary(f'STOR {REMOTE_DIR}/iisnode-entry.js', f)
+          print('Uploaded iisnode-entry.js')
+
+          # web.config with timestamp to force restart
+          with open(os.path.join(base, 'web.config'), 'r') as f:
+              wc = f.read()
+          wc = re.sub(r'\s*<!-- deployed:.*?-->\s*', '', wc)
+          wc = wc.replace('</configuration>', f'  <!-- deployed: {ts} -->\n</configuration>')
+          ftp.storbinary(f'STOR {REMOTE_DIR}/web.config', BytesIO(wc.encode()))
+          print(f'Uploaded web.config (deployed: {ts}) — iisnode restart triggered')
+
+          # .env
+          env_lines = [
+              f'DATABASE_URL={os.environ["DATABASE_URL"]}',
+              f'AUTH_SECRET={os.environ["AUTH_SECRET"]}',
+              f'AUTH_URL={os.environ["AUTH_URL"]}',
+              'AUTH_TRUST_HOST=true',
+              f'SENDGRID_API_KEY={os.environ["SENDGRID_API_KEY"]}',
+              f'SMS_API_URL={os.environ["SMS_API_URL"]}',
+              f'SMS_USERNAME={os.environ["SMS_USERNAME"]}',
+              f'SMS_PASSWORD={os.environ["SMS_PASSWORD"]}',
+              'NEXT_PUBLIC_APP_NAME=PulseBC',
+              'NODE_ENV=production',
+          ]
+          ftp.storbinary(f'STOR {REMOTE_DIR}/.env', BytesIO('\n'.join(env_lines).encode()))
+          print('Uploaded .env')
+
+          ftp.quit()
+          print(f'\nDeploy complete at {ts}')
+          print('Visit https://yourdebtcollectors.com')

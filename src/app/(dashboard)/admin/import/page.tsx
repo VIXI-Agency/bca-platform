@@ -97,6 +97,8 @@ function parseCSV(text: string): { headers: string[]; rows: ImportRow[] } {
     headers.forEach((header, idx) => {
       row[header] = values[idx] ?? '';
     });
+    // Skip rows where all values are empty
+    if (Object.values(row).every((v) => v.trim() === '')) continue;
     rows.push(row);
   }
 
@@ -112,6 +114,8 @@ export default function ImportPage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [step, setStep] = useState<Step>('upload');
   const [fileName, setFileName] = useState('');
+  const [originalFileContent, setOriginalFileContent] = useState('');
+  const [originalFileType, setOriginalFileType] = useState('text/csv');
   const [headers, setHeaders] = useState<string[]>([]);
   const [rows, setRows] = useState<ImportRow[]>([]);
   const [mapping, setMapping] = useState<ColumnMapping>({
@@ -140,6 +144,8 @@ export default function ImportPage() {
     const reader = new FileReader();
     reader.onload = (e) => {
       const text = e.target?.result as string;
+      setOriginalFileContent(text);
+      setOriginalFileType(file.type || 'text/csv');
       const parsed = parseCSV(text);
       setHeaders(parsed.headers);
       setRows(parsed.rows);
@@ -209,7 +215,13 @@ export default function ImportPage() {
   }
 
   async function handleImport() {
-    const result = await importLeads.mutateAsync({ rows, mapping });
+    const result = await importLeads.mutateAsync({
+      rows,
+      mapping,
+      originalFile: originalFileContent
+        ? { name: fileName, content: originalFileContent, type: originalFileType }
+        : undefined,
+    });
     setImportResult(result);
     setStep('done');
   }
@@ -217,6 +229,8 @@ export default function ImportPage() {
   function handleReset() {
     setStep('upload');
     setFileName('');
+    setOriginalFileContent('');
+    setOriginalFileType('text/csv');
     setHeaders([]);
     setRows([]);
     setMapping({
@@ -526,7 +540,7 @@ export default function ImportPage() {
                       className="text-2xl font-bold"
                       style={{ color: 'var(--text-primary)' }}
                     >
-                      {validationResult.valid}
+                      {validationResult.validRows}
                     </p>
                     <p
                       className="text-xs"
@@ -550,13 +564,13 @@ export default function ImportPage() {
                       className="text-2xl font-bold"
                       style={{ color: 'var(--text-primary)' }}
                     >
-                      {validationResult.duplicates}
+                      {validationResult.invalidRows}
                     </p>
                     <p
                       className="text-xs"
                       style={{ color: 'var(--text-muted)' }}
                     >
-                      Duplicates
+                      Skipped / Duplicates
                     </p>
                   </div>
                 </div>
@@ -616,7 +630,7 @@ export default function ImportPage() {
                 <Button
                   onClick={handleImport}
                   disabled={
-                    validationResult.valid === 0 || importLeads.isPending
+                    validationResult.validRows === 0 || importLeads.isPending
                   }
                 >
                   {importLeads.isPending ? (
@@ -626,7 +640,7 @@ export default function ImportPage() {
                     </>
                   ) : (
                     <>
-                      Import {validationResult.valid} Leads
+                      Import {validationResult.validRows} Leads
                       <ArrowRight className="h-4 w-4" />
                     </>
                   )}
@@ -701,6 +715,15 @@ export default function ImportPage() {
                 </div>
               </div>
 
+              <p
+                className="mb-4 text-sm"
+                style={{ color: importResult.emailSent ? 'var(--success)' : 'var(--warning)' }}
+              >
+                {importResult.emailSent
+                  ? 'Summary email sent to support@benjaminchaise.com'
+                  : 'Import finished, but the summary email was not sent. Check SendGrid configuration/logs.'}
+              </p>
+
               {importResult.errors.length > 0 && (
                 <div className="mb-6 w-full max-w-md">
                   <div className="max-h-32 overflow-y-auto rounded-lg border border-[var(--border)] bg-[var(--bg-secondary)] p-3">
@@ -710,7 +733,7 @@ export default function ImportPage() {
                         className="text-xs"
                         style={{ color: 'var(--danger)' }}
                       >
-                        Row {err.row}: {err.message}
+                        {err}
                       </p>
                     ))}
                   </div>

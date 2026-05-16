@@ -20,15 +20,17 @@ export interface ColumnMapping {
 }
 
 export interface ValidationResult {
-  valid: number;
-  errors: { row: number; message: string }[];
-  duplicates: number;
+  totalRows: number;
+  validRows: number;
+  invalidRows: number;
+  errors: { row: number; field: string; message: string }[];
 }
 
 export interface ImportResult {
   imported: number;
   skipped: number;
-  errors: { row: number; message: string }[];
+  errors: string[];
+  emailSent?: boolean;
 }
 
 export interface ValidatePayload {
@@ -39,11 +41,27 @@ export interface ValidatePayload {
 export interface ImportPayload {
   rows: ImportRow[];
   mapping: ColumnMapping;
+  originalFile?: {
+    name: string;
+    content: string;
+    type?: string;
+  };
 }
 
 /* -------------------------------------------------- */
 /*  Helpers                                            */
 /* -------------------------------------------------- */
+
+function applyMapping(rows: ImportRow[], mapping: ColumnMapping): Record<string, string>[] {
+  return rows.map((row) => ({
+    businessName: row[mapping.businessName] ?? '',
+    phone:        row[mapping.phone]         ?? '',
+    address:      row[mapping.address]       ?? '',
+    location:     row[mapping.location]      ?? '',
+    industry:     row[mapping.industry]      ?? '',
+    timeZone:     row[mapping.timezone]      ?? '',
+  }));
+}
 
 async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
   const res = await fetch(url, init);
@@ -60,22 +78,22 @@ async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
 
 export function useValidateImport() {
   return useMutation<ValidationResult, Error, ValidatePayload>({
-    mutationFn: (payload) =>
+    mutationFn: ({ rows, mapping }) =>
       fetchJson('/api/import/validate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
+        body: JSON.stringify({ data: applyMapping(rows, mapping) }),
       }),
   });
 }
 
 export function useImportLeads() {
   return useMutation<ImportResult, Error, ImportPayload>({
-    mutationFn: (payload) =>
+    mutationFn: ({ rows, mapping, originalFile }) =>
       fetchJson('/api/import', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
+        body: JSON.stringify({ data: applyMapping(rows, mapping), originalFile }),
       }),
   });
 }

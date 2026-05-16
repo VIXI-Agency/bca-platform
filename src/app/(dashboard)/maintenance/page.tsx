@@ -104,7 +104,7 @@ function ComputerCard({ computer }: { computer: MyComputer }) {
         </div>
         {computer.remotePcId && (
           <div>
-            <p className="text-xs font-medium" style={{ color: 'var(--text-muted)' }}>RemotePC ID</p>
+            <p className="text-xs font-medium" style={{ color: 'var(--text-muted)' }}>Remote Access ID</p>
             <p style={{ color: 'var(--text-secondary)' }}>{computer.remotePcId}</p>
           </div>
         )}

@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect } from 'react';
 import {
   Plus, Pencil, Trash2, Search, Monitor,
-  AlertCircle, Clock, CheckCircle, Ticket, X,
+  AlertCircle, Clock, CheckCircle, Ticket, X, MonitorPlay,
 } from 'lucide-react';
 import Header from '@/components/layout/header';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -399,7 +399,7 @@ export default function ComputersPage() {
               <table className="w-full text-sm">
                 <thead>
                   <tr style={{ borderBottom: '1px solid var(--border)', color: 'var(--text-muted)' }}>
-                    {['Computer', 'RemotePC ID ✎', 'IP Address ✎', 'Assigned To', 'OS', 'Last Maint.', 'Next Due', 'Status', 'Tickets', 'Actions'].map((h) => (
+                    {['Computer', 'Remote ID ✎', 'IP Address ✎', 'Assigned To', 'OS', 'Last Maint.', 'Next Due', 'Status', 'Tickets', 'Actions'].map((h) => (
                       <th key={h} className="pb-2 pr-3 text-left font-medium">{h}</th>
                     ))}
                   </tr>
@@ -446,6 +446,16 @@ export default function ComputersPage() {
                       </td>
                       <td className="py-3">
                         <div className="flex gap-2">
+                          {c.remotePcId && c.status === 'active' && (
+                            <a
+                              href={`anydesk://${c.remotePcId}`}
+                              title={`Connect to ${c.computerName}`}
+                            >
+                              <Button size="sm" variant="outline" style={{ color: 'var(--accent)', borderColor: 'var(--accent)' }}>
+                                <MonitorPlay size={13} className="mr-1" /> Connect
+                              </Button>
+                            </a>
+                          )}
                           <Button size="sm" variant="outline" onClick={() => setLogTarget(c)}>
                             <CheckCircle size={13} className="mr-1" /> Log
                           </Button>
@@ -481,8 +491,8 @@ export default function ComputersPage() {
                 <Input value={form.computerName} onChange={(e) => setForm({ ...form, computerName: e.target.value })} placeholder="AGENT-PC-01" />
               </div>
               <div>
-                <Label>RemotePC ID</Label>
-                <Input value={form.remotePcId} onChange={(e) => setForm({ ...form, remotePcId: e.target.value })} placeholder="RC-12345" />
+                <Label>Remote ID (AnyDesk / RustDesk)</Label>
+                <Input value={form.remotePcId} onChange={(e) => setForm({ ...form, remotePcId: e.target.value })} placeholder="123456789" />
               </div>
               <div>
                 <Label>IP Address</Label>

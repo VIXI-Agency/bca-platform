@@ -133,6 +133,11 @@ export const sendSmsSchema = z.object({
 // Import
 export const importValidateSchema = z.object({
   data: z.array(z.record(z.string(), z.string())),
+  originalFile: z.object({
+    name: z.string().min(1).max(255),
+    content: z.string().min(1),
+    type: z.string().max(100).optional(),
+  }).optional(),
 });
 
 // Settings

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { importValidateSchema } from '@/lib/validators';
+import { buildImportSummaryEmailHTML, sendEmail } from '@/lib/email';
 
 function cleanPhone(phone: string): { formatted: string; digits: string } {
   const digits = phone.replace(/\D/g, '');
@@ -13,6 +14,15 @@ function cleanPhone(phone: string): { formatted: string; digits: string } {
     formatted = `+1 (${digits.slice(1, 4)}) ${digits.slice(4, 7)}-${digits.slice(7)}`;
   }
   return { formatted, digits };
+}
+
+function formatReportDate(date: Date): string {
+  return new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/Chicago',
+    month: 'numeric',
+    day: 'numeric',
+    year: 'numeric',
+  }).format(date);
 }
 
 export async function POST(request: NextRequest) {
@@ -36,7 +46,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { data } = parsed.data;
+    const { data, originalFile } = parsed.data;
 
     const MAX_ROWS = 5000;
     if (data.length > MAX_ROWS) {
@@ -122,7 +132,8 @@ export async function POST(request: NextRequest) {
           data: {
             businessName,
             phone: formatted,
-            phoneDigits: digits,
+            // Do not set phoneDigits: SQL Server defines PhoneDigits as a computed column.
+            // It is populated automatically from Phone and can still be queried for duplicates.
             address,
             location,
             industry,
@@ -138,7 +149,46 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    return NextResponse.json({ imported, skipped, errors });
+    const duplicatesFound = errors.filter((error) => error.includes('Duplicate phone number')).length;
+    const blackListBusinesses = errors.filter((error) =>
+      error.includes('Blocked area code') || error.includes('Blocked business name keyword')
+    ).length;
+    const businessesReadyToCall = await prisma.business.count({ where: { idStatus: 3 } });
+    const importedBy = session.user.name || 'Carlos Aragon';
+    const fileName = originalFile?.name || 'import.csv';
+
+    const html = buildImportSummaryEmailHTML({
+      importedBy,
+      reportDate: formatReportDate(new Date()),
+      fileName,
+      totalRecords: data.length,
+      duplicatesFound,
+      blackListBusinesses,
+      businessesImported: imported,
+      businessesReadyToCall,
+    });
+
+    const attachments = originalFile?.content
+      ? [{
+          content: Buffer.from(originalFile.content, 'utf8').toString('base64'),
+          filename: fileName,
+          type: originalFile.type || 'text/csv',
+          disposition: 'attachment' as const,
+        }]
+      : undefined;
+
+    const emailSent = await sendEmail({
+      to: [
+        { email: 'support@benjaminchaise.com', name: 'BenjaminChaise Support' },
+        { email: 'brianna@benjaminchaise.com', name: 'Brianna' },
+        { email: 'michael@benjaminchaise.com', name: 'Michael' },
+      ],
+      subject: 'New Leads Imported!',
+      html,
+      attachments,
+    });
+
+    return NextResponse.json({ imported, skipped, errors, emailSent });
   } catch (error) {
     console.error('POST /api/import error:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });

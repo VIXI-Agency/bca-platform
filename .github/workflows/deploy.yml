@@ -69,6 +69,22 @@ jobs:
           shutil.copytree(static_src, static_dst)
           print('Static assets merged into standalone')
 
+          # --- Ensure next.js main entry + key server files exist in standalone ---
+          # nft sometimes skips next/dist/server/next.js on Windows; copy from full install
+          next_files_to_ensure = [
+              os.path.join('next', 'dist', 'server', 'next.js'),
+              os.path.join('next', 'dist', 'server', 'next.js.map'),
+          ]
+          for rel in next_files_to_ensure:
+              dst = os.path.join(standalone, 'node_modules', rel)
+              src = os.path.join(base, 'node_modules', rel)
+              if not os.path.exists(dst) and os.path.exists(src):
+                  os.makedirs(os.path.dirname(dst), exist_ok=True)
+                  shutil.copy2(src, dst)
+                  print(f'Copied missing {rel} to standalone')
+              else:
+                  print(f'OK {rel}: {"present" if os.path.exists(dst) else "MISSING in both!"}')
+
           # --- Generate iisnode-compatible server.js ---
           with open(os.path.join(standalone, 'server.js'), 'r') as f:
               content = f.read()

@@ -86,28 +86,51 @@ jobs:
                   print(f'OK {rel}: {"present" if os.path.exists(dst) else "MISSING in both!"}')
 
           # --- Generate iisnode-compatible server.js ---
+          # iisnode passes PORT as a named Windows named pipe (\\.\pipe\...).
+          # startServer() calls server.listen(port, hostname) internally which only
+          # accepts TCP ports. We patch http.createServer so that server.listen(tcpPort)
+          # is silently redirected to listen(PIPE) when running under iisnode.
           with open(os.path.join(standalone, 'server.js'), 'r') as f:
               content = f.read()
           match = re.search(r'const nextConfig = ({.*?})\n', content, re.DOTALL)
           if match:
               iis_server = (
                   "const path = require('path')\n"
-                  "const { createServer } = require('http')\n\n"
+                  "const http = require('http')\n"
+                  "const PIPE = process.env.PORT\n\n"
                   "const dir = path.join(__dirname)\n"
                   "process.env.NODE_ENV = 'production'\n"
                   "process.chdir(__dirname)\n\n"
                   "const nextConfig = " + match.group(1) + "\n\n"
                   "process.env.__NEXT_PRIVATE_STANDALONE_CONFIG = JSON.stringify(nextConfig)\n\n"
-                  "// Use require('next') — next/dist/server/next.js is traced by nft and present\n"
-                  "// in standalone node_modules. Do NOT parseInt(PORT): iisnode passes a named\n"
-                  "// pipe path that server.listen() accepts natively.\n"
-                  "const next = require('next')\n"
-                  "const app = next({ dev: false, dir, conf: nextConfig })\n"
-                  "const handle = app.getRequestHandler()\n\n"
-                  "app.prepare().then(() => {\n"
-                  "  const server = createServer((req, res) => { handle(req, res) })\n"
-                  "  const port = process.env.PORT || 3000\n"
-                  "  server.listen(port, () => console.log('> PulseBC ready'))\n"
+                  "// iisnode passes PORT as a named pipe. Patch http.createServer so that\n"
+                  "// startServer's server.listen(tcpPort, hostname) redirects to the pipe.\n"
+                  "if (PIPE && PIPE.indexOf('pipe') !== -1) {\n"
+                  "  const _orig = http.createServer.bind(http)\n"
+                  "  http.createServer = function() {\n"
+                  "    const srv = _orig(...arguments)\n"
+                  "    const _origListen = srv.listen.bind(srv)\n"
+                  "    srv.listen = function(portOrPipe, hostnameOrCb) {\n"
+                  "      if (typeof portOrPipe === 'number' || !isNaN(Number(portOrPipe))) {\n"
+                  "        const cb = typeof hostnameOrCb === 'function' ? hostnameOrCb : arguments[arguments.length - 1]\n"
+                  "        return _origListen(PIPE, typeof cb === 'function' ? cb : undefined)\n"
+                  "      }\n"
+                  "      return _origListen(portOrPipe, hostnameOrCb)\n"
+                  "    }\n"
+                  "    return srv\n"
+                  "  }\n"
+                  "}\n\n"
+                  "const { startServer } = require('next/dist/server/lib/start-server')\n\n"
+                  "let keepAliveTimeout = parseInt(process.env.KEEP_ALIVE_TIMEOUT, 10)\n"
+                  "if (Number.isNaN(keepAliveTimeout) || keepAliveTimeout < 0) keepAliveTimeout = undefined\n\n"
+                  "startServer({\n"
+                  "  dir,\n"
+                  "  isDev: false,\n"
+                  "  config: nextConfig,\n"
+                  "  hostname: '127.0.0.1',\n"
+                  "  port: 3000,\n"
+                  "  allowRetry: false,\n"
+                  "  keepAliveTimeout,\n"
                   "}).catch(err => {\n"
                   "  process.stderr.write('FATAL: ' + err.stack + '\\n')\n"
                   "  process.exit(1)\n"
@@ -191,6 +214,15 @@ jobs:
           # --- Upload node_modules from standalone (contains 'next' and runtime deps) ---
           print('Uploading node_modules from standalone...')
           upload_dir(ftp, os.path.join(standalone, 'node_modules'), f'{REMOTE_DIR}/node_modules', 'node_modules')
+
+          # --- Explicitly upload next/dist/server/next.js (required by require('next')) ---
+          next_js_local = os.path.join(standalone, 'node_modules', 'next', 'dist', 'server', 'next.js')
+          next_js_remote = f'{REMOTE_DIR}/node_modules/next/dist/server/next.js'
+          if os.path.exists(next_js_local):
+              upload_file(ftp, next_js_local, next_js_remote)
+              print(f'Explicitly re-uploaded next.js ({os.path.getsize(next_js_local)} bytes)')
+          else:
+              print('WARNING: next.js not found locally for explicit upload!')
 
           # --- Sync Prisma client ---
           prisma_pattern = os.path.join(base, 'node_modules', '.pnpm', '@prisma+client@*', 'node_modules', '.prisma', 'client')

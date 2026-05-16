@@ -18,22 +18,11 @@ if (fs.existsSync(envPath)) {
   process.stderr.write('> Loaded .env (' + lines.length + ' lines)\n');
 }
 
-// Write errors to debug.txt (accessible via HTTP) so we can see crashes
-const _debugLog = path.join(__dirname, 'debug.txt');
-function writeDebug(tag, err) {
-  try {
-    fs.appendFileSync(_debugLog,
-      new Date().toISOString() + ' [' + tag + ']: ' + (err && err.stack || String(err)) + '\n---\n');
-  } catch (e) { /* ignore */ }
-}
-
 process.on('uncaughtException', (err) => {
-  writeDebug('UNCAUGHT', err);
   process.stderr.write('UNCAUGHT: ' + err.stack + '\n');
   process.exit(1);
 });
 process.on('unhandledRejection', (err) => {
-  writeDebug('UNHANDLED', err);
   process.stderr.write('UNHANDLED: ' + (err && err.stack || err) + '\n');
 });
 

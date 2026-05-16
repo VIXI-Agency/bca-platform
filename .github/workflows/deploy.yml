@@ -256,40 +256,54 @@ jobs:
               print('WARNING: @prisma/client not found in pnpm tree!')
 
           # --- Fix Turbopack hashed module aliases ---
-          # Turbopack in pnpm projects resolves packages to @scope/pkg-HASH IDs.
-          # The standalone doesn't include these hashed aliases; create them from the base packages.
-          chunks_dir = os.path.join(standalone, '.next', 'server', 'chunks')
-          turbopack_aliases = {}  # hashed_id -> base_package_name
-          if os.path.isdir(chunks_dir):
-              for fn in os.listdir(chunks_dir):
-                  if not fn.endswith('.js'):
-                      continue
-                  try:
-                      raw = open(os.path.join(chunks_dir, fn), 'r', encoding='utf-8', errors='ignore').read(500000)
-                      import re as _re
-                      for m in _re.finditer(r'"(@[^"/]+/[^"@/-][^"]+)-([a-f0-9]{8,})"', raw):
-                          hid = m.group(1) + '-' + m.group(2)
-                          turbopack_aliases[hid] = m.group(1)
-                  except Exception as ex:
-                      print(f'  chunk scan error {fn}: {ex}')
+          # Turbopack in pnpm resolves @scope/pkg to @scope/pkg-HASH IDs.
+          # The standalone node_modules only has @scope/pkg; create hashed aliases from it.
+          # Fix: non-greedy regex + full file read + recursive scan of .next/server/
+          turbopack_aliases = {}  # hashed_id -> base_pkg_name
+          server_dir = os.path.join(standalone, '.next', 'server')
+          if os.path.isdir(server_dir):
+              for root_s, dirs_s, files_s in os.walk(server_dir):
+                  for fn in files_s:
+                      if not fn.endswith('.js'):
+                          continue
+                      try:
+                          fp = os.path.join(root_s, fn)
+                          raw = open(fp, 'r', encoding='utf-8', errors='ignore').read()
+                          # Non-greedy so hash is captured separately from package name
+                          for m in re.finditer(r'["\'](@[^"\']+?)-([a-f0-9]{12,})["\']', raw):
+                              pkg_name = m.group(1)   # e.g. @prisma/client
+                              pkg_hash = m.group(2)   # e.g. c1bc68389fabadd5
+                              hid = pkg_name + '-' + pkg_hash
+                              # Check if base package exists in standalone or project node_modules
+                              pkg_parts = pkg_name.lstrip('@').split('/', 1)
+                              if pkg_name.startswith('@') and len(pkg_parts) == 2:
+                                  nm_path_standalone = os.path.join(standalone, 'node_modules', '@' + pkg_parts[0], pkg_parts[1])
+                                  nm_path_project = os.path.join(base, 'node_modules', '@' + pkg_parts[0], pkg_parts[1])
+                              else:
+                                  nm_path_standalone = os.path.join(standalone, 'node_modules', pkg_name)
+                                  nm_path_project = os.path.join(base, 'node_modules', pkg_name)
+                              if os.path.isdir(nm_path_standalone) or os.path.isdir(nm_path_project):
+                                  turbopack_aliases[hid] = pkg_name
+                      except Exception as ex:
+                          print(f'  chunk scan error {fn}: {ex}')
           print(f'Turbopack aliases found: {list(turbopack_aliases.keys())}')
-          for hid, base in turbopack_aliases.items():
+          for hid, pkg_name in turbopack_aliases.items():
               hid_parts = hid.split('/')
-              base_parts = base.split('/')
+              pkg_parts = pkg_name.split('/')
               hid_dst = os.path.join(standalone, 'node_modules', *hid_parts)
-              base_src = os.path.join(standalone, 'node_modules', *base_parts)
-              if not os.path.isdir(base_src):
-                  # Try full project node_modules as fallback
-                  base_src = os.path.join(base, 'node_modules', *base_parts)
+              pkg_src = os.path.join(standalone, 'node_modules', *pkg_parts)
+              if not os.path.isdir(pkg_src):
+                  # Try full project node_modules as fallback (base = os.getcwd())
+                  pkg_src = os.path.join(base, 'node_modules', *pkg_parts)
               if os.path.isdir(hid_dst):
                   print(f'Alias already in standalone: {hid}')
                   upload_dir(ftp, hid_dst, f'{REMOTE_DIR}/node_modules/{hid}', hid)
-              elif os.path.isdir(base_src):
-                  shutil.copytree(base_src, hid_dst)
-                  print(f'Created alias {hid} -> {base} ({len(os.listdir(hid_dst))} items)')
+              elif os.path.isdir(pkg_src):
+                  shutil.copytree(pkg_src, hid_dst)
+                  print(f'Created alias {hid} -> {pkg_name} ({len(os.listdir(hid_dst))} items)')
                   upload_dir(ftp, hid_dst, f'{REMOTE_DIR}/node_modules/{hid}', hid)
               else:
-                  print(f'WARNING: base package not found for alias {hid} (tried {base_src})')
+                  print(f'WARNING: base package not found for alias {hid} (tried {pkg_src})')
 
           # --- Log all .exe and .node files in standalone node_modules (Prisma engines) ---
           for root, dirs, fnames in os.walk(os.path.join(standalone, 'node_modules')):

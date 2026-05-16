@@ -41,11 +41,17 @@ jobs:
       - name: Prepare deploy package
         shell: python
         run: |
-          import os, shutil, re, json
+          import os, shutil, re, json, glob
 
           base = os.getcwd()
-          standalone = os.path.join(base, '.next', 'standalone', 'bca-platform')
           deploy = os.path.join(base, 'deploy')
+
+          # Dynamically find the standalone directory (path varies by workspace root detection)
+          server_candidates = glob.glob(os.path.join(base, '.next', 'standalone', '**', 'server.js'), recursive=True)
+          if not server_candidates:
+              raise FileNotFoundError(f"server.js not found in .next/standalone — build may have failed")
+          standalone = os.path.dirname(server_candidates[0])
+          print(f"Found standalone at: {standalone}")
 
           # Copy standalone .next into deploy/.next
           src_next = os.path.join(standalone, '.next')

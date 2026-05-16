@@ -68,8 +68,18 @@ jobs:
           # Copy public
           shutil.copytree(os.path.join(base, 'public'), os.path.join(deploy, 'public'))
 
-          # Copy web.config
-          shutil.copy2(os.path.join(base, 'web.config'), deploy)
+          # Copy web.config with deploy timestamp (triggers iisnode restart)
+          import time as _time
+          wc_src = os.path.join(base, 'web.config')
+          with open(wc_src, 'r') as f:
+              wc = f.read()
+          wc = re.sub(r'\s*<!-- deployed:.*?-->\s*', '', wc)
+          wc = wc.replace('</configuration>', f'  <!-- deployed: {_time.strftime("%Y-%m-%d %H:%M:%S")} -->\n</configuration>')
+          with open(os.path.join(deploy, 'web.config'), 'w') as f:
+              f.write(wc)
+
+          # Copy iisnode-entry.js (required entry point for IIS)
+          shutil.copy2(os.path.join(base, 'iisnode-entry.js'), deploy)
 
           # Copy node_modules from standalone root
           src_nm = os.path.join(standalone, 'node_modules')
@@ -161,4 +171,4 @@ jobs:
           password: ${{ secrets.FTP_PASSWORD }}
           local-dir: ./deploy/
           server-dir: /httpdocs/
-          dangerous-clean-slate: false
+          dangerous-clean-slate: true

@@ -156,7 +156,7 @@ export default function TrainingPage() {
                     style={{ height: '220px', backgroundColor: '#000' }}
                   >
                     <source
-                      src={`/${video.url}`}
+                      src={`/api/media/${video.url.split('/').pop()}`}
                       type="video/mp4"
                     />
                     Your browser does not support the video tag.

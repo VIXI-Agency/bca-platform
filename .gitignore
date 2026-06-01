@@ -50,3 +50,13 @@ public/assets/files/*.mp4
 /iisnode
 /test-results
 /screenshot.png
+
+# deploy artifacts & local-only scripts (deploy is via .github/workflows/deploy.yml)
+deploy.zip
+clean_deploy.py
+deploy_staging.py
+.deploy-manifest.json
+bun.lock
+
+# Syncthing conflict copies
+*.sync-conflict-*

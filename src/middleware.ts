@@ -5,12 +5,6 @@ import { getPermissionKeyForRoute, getPermissionKeyForApiRoute } from '@/config/
 const publicRoutes = ['/login', '/register', '/forgot-password', '/reset-password', '/api/auth', '/api/sms/webhook'];
 
 export default auth((req) => {
-  const host = req.headers.get('host') ?? '';
-  // Redirect QA subdomain to main site
-  if (host.startsWith('qa.')) {
-    return NextResponse.redirect('https://yourdebtcollectors.com/', 301);
-  }
-
   const { pathname } = req.nextUrl;
 
   // Allow public routes

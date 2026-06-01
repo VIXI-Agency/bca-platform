@@ -202,9 +202,19 @@ export default function CallsPage() {
     reset,
     setValue,
     watch,
+    formState: { errors },
   } = useForm<CallFormData>({ defaultValues });
 
   const closerValue = watch('idCloser');
+
+  // Register the closer field so its validation rules are tracked
+  // (the value is set via setValue from the custom Select, not a native input).
+  register('idCloser', {
+    required:
+      selectedDisposition === DISPOSITION_POTENTIAL_CLIENT
+        ? 'Assigned closer is required'
+        : false,
+  });
 
   /* ---- Show toast ---- */
   const showToast = useCallback((message: string, type: 'success' | 'error') => {
@@ -384,6 +394,9 @@ export default function CallsPage() {
     selectedDisposition === DISPOSITION_CALL_BACK;
   const showComments = DISPOSITIONS_WITH_FORM.has(selectedDisposition ?? -1);
   const showFullForm = DISPOSITIONS_WITH_FORM.has(selectedDisposition ?? -1);
+
+  // Potential Client requires all of its fields to be filled in.
+  const requirePC = selectedDisposition === DISPOSITION_POTENTIAL_CLIENT;
 
   const isSubmitting = logCall.isPending || nextLead.isPending;
 
@@ -822,17 +835,25 @@ export default function CallsPage() {
                           <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
                             <div>
                               <Label htmlFor="dmakerName" className="mb-1.5 block text-xs">
-                                Name
+                                Name {requirePC && <span style={{ color: 'var(--danger)' }}>*</span>}
                               </Label>
                               <Input
                                 id="dmakerName"
                                 placeholder="Full name"
-                                {...register('dmakerName')}
+                                aria-invalid={!!errors.dmakerName}
+                                {...register('dmakerName', {
+                                  required: requirePC ? 'Name is required' : false,
+                                })}
                               />
+                              {errors.dmakerName && (
+                                <p className="mt-1 text-xs" style={{ color: 'var(--danger)' }}>
+                                  {errors.dmakerName.message}
+                                </p>
+                              )}
                             </div>
                             <div>
                               <Label htmlFor="dmakerEmail" className="mb-1.5 block text-xs">
-                                Email
+                                Email {requirePC && <span style={{ color: 'var(--danger)' }}>*</span>}
                               </Label>
                               <div className="relative">
                                 <Mail
@@ -844,13 +865,23 @@ export default function CallsPage() {
                                   type="email"
                                   placeholder="email@example.com"
                                   className="pl-9"
-                                  {...register('dmakerEmail')}
+                                  aria-invalid={!!errors.dmakerEmail}
+                                  {...register('dmakerEmail', {
+                                    required: requirePC ? 'Email is required' : false,
+                                    validate: (v) =>
+                                      !v || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v) || 'Enter a valid email',
+                                  })}
                                 />
                               </div>
+                              {errors.dmakerEmail && (
+                                <p className="mt-1 text-xs" style={{ color: 'var(--danger)' }}>
+                                  {errors.dmakerEmail.message}
+                                </p>
+                              )}
                             </div>
                             <div>
                               <Label htmlFor="dmakerPhone" className="mb-1.5 block text-xs">
-                                Phone
+                                Phone {requirePC && <span style={{ color: 'var(--danger)' }}>*</span>}
                               </Label>
                               <div className="relative">
                                 <Phone
@@ -862,9 +893,17 @@ export default function CallsPage() {
                                   type="tel"
                                   placeholder="(555) 555-5555"
                                   className="pl-9"
-                                  {...register('dmakerPhone')}
+                                  aria-invalid={!!errors.dmakerPhone}
+                                  {...register('dmakerPhone', {
+                                    required: requirePC ? 'Phone is required' : false,
+                                  })}
                                 />
                               </div>
+                              {errors.dmakerPhone && (
+                                <p className="mt-1 text-xs" style={{ color: 'var(--danger)' }}>
+                                  {errors.dmakerPhone.message}
+                                </p>
+                              )}
                             </div>
                           </div>
                         </fieldset>
@@ -883,17 +922,25 @@ export default function CallsPage() {
                           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                             <div>
                               <Label htmlFor="debtorName" className="mb-1.5 block text-xs">
-                                Debtor Name
+                                Debtor Name {requirePC && <span style={{ color: 'var(--danger)' }}>*</span>}
                               </Label>
                               <Input
                                 id="debtorName"
                                 placeholder="Debtor full name"
-                                {...register('debtorName')}
+                                aria-invalid={!!errors.debtorName}
+                                {...register('debtorName', {
+                                  required: requirePC ? 'Debtor name is required' : false,
+                                })}
                               />
+                              {errors.debtorName && (
+                                <p className="mt-1 text-xs" style={{ color: 'var(--danger)' }}>
+                                  {errors.debtorName.message}
+                                </p>
+                              )}
                             </div>
                             <div>
                               <Label htmlFor="debtAmount" className="mb-1.5 block text-xs">
-                                Amount Owed
+                                Amount Owed {requirePC && <span style={{ color: 'var(--danger)' }}>*</span>}
                               </Label>
                               <div className="relative">
                                 <span
@@ -909,9 +956,19 @@ export default function CallsPage() {
                                   min="0"
                                   placeholder="0.00"
                                   className="pl-7"
-                                  {...register('debtAmount')}
+                                  aria-invalid={!!errors.debtAmount}
+                                  {...register('debtAmount', {
+                                    required: requirePC ? 'Amount owed is required' : false,
+                                    validate: (v) =>
+                                      !requirePC || (!!v && parseFloat(v) > 0) || 'Enter an amount greater than 0',
+                                  })}
                                 />
                               </div>
+                              {errors.debtAmount && (
+                                <p className="mt-1 text-xs" style={{ color: 'var(--danger)' }}>
+                                  {errors.debtAmount.message}
+                                </p>
+                              )}
                             </div>
                           </div>
                         </fieldset>
@@ -924,7 +981,7 @@ export default function CallsPage() {
                             className="mb-3 text-sm font-semibold"
                             style={{ color: 'var(--text-primary)' }}
                           >
-                            Agreement Sent
+                            Agreement Sent {requirePC && <span style={{ color: 'var(--danger)' }}>*</span>}
                           </legend>
                           <div className="flex gap-3">
                             {['yes', 'no'].map((val) => (
@@ -939,23 +996,34 @@ export default function CallsPage() {
                                 <input
                                   type="radio"
                                   value={val}
-                                  {...register('agreementSent')}
+                                  {...register('agreementSent', {
+                                    required: requirePC ? 'Please select Yes or No' : false,
+                                  })}
                                   className="accent-[var(--accent)]"
                                 />
                                 {val === 'yes' ? 'Yes' : 'No'}
                               </label>
                             ))}
                           </div>
+                          {errors.agreementSent && (
+                            <p className="mt-1 text-xs" style={{ color: 'var(--danger)' }}>
+                              {errors.agreementSent.message}
+                            </p>
+                          )}
                         </fieldset>
                       )}
 
                       {/* Closer Assignment */}
                       {showCloser && (
                         <div>
-                          <Label className="mb-1.5 block text-xs">Assigned Closer</Label>
+                          <Label className="mb-1.5 block text-xs">
+                            Assigned Closer {requirePC && <span style={{ color: 'var(--danger)' }}>*</span>}
+                          </Label>
                           <Select
                             value={closerValue || undefined}
-                            onValueChange={(val) => setValue('idCloser', val)}
+                            onValueChange={(val) =>
+                              setValue('idCloser', val, { shouldValidate: true })
+                            }
                           >
                             <SelectTrigger className="max-w-sm">
                               <SelectValue placeholder="Select a closer" />
@@ -968,6 +1036,11 @@ export default function CallsPage() {
                               ))}
                             </SelectContent>
                           </Select>
+                          {errors.idCloser && (
+                            <p className="mt-1 text-xs" style={{ color: 'var(--danger)' }}>
+                              {errors.idCloser.message}
+                            </p>
+                          )}
                         </div>
                       )}
 
@@ -977,15 +1050,23 @@ export default function CallsPage() {
                           <Label htmlFor="callBack" className="mb-1.5 block text-xs">
                             <span className="flex items-center gap-1.5">
                               <Calendar className="h-3.5 w-3.5" style={{ color: 'var(--accent)' }} />
-                              Callback Date
+                              Callback Date {requirePC && <span style={{ color: 'var(--danger)' }}>*</span>}
                             </span>
                           </Label>
                           <Input
                             id="callBack"
                             type="datetime-local"
                             className="max-w-sm"
-                            {...register('callBack')}
+                            aria-invalid={!!errors.callBack}
+                            {...register('callBack', {
+                              required: requirePC ? 'Callback date is required' : false,
+                            })}
                           />
+                          {errors.callBack && (
+                            <p className="mt-1 text-xs" style={{ color: 'var(--danger)' }}>
+                              {errors.callBack.message}
+                            </p>
+                          )}
                         </div>
                       )}
 

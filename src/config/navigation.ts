@@ -4,7 +4,6 @@ import {
   Clock,
   Users,
   BarChart3,
-  MessageSquare,
   BookOpen,
   Link2,
   Building2,
@@ -63,12 +62,6 @@ export const navigation: NavItem[] = [
     href: '/training',
     icon: BookOpen,
     permissionKey: 'training',
-  },
-  {
-    label: 'SMS',
-    href: '/sms',
-    icon: MessageSquare,
-    permissionKey: 'sms',
   },
   {
     label: 'Resources',

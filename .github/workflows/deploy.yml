@@ -3,6 +3,17 @@ name: Build & Deploy to Plesk
 on:
   push:
     branches: [main]
+  workflow_dispatch:
+    inputs:
+      force_node_modules:
+        description: 'Re-upload the full node_modules even if dependencies did not change'
+        type: boolean
+        default: false
+
+# Never run two FTP deploys at once (they would clobber each other). Queue them.
+concurrency:
+  group: deploy-prod
+  cancel-in-progress: false
 
 jobs:
   build-and-deploy:
@@ -45,6 +56,7 @@ jobs:
           FTP_HOST: ${{ secrets.FTP_HOST }}
           FTP_USER: ${{ secrets.FTP_USERNAME }}
           FTP_PASS: ${{ secrets.FTP_PASSWORD }}
+          FORCE_NODE_MODULES: ${{ github.event.inputs.force_node_modules }}
         run: |
           import os, re, glob, ftplib, shutil, time, hashlib
           from io import BytesIO
@@ -54,6 +66,11 @@ jobs:
           FTP_USER = os.environ['FTP_USER']
           FTP_PASS = os.environ['FTP_PASS']
           REMOTE_DIR = '/httpdocs'
+
+          # --- Lockfile hash: node_modules is only re-uploaded when deps change ---
+          lock_path = os.path.join(base, 'pnpm-lock.yaml')
+          lock_hash = hashlib.md5(open(lock_path, 'rb').read()).hexdigest() if os.path.exists(lock_path) else 'nolock'
+          FORCE_NM = os.environ.get('FORCE_NODE_MODULES', '') == 'true'
 
           # --- Find standalone dir ---
           server_candidates = glob.glob(os.path.join(base, '.next', 'standalone', '**', 'server.js'), recursive=True)
@@ -206,15 +223,33 @@ jobs:
           ftp = ftp_connect()
           print('Connected')
 
+          # --- Decide whether the full node_modules needs re-uploading ---
+          def _read_remote(path):
+              buf = BytesIO()
+              try:
+                  ftp.retrbinary(f'RETR {path}', buf.write)
+                  return buf.getvalue().decode('utf-8', 'ignore').strip()
+              except Exception:
+                  return None
+          server_lock = _read_remote(f'{REMOTE_DIR}/.deploy-lockhash')
+          deps_changed = FORCE_NM or (server_lock != lock_hash)
+          print(f'lock_hash={lock_hash[:12]} server={str(server_lock)[:12]} -> deps_changed={deps_changed} (force={FORCE_NM})')
+
           # --- Delete old .next and re-upload ---
           print('Deleting old .next on server...')
           delete_dir(ftp, f'{REMOTE_DIR}/.next')
           print('Deleted. Uploading new .next...')
           upload_dir(ftp, os.path.join(standalone, '.next'), f'{REMOTE_DIR}/.next', '.next')
 
-          # --- Upload node_modules from standalone (contains 'next' and runtime deps) ---
-          print('Uploading node_modules from standalone...')
-          upload_dir(ftp, os.path.join(standalone, 'node_modules'), f'{REMOTE_DIR}/node_modules', 'node_modules')
+          # --- Upload node_modules ONLY when dependencies changed (the slow part: thousands of files) ---
+          if deps_changed:
+              print('Dependencies changed (or forced) — uploading full node_modules...')
+              upload_dir(ftp, os.path.join(standalone, 'node_modules'), f'{REMOTE_DIR}/node_modules', 'node_modules')
+              ftp.storbinary(f'STOR {REMOTE_DIR}/.deploy-lockhash', BytesIO(lock_hash.encode()))
+              print('Updated /httpdocs/.deploy-lockhash marker')
+          else:
+              print('Dependencies unchanged — SKIPPING full node_modules upload (saves ~25-35 min).')
+              print('(.next, Prisma client + Turbopack aliases, and public/ below are still refreshed for this build.)')
 
           # --- Explicitly upload next/dist/server/next.js (required by require('next')) ---
           next_js_local = os.path.join(standalone, 'node_modules', 'next', 'dist', 'server', 'next.js')

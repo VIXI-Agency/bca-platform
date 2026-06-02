@@ -357,13 +357,12 @@ export default function CallsPage() {
 
   /* ---- Unified main button handler ---- */
   const handleMainButton = useCallback(() => {
-    if (!timezone) {
-      showToast('Please select a timezone first.', 'error');
-      return;
-    }
-
-    // No lead loaded yet → just fetch one
+    // No lead loaded yet → need a timezone to fetch one
     if (!lead) {
+      if (!timezone) {
+        showToast('Please select a timezone first.', 'error');
+        return;
+      }
       doFetchLead();
       return;
     }
@@ -464,7 +463,7 @@ export default function CallsPage() {
                   {/* Unified Main Button: Get Lead / Log & Next Call */}
                   <Button
                     onClick={handleMainButton}
-                    disabled={!timezone || isSubmitting}
+                    disabled={(!lead && !timezone) || isSubmitting}
                     size="lg"
                     className="shrink-0"
                   >

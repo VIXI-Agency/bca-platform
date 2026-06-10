@@ -57,14 +57,14 @@ import {
 /*  Helpers                                            */
 /* -------------------------------------------------- */
 
-/** Get the Friday that starts the work week containing `date`. */
+/** Get the Monday that starts the work week containing `date`. */
 function getWorkWeekStart(date: Date): Date {
   const d = new Date(date);
   d.setHours(0, 0, 0, 0);
   // 0=Sun,1=Mon,...,5=Fri,6=Sat
   const day = d.getDay();
-  // Days since last Friday
-  const diff = (day + 2) % 7; // Fri=0, Sat=1, Sun=2, Mon=3 ...
+  // Days since last Monday: Mon=0, Tue=1, ..., Fri=4, Sat=5, Sun=6
+  const diff = (day + 6) % 7;
   d.setDate(d.getDate() - diff);
   return d;
 }
@@ -73,22 +73,22 @@ function formatDateISO(d: Date): string {
   return d.toISOString().split('T')[0];
 }
 
-function formatWeekLabel(friday: Date): string {
-  const thu = new Date(friday);
-  thu.setDate(thu.getDate() + 6);
+function formatWeekLabel(monday: Date): string {
+  const friday = new Date(monday);
+  friday.setDate(friday.getDate() + 4); // Monday + 4 = Friday
   const opts: Intl.DateTimeFormatOptions = { month: 'short', day: 'numeric' };
-  return `${friday.toLocaleDateString('en-US', opts)} - ${thu.toLocaleDateString('en-US', opts)}, ${thu.getFullYear()}`;
+  return `${monday.toLocaleDateString('en-US', opts)} - ${friday.toLocaleDateString('en-US', opts)}, ${friday.getFullYear()}`;
 }
 
 function generateWeekOptions(count: number): { value: string; label: string }[] {
   const weeks: { value: string; label: string }[] = [];
   const current = getWorkWeekStart(new Date());
   for (let i = 0; i < count; i++) {
-    const friday = new Date(current);
-    friday.setDate(friday.getDate() - i * 7);
+    const monday = new Date(current);
+    monday.setDate(monday.getDate() - i * 7);
     weeks.push({
-      value: formatDateISO(friday),
-      label: formatWeekLabel(friday),
+      value: formatDateISO(monday),
+      label: formatWeekLabel(monday),
     });
   }
   return weeks;
@@ -187,8 +187,6 @@ const STATUS_CONFIG: Record<
     bg: 'rgba(59, 130, 246, 0.1)',
   },
 };
-
-const DAY_NAMES = ['Fri', 'Sat', 'Sun', 'Mon', 'Tue', 'Wed', 'Thu'];
 
 const EDITABLE_FIELDS: { key: string; label: string }[] = [
   { key: 'clockIn', label: 'Clock In' },
@@ -895,9 +893,10 @@ function EditTimeTab() {
                       </td>
                     </tr>
                   )}
-                  {dayLogs.map((day, i) => {
+                  {dayLogs.map((day) => {
                     const dayDate = new Date(day.date + 'T00:00:00');
-                    const dayName = DAY_NAMES[i] ?? dayDate.toLocaleDateString('en-US', { weekday: 'short' });
+                    // Derive the weekday name from the actual date (robust to missing days)
+                    const dayName = dayDate.toLocaleDateString('en-US', { weekday: 'short' });
                     const dayLabel = `${dayName} ${dayDate.getMonth() + 1}/${dayDate.getDate()}`;
 
                     const break1 = breakInfo(

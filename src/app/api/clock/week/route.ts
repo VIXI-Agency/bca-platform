@@ -5,16 +5,15 @@ import { clockWeekSchema } from '@/lib/validators';
 import { getTodayRangePST } from '@/lib/time';
 
 /**
- * Get the Friday start date for the work week containing the given date.
- * Work week: Friday to Thursday.
+ * Get the Monday start date for the work week containing the given date.
+ * Pay period: Monday to Friday (no weekends).
  */
-function getFridayStart(date: Date): Date {
+function getMondayStart(date: Date): Date {
   const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
   const dayOfWeek = d.getUTCDay(); // 0=Sun, 1=Mon, ..., 5=Fri, 6=Sat
-  // Days since last Friday:
-  // Fri(5)->0, Sat(6)->1, Sun(0)->2, Mon(1)->3, Tue(2)->4, Wed(3)->5, Thu(4)->6
-  const daysSinceFriday = (dayOfWeek + 2) % 7;
-  d.setDate(d.getDate() - daysSinceFriday);
+  // Days since last Monday: Mon(1)->0, Tue(2)->1, ..., Fri(5)->4, Sat(6)->5, Sun(0)->6
+  const daysSinceMonday = (dayOfWeek + 6) % 7;
+  d.setDate(d.getDate() - daysSinceMonday);
   return d;
 }
 
@@ -119,37 +118,37 @@ export async function GET(request: Request) {
       );
     }
 
-    // Determine the Friday start date
-    let fridayStart: Date;
+    // Determine the Monday start date
+    let mondayStart: Date;
     if (parsed.data.week) {
       const parts = parsed.data.week.split('-').map(Number);
       const inputDate = new Date(parts[0], parts[1] - 1, parts[2]);
-      fridayStart = getFridayStart(inputDate);
+      mondayStart = getMondayStart(inputDate);
     } else {
       const { todayStart } = getTodayRangePST();
-      fridayStart = getFridayStart(todayStart);
+      mondayStart = getMondayStart(todayStart);
     }
 
-    // Thursday end = Friday + 7 days
-    const thursdayEnd = new Date(fridayStart);
-    thursdayEnd.setDate(thursdayEnd.getDate() + 7);
+    // Week end = Monday + 5 days (Saturday, exclusive) → covers Mon–Fri only
+    const weekEnd = new Date(mondayStart);
+    weekEnd.setDate(weekEnd.getDate() + 5);
 
     // Fetch all logs for this week
     const logs = await prisma.employeeTimeLog.findMany({
       where: {
         idUser: userId,
         logDate: {
-          gte: fridayStart,
-          lt: thursdayEnd,
+          gte: mondayStart,
+          lt: weekEnd,
         },
       },
       orderBy: { logDate: 'asc' },
     });
 
-    // Filter out Saturday (6) and Sunday (0) - work week is Fri, Mon, Tue, Wed, Thu
+    // Defensive: exclude Saturday (6) and Sunday (0) — pay period is Mon–Fri
     const filteredLogs = logs.filter((log) => {
       const day = new Date(log.logDate).getUTCDay();
-      return day !== 0 && day !== 6; // Exclude Sunday and Saturday
+      return day !== 0 && day !== 6;
     });
 
     // Map day-of-week names

@@ -202,18 +202,18 @@ function formatTotalHours(hours: number | undefined): string {
   return `${h}:${m.toString().padStart(2, '0')}`;
 }
 
-/** Get the current Friday-start week date as YYYY-MM-DD */
+/** Get the current Monday-start week date as YYYY-MM-DD */
 function getCurrentWeekDate(): string {
   const now = new Date();
   const pst = new Date(
     now.toLocaleString('en-US', { timeZone: 'America/Los_Angeles' })
   );
-  const day = pst.getDay(); // 0=Sun, 5=Fri
-  // Find the most recent Friday
-  const diff = day >= 5 ? day - 5 : day + 2;
-  const friday = new Date(pst);
-  friday.setDate(pst.getDate() - diff);
-  return friday.toISOString().split('T')[0];
+  const day = pst.getDay(); // 0=Sun, 1=Mon, ..., 6=Sat
+  // Find the most recent Monday
+  const diff = (day + 6) % 7;
+  const monday = new Date(pst);
+  monday.setDate(pst.getDate() - diff);
+  return monday.toISOString().split('T')[0];
 }
 
 /** Determine which break can be skipped based on nextAction */
@@ -371,7 +371,7 @@ function MiniTimeline({ steps }: { steps: TimelineStep[] }) {
 /*  Weekly Timesheet Component                         */
 /* -------------------------------------------------- */
 
-const ORDERED_DAYS = ['Friday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday'];
+const ORDERED_DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
 
 const TABLE_COLUMNS = [
   'Day',

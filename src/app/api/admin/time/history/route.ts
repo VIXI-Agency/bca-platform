@@ -5,7 +5,8 @@ import { Prisma } from '@prisma/client';
 
 /**
  * Get time logs for all (or one) employee for a given work week.
- * Query params: week=YYYY-MM-DD (Friday start), userId=number (optional)
+ * Query params: week=YYYY-MM-DD (Monday start), userId=number (optional)
+ * Pay period: Monday to Friday (no weekends).
  */
 export async function GET(request: NextRequest) {
   try {
@@ -27,16 +28,16 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'week parameter required (YYYY-MM-DD)' }, { status: 400 });
     }
 
-    // Parse the Friday start date
+    // Parse the Monday start date; week end = Monday + 5 days (Mon–Fri only)
     const parts = weekParam.split('-').map(Number);
-    const fridayStart = new Date(Date.UTC(parts[0], parts[1] - 1, parts[2]));
-    const thursdayEnd = new Date(fridayStart);
-    thursdayEnd.setDate(thursdayEnd.getDate() + 7);
+    const weekStart = new Date(Date.UTC(parts[0], parts[1] - 1, parts[2]));
+    const weekEnd = new Date(weekStart);
+    weekEnd.setDate(weekEnd.getDate() + 5);
 
     // Build conditions
     const conditions: Prisma.Sql[] = [
-      Prisma.sql`t.LogDate >= ${fridayStart}`,
-      Prisma.sql`t.LogDate < ${thursdayEnd}`,
+      Prisma.sql`t.LogDate >= ${weekStart}`,
+      Prisma.sql`t.LogDate < ${weekEnd}`,
     ];
 
     if (userIdParam) {

@@ -5,14 +5,14 @@ import { clockWeekSchema } from '@/lib/validators';
 import { getTodayRangePST } from '@/lib/time';
 
 /**
- * Get the Friday start date for the work week containing the given date.
- * Work week: Friday to Thursday.
+ * Get the Monday start date for the work week containing the given date.
+ * Pay period: Monday to Friday (no weekends).
  */
-function getFridayStart(date: Date): Date {
+function getMondayStart(date: Date): Date {
   const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
   const dayOfWeek = d.getUTCDay();
-  const daysSinceFriday = (dayOfWeek + 2) % 7;
-  d.setDate(d.getDate() - daysSinceFriday);
+  const daysSinceMonday = (dayOfWeek + 6) % 7;
+  d.setDate(d.getDate() - daysSinceMonday);
   return d;
 }
 
@@ -125,19 +125,20 @@ export async function GET(
       );
     }
 
-    // Determine the Friday start date
-    let fridayStart: Date;
+    // Determine the Monday start date
+    let mondayStart: Date;
     if (parsed.data.week) {
       const parts = parsed.data.week.split('-').map(Number);
       const inputDate = new Date(parts[0], parts[1] - 1, parts[2]);
-      fridayStart = getFridayStart(inputDate);
+      mondayStart = getMondayStart(inputDate);
     } else {
       const { todayStart } = getTodayRangePST();
-      fridayStart = getFridayStart(todayStart);
+      mondayStart = getMondayStart(todayStart);
     }
 
-    const thursdayEnd = new Date(fridayStart);
-    thursdayEnd.setDate(thursdayEnd.getDate() + 7);
+    // Week end = Monday + 5 days (Saturday, exclusive) → Mon–Fri only
+    const weekEnd = new Date(mondayStart);
+    weekEnd.setDate(weekEnd.getDate() + 5);
 
     // Fetch time logs and audit trail in parallel
     const [logs, audits, user] = await Promise.all([
@@ -145,8 +146,8 @@ export async function GET(
         where: {
           idUser: targetUserId,
           logDate: {
-            gte: fridayStart,
-            lt: thursdayEnd,
+            gte: mondayStart,
+            lt: weekEnd,
           },
         },
         orderBy: { logDate: 'asc' },
@@ -155,8 +156,8 @@ export async function GET(
         where: {
           idUser: String(targetUserId),
           modifiedDate: {
-            gte: fridayStart,
-            lt: thursdayEnd,
+            gte: mondayStart,
+            lt: weekEnd,
           },
         },
         orderBy: { modifiedDate: 'desc' },
@@ -246,8 +247,8 @@ export async function GET(
       data: transformedDays,
       audits: transformedAudits,
       employee: user,
-      weekStart: fridayStart.toISOString().split('T')[0],
-      weekEnd: new Date(thursdayEnd.getTime() - 1).toISOString().split('T')[0],
+      weekStart: mondayStart.toISOString().split('T')[0],
+      weekEnd: new Date(weekEnd.getTime() - 1).toISOString().split('T')[0],
       weekTotals,
     });
   } catch (error) {

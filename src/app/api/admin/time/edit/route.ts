@@ -48,9 +48,12 @@ export async function POST(request: Request) {
       );
     }
 
-    // Validate time format (HH:mm)
+    // An empty value clears the entry (e.g. a break/lunch the employee never took).
+    const isClearing = value.trim() === '';
+
+    // Validate time format (HH:mm) when a value is provided
     const timeRegex = /^\d{2}:\d{2}$/;
-    if (!timeRegex.test(value)) {
+    if (!isClearing && !timeRegex.test(value)) {
       return NextResponse.json(
         { error: 'Value must be in HH:mm format' },
         { status: 400 }
@@ -84,10 +87,12 @@ export async function POST(request: Request) {
     // Get the current (old) value for the audit trail
     const oldValueRaw = log[field as keyof typeof log] as Date | null;
 
-    // Build UTC-epoch Date where UTC hours = PST hours (for TIME column storage)
-    const newDateTime = timeStringToUtcDate(value);
+    // Build UTC-epoch Date where UTC hours = PST hours (for TIME column storage),
+    // or null when clearing the entry.
+    const newDateTime = isClearing ? null : timeStringToUtcDate(value);
 
     // Chronological validation: ensure time fields are in order
+    // (null entries are ignored, so clearing a field never breaks the order)
     const TIME_ORDER = [
       'clockIn', 'firstBreakOut', 'firstBreakIn',
       'lunchOut', 'lunchIn',

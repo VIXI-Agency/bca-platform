@@ -1,7 +1,6 @@
 'use client';
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { useSession } from 'next-auth/react';
 import {
   Clock,
   Play,
@@ -581,7 +580,6 @@ function WeeklyTimesheet() {
 /* -------------------------------------------------- */
 
 export default function ClockPage() {
-  const { data: session } = useSession();
   const now = useLiveClock();
 
   const {
@@ -616,8 +614,9 @@ export default function ClockPage() {
   const timeLog = clockData?.data ?? null;
   const statusConfig = STATUS_CONFIG[status];
 
-  const userRole = (session?.user as { role?: number })?.role;
-  const isPartTime = userRole === 4; // Rep role treated as potentially part-time
+  // Part-time status comes from the user's DB flag (returned by the status API),
+  // matching the authorization in /api/clock/skip. Falls back to false.
+  const isPartTime = clockData?.isPartTime ?? false;
   const skippableBreak = getSkippableBreak(nextAction);
 
   // Live elapsed timer: time since clock in (comparing PST times)

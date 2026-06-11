@@ -109,7 +109,8 @@ export const timeEditSchema = z.object({
     'lunchOut', 'lunchIn',
     'secondBreakOut', 'secondBreakIn', 'clockOut',
   ]),
-  value: z.string().regex(/^\d{2}:\d{2}$/, 'Must be HH:mm format'),
+  // HH:mm to set a time, or empty string to clear the entry (e.g. a skipped break/lunch)
+  value: z.string().regex(/^(\d{2}:\d{2})?$/, 'Must be HH:mm format or empty to clear'),
   reason: z.string().min(1, 'Reason is required').max(500),
 });
 

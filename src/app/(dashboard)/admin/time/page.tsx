@@ -709,7 +709,9 @@ function EditTimeTab() {
   }
 
   async function handleEditSave() {
-    if (!editingDay || !editReason.trim() || !editNewValue.trim()) return;
+    // An empty value is allowed — it clears the entry (e.g. a skipped break/lunch).
+    // Only the reason is mandatory.
+    if (!editingDay || !editReason.trim()) return;
     await editMutation.mutateAsync({
       userId: parseInt(selectedUserId, 10),
       date: editingDay.date,
@@ -1105,13 +1107,28 @@ function EditTimeTab() {
 
             {/* New value */}
             <div className="space-y-2">
-              <Label htmlFor="edit-new-value">New Time (HH:mm)</Label>
+              <div className="flex items-center justify-between">
+                <Label htmlFor="edit-new-value">New Time (HH:mm)</Label>
+                {editNewValue.trim() !== '' && (
+                  <button
+                    type="button"
+                    onClick={() => setEditNewValue('')}
+                    className="text-xs font-medium text-[var(--text-muted)] underline-offset-2 hover:text-[var(--text-primary)] hover:underline"
+                  >
+                    Clear (no entry)
+                  </button>
+                )}
+              </div>
               <Input
                 id="edit-new-value"
                 type="time"
                 value={editNewValue}
                 onChange={(e) => setEditNewValue(e.target.value)}
               />
+              <p className="text-xs text-[var(--text-muted)]">
+                Leave blank to clear this entry — e.g. a break or lunch the
+                employee didn&apos;t take.
+              </p>
             </div>
 
             {/* Reason */}
@@ -1140,11 +1157,7 @@ function EditTimeTab() {
             </Button>
             <Button
               onClick={handleEditSave}
-              disabled={
-                !editNewValue.trim() ||
-                !editReason.trim() ||
-                editMutation.isPending
-              }
+              disabled={!editReason.trim() || editMutation.isPending}
             >
               {editMutation.isPending ? (
                 <>

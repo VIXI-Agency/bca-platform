@@ -53,6 +53,14 @@ export async function GET() {
     const userId = (session.user as { userId: number }).userId;
     const { todayStart, todayEnd } = getTodayRangePST();
 
+    // Whether this employee is part-time controls who may skip breaks
+    // (lunch can be skipped by anyone — see /api/clock/skip).
+    const dbUser = await prisma.user.findUnique({
+      where: { idUser: userId },
+      select: { isPartTime: true },
+    });
+    const isPartTime = dbUser?.isPartTime ?? false;
+
     const log = await prisma.employeeTimeLog.findFirst({
       where: {
         idUser: userId,
@@ -68,10 +76,12 @@ export async function GET() {
         data: null,
         status: 'not_clocked_in' as ClockStatus,
         nextAction: 'clockIn',
+        isPartTime,
       });
     }
 
     return NextResponse.json({
+      isPartTime,
       data: {
         clockIn: log.clockIn?.toISOString() ?? null,
         firstBreakOut: log.firstBreakOut?.toISOString() ?? null,

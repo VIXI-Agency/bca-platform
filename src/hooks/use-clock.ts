@@ -9,6 +9,8 @@ export interface ClockStatusResponse {
   data: TimeLogEntry | null;
   nextAction: ClockAction | null;
   status: ClockStatus;
+  /** True when the signed-in employee is flagged part-time (may skip breaks). */
+  isPartTime?: boolean;
 }
 
 export interface ClockActionResponse {

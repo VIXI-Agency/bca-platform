@@ -106,27 +106,9 @@ export async function POST(request: Request) {
       }
     }
 
-    // Break minimum 10-minute rule (applies to both the first and second break)
-    if (action === 'firstBreakIn' && log?.firstBreakOut) {
-      const elapsed = minutesSinceStored(log.firstBreakOut);
-      if (elapsed < 10) {
-        const remaining = Math.ceil(10 - elapsed);
-        return NextResponse.json(
-          { error: `Break must be at least 10 minutes. ${remaining} minute(s) remaining.` },
-          { status: 400 }
-        );
-      }
-    }
-    if (action === 'secondBreakIn' && log?.secondBreakOut) {
-      const elapsed = minutesSinceStored(log.secondBreakOut);
-      if (elapsed < 10) {
-        const remaining = Math.ceil(10 - elapsed);
-        return NextResponse.json(
-          { error: `Break must be at least 10 minutes. ${remaining} minute(s) remaining.` },
-          { status: 400 }
-        );
-      }
-    }
+    // Breaks have no minimum duration — employees may end a break whenever they
+    // want (the 10-minute figure is only a soft limit shown in the UI). Lunch
+    // keeps its 30-minute minimum above.
 
     // Determine the time to record (PST as UTC-epoch)
     let recordTime = now;

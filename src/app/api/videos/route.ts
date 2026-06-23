@@ -68,19 +68,32 @@ export async function POST(request: Request) {
       );
     }
 
-    // videoId has no DB default in the schema, so assign the next id manually.
-    const max = await prisma.video.aggregate({ _max: { videoId: true } });
-    const nextId = (max._max.videoId ?? 0) + 1;
+    // VideoId may be a DB identity (auto-assigned) column even though the Prisma
+    // schema doesn't declare it. If so, supplying VideoId explicitly errors, so
+    // detect it: identity → let the DB assign the id; otherwise → assign max+1.
+    const idCheck = await prisma.$queryRaw<{ isIdentity: number | null }[]>`
+      SELECT COLUMNPROPERTY(OBJECT_ID('benjaise_sqluser2.Videos'), 'VideoId', 'IsIdentity') AS isIdentity
+    `;
+    const isIdentity = idCheck?.[0]?.isIdentity === 1;
 
-    const created = await prisma.video.create({
-      data: { videoId: nextId, videoTitle: title, videoFilePath: filename },
-    });
+    let createdId: number;
+    if (isIdentity) {
+      const inserted = await prisma.$queryRaw<{ id: number }[]>`
+        INSERT INTO benjaise_sqluser2.Videos (VideoTitle, VideoFilePath)
+        OUTPUT INSERTED.VideoId AS id
+        VALUES (${title}, ${filename})
+      `;
+      createdId = inserted[0].id;
+    } else {
+      const max = await prisma.video.aggregate({ _max: { videoId: true } });
+      const nextId = (max._max.videoId ?? 0) + 1;
+      const created = await prisma.video.create({
+        data: { videoId: nextId, videoTitle: title, videoFilePath: filename },
+      });
+      createdId = created.videoId;
+    }
 
-    return NextResponse.json({
-      id: created.videoId,
-      title: created.videoTitle,
-      url: created.videoFilePath ?? '',
-    });
+    return NextResponse.json({ id: createdId, title, url: filename });
   } catch (error) {
     console.error('POST /api/videos error:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });

@@ -44,8 +44,11 @@ export async function PATCH(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const role = (session.user as { role: number }).role;
-    if (role !== 1 && role !== 2) {
+    // Authorize by the 'clients' permission (same gate as the Clients page),
+    // not a hardcoded role — otherwise non-admin users who can see the page
+    // and the "Mark as Existing" button get a 403 here.
+    const permissions = (session.user as { permissions?: string[] }).permissions ?? [];
+    if (!permissions.includes('clients')) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 

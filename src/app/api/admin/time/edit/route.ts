@@ -78,10 +78,43 @@ export async function POST(request: Request) {
     });
 
     if (!log) {
-      return NextResponse.json(
-        { error: 'No time log found for this user on this date' },
-        { status: 404 }
-      );
+      // No entry exists for this date — e.g. the employee forgot to clock in
+      // at all, so the clock flow never created a row. Clearing a field that
+      // doesn't exist is a no-op, but for a real value we create the day's log
+      // with that single field set so an admin can add the missed hours.
+      if (isClearing) {
+        return NextResponse.json(
+          { error: 'No time log found for this user on this date' },
+          { status: 404 }
+        );
+      }
+
+      const createdValue = timeStringToUtcDate(value);
+      const createdLog = await prisma.$transaction(async (tx) => {
+        const created = await tx.employeeTimeLog.create({
+          data: {
+            idUser: userId,
+            logDate: targetDate,
+            [field]: createdValue,
+            isModifiedByAdmin: true,
+          },
+        });
+        await tx.employeeTimeLogAudit.create({
+          data: {
+            timeLogId: created.timeLogId,
+            idUser: String(userId),
+            modifiedBy: String(adminUserId),
+            modifiedDate: new Date(),
+            fieldModified: field,
+            oldValue: null,
+            newValue: createdValue,
+            reason,
+          },
+        });
+        return created;
+      });
+
+      return NextResponse.json({ data: createdLog });
     }
 
     // Get the current (old) value for the audit trail

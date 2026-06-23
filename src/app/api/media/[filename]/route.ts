@@ -26,9 +26,12 @@ export async function GET(
   const { filename } = await params;
   const safeName = path.basename(filename);
 
+  // Allow spaces in addition to alphanumerics/dot/dash/underscore — uploaded
+  // video files often contain spaces (e.g. "Suspensions Breakdown.mp4").
+  // Path traversal is still blocked by the path.basename check above.
   if (
     safeName !== filename ||
-    !/^[a-zA-Z0-9._-]+\.(mp4|mov|webm)$/.test(safeName)
+    !/^[a-zA-Z0-9 ._-]+\.(mp4|mov|webm)$/.test(safeName)
   ) {
     return new NextResponse('Invalid filename', { status: 400 });
   }

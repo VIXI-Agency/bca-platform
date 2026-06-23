@@ -41,6 +41,25 @@ export function useVideos() {
 /*  Mutations                                          */
 /* -------------------------------------------------- */
 
+export function useAddVideo() {
+  const qc = useQueryClient();
+  return useMutation<
+    { id: number; title: string; url: string },
+    Error,
+    { title: string; filename: string }
+  >({
+    mutationFn: (input) =>
+      fetchJson('/api/videos', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(input),
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['training-videos'] });
+    },
+  });
+}
+
 export function useMarkWatched() {
   const qc = useQueryClient();
   return useMutation<{ success: boolean }, Error, number>({

@@ -1,22 +1,49 @@
 'use client';
 
-import { useCallback, useRef } from 'react';
+import { useCallback, useRef, useState } from 'react';
+import { useSession } from 'next-auth/react';
 import {
   PlayCircle,
   CheckCircle2,
   Circle,
   Loader2,
+  Plus,
 } from 'lucide-react';
 import Header from '@/components/layout/header';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { Loading } from '@/components/ui/loading';
-import { useVideos, useMarkWatched } from '@/hooks/use-videos';
+import { useVideos, useMarkWatched, useAddVideo } from '@/hooks/use-videos';
 
 export default function TrainingPage() {
   const { data: videos, isLoading } = useVideos();
   const markWatched = useMarkWatched();
+  const addVideo = useAddVideo();
   const videoRefs = useRef<Map<number, HTMLVideoElement>>(new Map());
+
+  const { data: session } = useSession();
+  const userRole = (session?.user as { role?: number })?.role;
+  const isAdmin = userRole === 1 || userRole === 2;
+
+  const [newTitle, setNewTitle] = useState('');
+  const [newFilename, setNewFilename] = useState('');
+
+  const handleAddVideo = useCallback(() => {
+    const title = newTitle.trim();
+    const filename = newFilename.trim();
+    if (!title || !filename) return;
+    addVideo.mutate(
+      { title, filename },
+      {
+        onSuccess: () => {
+          setNewTitle('');
+          setNewFilename('');
+        },
+      },
+    );
+  }, [newTitle, newFilename, addVideo]);
 
   const watchedCount = videos?.filter((v) => v.watched).length ?? 0;
   const totalCount = videos?.length ?? 0;
@@ -82,6 +109,68 @@ export default function TrainingPage() {
             )}
           </CardContent>
         </Card>
+
+        {/* ---- Admin: Add Video ---- */}
+        {isAdmin && (
+          <Card className="mb-6">
+            <CardHeader className="pb-3">
+              <CardTitle className="flex items-center gap-2 text-base">
+                <Plus className="h-4 w-4" style={{ color: 'var(--accent)' }} />
+                Add Training Video
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="mb-3 text-xs" style={{ color: 'var(--text-muted)' }}>
+                Upload the video file to the server first, then register it here.
+                The file name must match the uploaded file exactly.
+              </p>
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
+                <div className="flex-1">
+                  <label className="mb-1 block text-xs font-medium" style={{ color: 'var(--text-secondary)' }}>
+                    Title (shown to users)
+                  </label>
+                  <Input
+                    placeholder="e.g. Suspensions Breakdown"
+                    value={newTitle}
+                    onChange={(e) => setNewTitle(e.target.value)}
+                  />
+                </div>
+                <div className="flex-1">
+                  <label className="mb-1 block text-xs font-medium" style={{ color: 'var(--text-secondary)' }}>
+                    File name (in assets/files)
+                  </label>
+                  <Input
+                    placeholder="e.g. SuspensionsBreakdown.mp4"
+                    value={newFilename}
+                    onChange={(e) => setNewFilename(e.target.value)}
+                  />
+                </div>
+                <Button
+                  onClick={handleAddVideo}
+                  disabled={addVideo.isPending || !newTitle.trim() || !newFilename.trim()}
+                >
+                  {addVideo.isPending ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Plus className="h-4 w-4" />
+                  )}
+                  Add Video
+                </Button>
+              </div>
+              {addVideo.isError && (
+                <p className="mt-2 text-xs" style={{ color: 'var(--danger, #ef4444)' }}>
+                  {addVideo.error.message}
+                </p>
+              )}
+              {addVideo.isSuccess && (
+                <p className="mt-2 flex items-center gap-1.5 text-xs font-medium" style={{ color: 'var(--success)' }}>
+                  <CheckCircle2 className="h-3.5 w-3.5" />
+                  Video added.
+                </p>
+              )}
+            </CardContent>
+          </Card>
+        )}
 
         {/* ---- Video Grid ---- */}
         {isLoading ? (

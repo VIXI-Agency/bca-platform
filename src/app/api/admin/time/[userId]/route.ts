@@ -230,6 +230,39 @@ export async function GET(
       isModifiedByAdmin: d.isModifiedByAdmin ?? false,
     }));
 
+    // Return a row for every weekday (Mon–Fri), filling days with no log with
+    // an empty placeholder. This lets admins click an empty cell to add hours
+    // for a day the employee never clocked (e.g. forgot to clock in entirely);
+    // the edit endpoint creates the log on first save. weekStart is UTC-midnight
+    // and day dates serialize via toISOString, so generate the same way to match.
+    const weekStartStr = mondayStart.toISOString().split('T')[0];
+    const byDate = new Map(transformedDays.map((d) => [d.date, d]));
+    const fullWeek = Array.from({ length: 5 }, (_, i) => {
+      const d = new Date(weekStartStr + 'T00:00:00Z');
+      d.setUTCDate(d.getUTCDate() + i);
+      const date = d.toISOString().split('T')[0];
+      return (
+        byDate.get(date) ?? {
+          date,
+          clockIn: undefined,
+          firstBreakOut: undefined,
+          firstBreakIn: undefined,
+          lunchOut: undefined,
+          lunchIn: undefined,
+          secondBreakOut: undefined,
+          secondBreakIn: undefined,
+          clockOut: undefined,
+          totalHours: 0,
+          overtime: 0,
+          firstBreakExcess: 0,
+          secondBreakExcess: 0,
+          lunchDurationMinutes: 0,
+          modifiedFields: [] as string[],
+          isModifiedByAdmin: false,
+        }
+      );
+    });
+
     const transformedAudits = audits.map((a) => ({
       id: a.auditId,
       userId: targetUserId,
@@ -244,7 +277,7 @@ export async function GET(
     }));
 
     return NextResponse.json({
-      data: transformedDays,
+      data: fullWeek,
       audits: transformedAudits,
       employee: user,
       weekStart: mondayStart.toISOString().split('T')[0],

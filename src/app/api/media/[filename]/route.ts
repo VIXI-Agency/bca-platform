@@ -3,9 +3,16 @@ import { auth } from '@/lib/auth';
 import path from 'path';
 import fs from 'fs';
 
-const ASSETS_PATH =
-  process.env.VIDEO_ASSETS_PATH ||
-  path.join(process.cwd(), '..', 'assets', 'files');
+// Candidate directories where uploaded training videos live on disk.
+// In production the files are under /httpdocs/public/assets/files and the
+// process cwd is /httpdocs, so `<cwd>/public/assets/files` is the real path.
+// VIDEO_ASSETS_PATH (if set) and the legacy parent-level path are kept as
+// fallbacks. We pick the first candidate that actually contains the file.
+const ASSETS_PATHS = [
+  process.env.VIDEO_ASSETS_PATH,
+  path.join(process.cwd(), 'public', 'assets', 'files'),
+  path.join(process.cwd(), '..', 'assets', 'files'),
+].filter((p): p is string => Boolean(p));
 
 export async function GET(
   request: Request,
@@ -26,9 +33,11 @@ export async function GET(
     return new NextResponse('Invalid filename', { status: 400 });
   }
 
-  const videoPath = path.join(ASSETS_PATH, safeName);
+  const videoPath = ASSETS_PATHS
+    .map((base) => path.join(base, safeName))
+    .find((p) => fs.existsSync(p));
 
-  if (!fs.existsSync(videoPath)) {
+  if (!videoPath) {
     return new NextResponse('Not found', { status: 404 });
   }
 

@@ -396,7 +396,7 @@ export default function ComputersPage() {
             <div className="flex justify-center py-12"><Loading /></div>
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full text-sm">
+              <table className="w-full min-w-[1100px] text-sm">
                 <thead>
                   <tr style={{ borderBottom: '1px solid var(--border)', color: 'var(--text-muted)' }}>
                     {['Computer', 'Remote ID ✎', 'IP Address ✎', 'Assigned To', 'OS', 'Last Maint.', 'Next Due', 'Status', 'Tickets', 'Actions'].map((h) => (

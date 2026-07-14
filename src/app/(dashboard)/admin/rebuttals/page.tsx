@@ -233,7 +233,7 @@ export default function RebuttalsPage() {
                         {decodeEntities(r.title)}
                       </h3>
                       <div
-                        className="flex shrink-0 gap-1 opacity-0 transition-opacity group-hover:opacity-100"
+                        className="flex shrink-0 gap-1 opacity-0 transition-opacity group-hover:opacity-100 [@media(hover:none)]:opacity-100"
                         onClick={(e) => e.stopPropagation()}
                       >
                         <Button

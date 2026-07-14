@@ -752,7 +752,7 @@ export default function SmsPage() {
                 <button
                   type="button"
                   onClick={(e) => { e.stopPropagation(); deleteTemplate.mutate(tpl.id); }}
-                  className="shrink-0 opacity-0 group-hover:opacity-100 transition-opacity"
+                  className="shrink-0 opacity-0 group-hover:opacity-100 transition-opacity [@media(hover:none)]:opacity-100"
                 >
                   <Trash2 className="h-3.5 w-3.5" style={{ color: '#ef4444' }} />
                 </button>

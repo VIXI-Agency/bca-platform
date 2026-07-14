@@ -386,20 +386,22 @@ export default function UsersPage() {
 
                   {/* Info */}
                   <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2">
+                    <div className="flex flex-col items-start gap-1 sm:flex-row sm:items-center sm:gap-2">
                       <p
-                        className="truncate font-medium"
+                        className="max-w-full truncate font-medium"
                         style={{ color: 'var(--text-primary)' }}
                       >
                         {user.name} {user.lastname}
                       </p>
-                      {getRoleBadge(user.role)}
-                      <Badge variant={user.isActive ? 'success' : 'destructive'}>
-                        {user.isActive ? 'Active' : 'Inactive'}
-                      </Badge>
-                      {user.isPartTime && (
-                        <Badge variant="warning">Part-time</Badge>
-                      )}
+                      <div className="flex flex-wrap items-center gap-2">
+                        {getRoleBadge(user.role)}
+                        <Badge variant={user.isActive ? 'success' : 'destructive'}>
+                          {user.isActive ? 'Active' : 'Inactive'}
+                        </Badge>
+                        {user.isPartTime && (
+                          <Badge variant="warning">Part-time</Badge>
+                        )}
+                      </div>
                     </div>
                     <p
                       className="truncate text-sm"

@@ -69,7 +69,7 @@ export const createUserSchema = z.object({
   name: z.string().min(1).max(100),
   lastname: z.string().min(1).max(100),
   email: z.string().email(),
-  password: z.string().min(6).max(100),
+  password: z.string().min(6, 'Password must be at least 6 characters').max(100),
   roleId: z.number().int().min(1).max(3),
   timezone: z.string().max(50).optional(),
   city: z.string().max(100).optional(),
@@ -81,7 +81,10 @@ export const createUserSchema = z.object({
 });
 
 export const updateUserSchema = createUserSchema.partial().omit({ password: true }).extend({
-  password: z.string().min(6).max(100).optional(),
+  password: z.string().min(6, 'Password must be at least 6 characters').max(100).optional(),
+  // Allow editing users on legacy roles (4=Disabled, 5=Importer) without being
+  // forced to change their role, so password resets on those accounts succeed.
+  roleId: z.number().int().min(1).max(5).optional(),
 });
 
 export const userSearchSchema = z.object({

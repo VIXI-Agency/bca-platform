@@ -172,7 +172,6 @@ function ToastNotification({ toast, onClose }: { toast: Toast; onClose: () => vo
 export default function CallsPage() {
   /* ---- Queries ---- */
   const { data: dispositions, isLoading: loadingDispos } = useDispositions();
-  const { data: filters, isLoading: loadingFilters } = useFilters();
   const { data: closers } = useClosers();
   const { data: rebuttals, isLoading: loadingRebuttals } = useRebuttals();
 
@@ -184,6 +183,10 @@ export default function CallsPage() {
   /* ---- Local state ---- */
   const [timezone, setTimezone] = useState('');
   const [industry, setIndustry] = useState('');
+
+  // Industry options depend on the selected timezone, so scope the filters query to it.
+  const { data: filters, isLoading: loadingFilters } = useFilters(timezone);
+
   const [lead, setLead] = useState<LeadBusiness | null>(null);
   const [previousLead, setPreviousLead] = useState<LeadBusiness | null>(null);
   const [selectedDisposition, setSelectedDisposition] = useState<number | null>(null);
@@ -419,7 +422,13 @@ export default function CallsPage() {
                         <Loading size="sm" />
                       </div>
                     ) : (
-                      <Select value={timezone} onValueChange={setTimezone}>
+                      <Select
+                        value={timezone}
+                        onValueChange={(tz) => {
+                          setTimezone(tz);
+                          setIndustry('');
+                        }}
+                      >
                         <SelectTrigger>
                           <SelectValue placeholder="Select timezone" />
                         </SelectTrigger>
@@ -444,15 +453,15 @@ export default function CallsPage() {
                         <Loading size="sm" />
                       </div>
                     ) : (
-                      <Select value={industry} onValueChange={setIndustry}>
+                      <Select value={industry} onValueChange={setIndustry} disabled={!timezone}>
                         <SelectTrigger>
-                          <SelectValue placeholder="Random Industry" />
+                          <SelectValue placeholder={timezone ? 'Random Industry' : 'Select timezone first'} />
                         </SelectTrigger>
                         <SelectContent>
                           <SelectItem value="random">Random Industry</SelectItem>
                           {filters?.industries.map((ind) => (
-                            <SelectItem key={ind} value={ind}>
-                              {ind}
+                            <SelectItem key={ind.name} value={ind.name}>
+                              {ind.name} ({ind.count.toLocaleString()})
                             </SelectItem>
                           ))}
                         </SelectContent>

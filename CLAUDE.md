@@ -81,6 +81,27 @@ sharing the **same SQL Server database** (`benjaise_BCA`).
 
 ## Deployment runbook
 
+> **Deployment is now AUTOMATED via GitHub Actions**: `.github/workflows/deploy.yml`
+> ("Build & Deploy to Plesk"). It runs on every **push to `main`** (and via manual
+> `workflow_dispatch`): `pnpm install` → `prisma generate` → `pnpm build` → FTP
+> upload. It writes the server `.env` from GitHub Actions secrets and re-uploads
+> `node_modules` only when `pnpm-lock.yaml` changed. **Merging a PR to `main`
+> ships to PROD.** The manual steps below are now a fallback / reference, not the
+> normal path.
+>
+> - **Target prod (default):** any push to `main`, or
+>   `gh workflow run deploy.yml -f target=prod`. Uploads to `/httpdocs`,
+>   `AUTH_URL` from the `AUTH_URL` secret.
+> - **Target QA:** `gh workflow run deploy.yml -f target=qa`. Uploads to `/qa`
+>   with `AUTH_URL=https://qa.yourdebtcollectors.com` (hardcoded so QA logins
+>   don't redirect to prod). QA is **not** deployed by push-to-main; run it
+>   explicitly. QA runs Plesk-managed Node, so it may need a **Restart App** in
+>   Plesk afterward (the web.config touch only restarts prod's iisnode). A QA
+>   deploy with no server `.deploy-lockhash` marker re-uploads the full
+>   `node_modules` (~25-35 min) on first run.
+> - Secrets used: `DATABASE_URL`, `AUTH_SECRET`, `AUTH_URL`, `SENDGRID_API_KEY`,
+>   `SMS_*`, `FTP_HOST`, `FTP_USERNAME`, `FTP_PASSWORD`.
+
 > **The #1 lesson:** the old deploy scripts only shipped `.next` and assumed the
 > server's `node_modules` already matched the build. It often does **not** —
 > production's `node_modules` is stale relative to the current lockfile, and a

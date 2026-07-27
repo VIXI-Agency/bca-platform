@@ -5,23 +5,33 @@ on:
     branches: [main]
   workflow_dispatch:
     inputs:
+      target:
+        description: 'Deploy target (push-to-main always deploys prod)'
+        type: choice
+        options: [prod, qa]
+        default: prod
       force_node_modules:
         description: 'Re-upload the full node_modules even if dependencies did not change'
         type: boolean
         default: false
 
-# Never run two FTP deploys at once (they would clobber each other). Queue them.
+# Never run two FTP deploys at once against the same target (they would clobber
+# each other). Queue per-target so a QA deploy doesn't block a prod deploy.
 concurrency:
-  group: deploy-prod
+  group: deploy-${{ github.event.inputs.target || 'prod' }}
   cancel-in-progress: false
 
 jobs:
   build-and-deploy:
     runs-on: windows-latest
     env:
+      # push-to-main has no inputs, so target falls back to prod (unchanged prod path)
+      TARGET: ${{ github.event.inputs.target || 'prod' }}
+      REMOTE_DIR: ${{ github.event.inputs.target == 'qa' && '/qa' || '/httpdocs' }}
       DATABASE_URL: ${{ secrets.DATABASE_URL }}
       AUTH_SECRET: ${{ secrets.AUTH_SECRET }}
-      AUTH_URL: ${{ secrets.AUTH_URL }}
+      # QA must get its own AUTH_URL or NextAuth redirects logins to the prod domain
+      AUTH_URL: ${{ github.event.inputs.target == 'qa' && 'https://qa.yourdebtcollectors.com' || secrets.AUTH_URL }}
       AUTH_TRUST_HOST: "true"
       SENDGRID_API_KEY: ${{ secrets.SENDGRID_API_KEY }}
       SMS_API_URL: ${{ secrets.SMS_API_URL }}
@@ -65,7 +75,7 @@ jobs:
           FTP_HOST = os.environ['FTP_HOST']
           FTP_USER = os.environ['FTP_USER']
           FTP_PASS = os.environ['FTP_PASS']
-          REMOTE_DIR = '/httpdocs'
+          REMOTE_DIR = os.environ.get('REMOTE_DIR', '/httpdocs')
 
           # --- Lockfile hash: node_modules is only re-uploaded when deps change ---
           lock_path = os.path.join(base, 'pnpm-lock.yaml')
@@ -246,7 +256,7 @@ jobs:
               print('Dependencies changed (or forced) — uploading full node_modules...')
               upload_dir(ftp, os.path.join(standalone, 'node_modules'), f'{REMOTE_DIR}/node_modules', 'node_modules')
               ftp.storbinary(f'STOR {REMOTE_DIR}/.deploy-lockhash', BytesIO(lock_hash.encode()))
-              print('Updated /httpdocs/.deploy-lockhash marker')
+              print(f'Updated {REMOTE_DIR}/.deploy-lockhash marker')
           else:
               print('Dependencies unchanged — SKIPPING full node_modules upload (saves ~25-35 min).')
               print('(.next, Prisma client + Turbopack aliases, and public/ below are still refreshed for this build.)')
@@ -390,5 +400,7 @@ jobs:
           print('Uploaded .env')
 
           ftp.quit()
-          print(f'\nDeploy complete at {ts}')
-          print('Visit https://yourdebtcollectors.com')
+          target = os.environ.get('TARGET', 'prod')
+          url = 'https://qa.yourdebtcollectors.com' if target == 'qa' else 'https://yourdebtcollectors.com'
+          print(f'\nDeploy complete at {ts} (target={target}, dir={REMOTE_DIR})')
+          print(f'Visit {url}')

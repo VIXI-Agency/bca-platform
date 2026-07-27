@@ -84,7 +84,12 @@ async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
     let message = STATUS_FALLBACKS[res.status] ?? `Request failed (${res.status})`;
     try {
       const body = await res.json();
-      if (body?.error) message = body.error;
+      const fieldErrors = body?.details?.fieldErrors as Record<string, string[]> | undefined;
+      const detail = fieldErrors
+        ? Object.values(fieldErrors).flat().filter(Boolean).join('. ')
+        : undefined;
+      if (detail) message = detail;
+      else if (body?.error) message = body.error;
       else if (body?.message) message = body.message;
     } catch {
       // non-JSON body — keep the status-based fallback

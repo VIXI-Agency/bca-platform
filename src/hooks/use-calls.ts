@@ -1,4 +1,4 @@
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query';
 import type { Disposition, Rebuttal } from '@/types';
 
 /* -------------------------------------------------- */
@@ -10,8 +10,13 @@ export interface CloserUser {
   name: string;
 }
 
+export interface IndustryOption {
+  name: string;
+  count: number;
+}
+
 export interface FiltersData {
-  industries: string[];
+  industries: IndustryOption[];
   timezones: string[];
 }
 
@@ -70,11 +75,13 @@ export function useDispositions() {
   });
 }
 
-export function useFilters() {
+export function useFilters(timezone?: string) {
   return useQuery<FiltersData>({
-    queryKey: ['call-filters'],
-    queryFn: () => fetchJson('/api/calls/filters'),
+    queryKey: ['call-filters', timezone ?? ''],
+    queryFn: () =>
+      fetchJson(`/api/calls/filters${timezone ? `?timezone=${encodeURIComponent(timezone)}` : ''}`),
     staleTime: 30 * 60 * 1000, // 30 min — dropdown values rarely change
+    placeholderData: keepPreviousData, // keep timezones visible while industries refetch on tz change
   });
 }
 

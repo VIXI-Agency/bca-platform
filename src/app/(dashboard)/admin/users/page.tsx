@@ -212,6 +212,11 @@ export default function UsersPage() {
     if (!form.name.trim() || !form.email.trim()) return;
     setFormError(null);
 
+    if (form.password && form.password.length < 6) {
+      setFormError('Password must be at least 6 characters');
+      return;
+    }
+
     try {
       if (editingUser) {
         await updateUser.mutateAsync({
@@ -518,6 +523,9 @@ export default function UsersPage() {
                 onChange={(e) => updateForm('password', e.target.value)}
                 placeholder={editingUser ? '••••••••' : 'Enter password'}
               />
+              <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
+                Minimum 6 characters
+              </p>
             </div>
 
             {/* Role */}

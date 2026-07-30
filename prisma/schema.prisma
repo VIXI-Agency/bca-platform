@@ -428,3 +428,85 @@ model Printer {
   @@map("Printers")
   @@schema("benjaise_sqluser2")
 }
+
+// ─── Lead Scraping ─────────────────────────────────────────────────────────────
+
+model ScrapeIndustry {
+  id     Int     @id @default(autoincrement()) @map("Id")
+  name   String  @unique(map: "UX_ScrapeIndustries_Name") @map("Name") @db.NVarChar(100)
+  active Boolean @default(true) @map("Active")
+
+  @@map("ScrapeIndustries")
+  @@schema("dbo")
+}
+
+model ScrapeCity {
+  id       Int    @id @default(autoincrement()) @map("Id")
+  city     String @map("City") @db.NVarChar(100)
+  state    String @map("State") @db.NChar(2)
+  timeZone String @map("TimeZone") @db.NVarChar(3)
+
+  @@unique([city, state], map: "UX_ScrapeCities_City_State")
+  @@index([state], map: "IX_ScrapeCities_State")
+  @@map("ScrapeCities")
+  @@schema("dbo")
+}
+
+model ScrapeRun {
+  id            Int       @id @default(autoincrement()) @map("Id")
+  startedAt     DateTime  @default(now()) @map("StartedAt")
+  finishedAt    DateTime? @map("FinishedAt")
+  tasksDone     Int       @default(0) @map("TasksDone")
+  leadsFound    Int       @default(0) @map("LeadsFound")
+  leadsImported Int       @default(0) @map("LeadsImported")
+  duplicates    Int       @default(0) @map("Duplicates")
+  blacklisted   Int       @default(0) @map("Blacklisted")
+  status        String    @map("Status") @db.NVarChar(20)
+  finishReason  String?   @map("FinishReason") @db.NVarChar(20)
+
+  tasks ScrapeTask[]
+
+  @@index([startedAt], map: "IX_ScrapeRuns_StartedAt")
+  @@map("ScrapeRuns")
+  @@schema("dbo")
+}
+
+model ScrapeRequest {
+  id        Int      @id @default(autoincrement()) @map("Id")
+  createdBy String   @map("CreatedBy") @db.NVarChar(200)
+  createdAt DateTime @default(now()) @map("CreatedAt")
+  status    String   @map("Status") @db.NVarChar(20)
+  maxPages  Int      @default(3) @map("MaxPages")
+
+  tasks ScrapeTask[]
+
+  @@index([status, createdAt], map: "IX_ScrapeRequests_Status_CreatedAt")
+  @@map("ScrapeRequests")
+  @@schema("dbo")
+}
+
+model ScrapeTask {
+  id            Int       @id @default(autoincrement()) @map("Id")
+  idRequest     Int       @map("IdRequest")
+  idRun         Int?      @map("IdRun")
+  industry      String    @map("Industry") @db.NVarChar(100)
+  city          String    @map("City") @db.NVarChar(100)
+  state         String    @map("State") @db.NChar(2)
+  timeZone      String    @map("TimeZone") @db.NVarChar(3)
+  status        String    @map("Status") @db.NVarChar(20)
+  attempts      Int       @default(0) @map("Attempts")
+  leasedAt      DateTime? @map("LeasedAt")
+  completedAt   DateTime? @map("CompletedAt")
+  foundCount    Int?      @map("FoundCount")
+  importedCount Int?      @map("ImportedCount")
+  lastError     String?   @map("LastError") @db.NVarChar(500)
+
+  request ScrapeRequest @relation(fields: [idRequest], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  run     ScrapeRun?    @relation(fields: [idRun], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@unique([industry, city, state], map: "UX_ScrapeTasks_Coverage")
+  @@index([status, idRequest], map: "IX_ScrapeTasks_Status_Request")
+  @@index([idRequest], map: "IX_ScrapeTasks_Request")
+  @@map("ScrapeTasks")
+  @@schema("dbo")
+}

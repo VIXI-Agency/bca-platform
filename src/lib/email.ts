@@ -350,3 +350,115 @@ export function buildCallEmailHTML(data: CallEmailData): string {
 </body>
 </html>`;
 }
+
+interface ScrapeSummaryEmailData {
+  runId: number;
+  reportDate: string;
+  queueDrained: boolean;
+  searchesRun: number;
+  totalRecords: number;
+  duplicatesFound: number;
+  blackListBusinesses: number;
+  businessesImported: number;
+  businessesReadyToCall: number;
+}
+
+/**
+ * Summary for an automated scraper run.
+ *
+ * Separate from buildImportSummaryEmailHTML rather than a parameter on it: that
+ * template hardcodes "X just imported new Businesses" and refers to an attached
+ * CSV, and an automated run has neither an importer nor an attachment.
+ */
+export function buildScrapeSummaryEmailHTML(data: ScrapeSummaryEmailData): string {
+  const stat = (label: string, value: number, color: string) => `
+    <td style="padding:8px;">
+      <table width="100%" cellpadding="0" cellspacing="0" style="background:#f8fafc; border-radius:12px;">
+        <tr><td style="padding:18px; text-align:center; font-family:Arial,sans-serif;">
+          <div style="font-size:26px; font-weight:800; color:${color};">${formatNumber(value)}</div>
+          <div style="font-size:11px; color:#64748b; letter-spacing:1px; text-transform:uppercase; padding-top:6px;">${escapeHtml(label)}</div>
+        </td></tr>
+      </table>
+    </td>`;
+
+  const headline = data.queueDrained
+    ? 'The scraping queue is empty.'
+    : `${formatNumber(data.businessesImported)} new leads were added overnight.`;
+  const subhead = data.queueDrained
+    ? 'Every queued industry and city has been covered. Queue more work from Admin &rsaquo; Find New Leads to keep leads flowing.'
+    : `Run #${data.runId} completed ${formatNumber(data.searchesRun)} searches.`;
+
+  return `<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"></head>
+<body style="margin:0; padding:24px; background:#f1f5f9;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="max-width:640px; margin:0 auto; background:#ffffff; border-radius:20px;">
+    <tr><td style="padding:32px 40px 8px 40px;">
+      <span style="display:inline-block; padding:7px 14px; background:#ecfeff; color:#0891b2; border-radius:999px; font-size:11px; font-weight:800; letter-spacing:1px; font-family:Arial,sans-serif;">${data.queueDrained ? 'QUEUE EMPTY' : 'AUTOMATED SCRAPER RUN'}</span>
+    </td></tr>
+    <tr><td style="padding:16px 40px 24px 40px;">
+      <table width="100%" cellpadding="0" cellspacing="0" style="background:linear-gradient(135deg,#0f172a 0%,#1e293b 100%); border-radius:16px;">
+        <tr><td style="padding:34px;">
+          <h1 style="margin:0 0 12px 0; font-size:28px; color:#ffffff; font-family:Arial,sans-serif; line-height:1.25;">${escapeHtml(headline)}</h1>
+          <p style="margin:0; font-size:14px; color:#94a3b8; font-family:Arial,sans-serif; line-height:1.6;">${subhead}</p>
+        </td></tr>
+      </table>
+    </td></tr>
+    <tr><td style="padding:0 32px 8px 32px; font-size:13px; color:#64748b; font-family:Arial,sans-serif;">
+      <strong style="color:#0f172a;">Report Date:</strong> ${escapeHtml(data.reportDate)}
+    </td></tr>
+    <tr><td style="padding:8px 32px;">
+      <table width="100%" cellpadding="0" cellspacing="0"><tr>
+        ${stat('Found', data.totalRecords, '#0f172a')}
+        ${stat('Imported', data.businessesImported, '#059669')}
+      </tr><tr>
+        ${stat('Duplicates', data.duplicatesFound, '#d97706')}
+        ${stat('Blacklisted', data.blackListBusinesses, '#dc2626')}
+      </tr></table>
+    </td></tr>
+    <tr><td style="padding:8px 40px 32px 40px;">
+      <table width="100%" cellpadding="0" cellspacing="0" style="background:#0f172a; border-radius:12px;">
+        <tr><td style="padding:20px; text-align:center; font-family:Arial,sans-serif;">
+          <div style="font-size:26px; font-weight:800; color:#22d3ee;">${formatNumber(data.businessesReadyToCall)}</div>
+          <div style="font-size:11px; color:#94a3b8; letter-spacing:1px; text-transform:uppercase; padding-top:6px;">Businesses ready to call</div>
+        </td></tr>
+      </table>
+    </td></tr>
+    <tr><td style="padding:0 40px 28px 40px;">
+      <p style="margin:0; text-align:center; font-size:11px; color:#94a3b8; font-family:Arial,sans-serif;">This is an automated notification from PulseBC Calling System.</p>
+    </td></tr>
+  </table>
+</body>
+</html>`;
+}
+
+interface ScrapeAlertEmailData {
+  runId: number;
+  reportDate: string;
+  message: string;
+}
+
+export function buildScrapeAlertEmailHTML(data: ScrapeAlertEmailData): string {
+  return `<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"></head>
+<body style="margin:0; padding:24px; background:#f1f5f9;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="max-width:640px; margin:0 auto; background:#ffffff; border-radius:20px;">
+    <tr><td style="padding:32px 40px 8px 40px;">
+      <span style="display:inline-block; padding:7px 14px; background:#fef2f2; color:#dc2626; border-radius:999px; font-size:11px; font-weight:800; letter-spacing:1px; font-family:Arial,sans-serif;">SCRAPER ALERT</span>
+    </td></tr>
+    <tr><td style="padding:16px 40px 24px 40px;">
+      <table width="100%" cellpadding="0" cellspacing="0" style="background:#0f172a; border-radius:16px;">
+        <tr><td style="padding:34px;">
+          <h1 style="margin:0 0 12px 0; font-size:24px; color:#ffffff; font-family:Arial,sans-serif; line-height:1.3;">Run #${data.runId} was aborted.</h1>
+          <p style="margin:0; font-size:14px; color:#94a3b8; font-family:Arial,sans-serif; line-height:1.6;">${escapeHtml(data.message)}</p>
+        </td></tr>
+      </table>
+    </td></tr>
+    <tr><td style="padding:0 40px 28px 40px; font-size:13px; color:#64748b; font-family:Arial,sans-serif;">
+      <strong style="color:#0f172a;">Report Date:</strong> ${escapeHtml(data.reportDate)}
+    </td></tr>
+  </table>
+</body>
+</html>`;
+}

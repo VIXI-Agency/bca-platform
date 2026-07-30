@@ -461,6 +461,7 @@ model ScrapeRun {
   leadsImported Int       @default(0) @map("LeadsImported")
   duplicates    Int       @default(0) @map("Duplicates")
   blacklisted   Int       @default(0) @map("Blacklisted")
+  invalid       Int       @default(0) @map("Invalid")
   status        String    @map("Status") @db.NVarChar(20)
   finishReason  String?   @map("FinishReason") @db.NVarChar(20)
 

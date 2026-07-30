@@ -60,6 +60,10 @@ describe('areaCodeOf', () => {
   it('skips the country code on an eleven-digit number', () => {
     expect(areaCodeOf('12105551234')).toBe('210');
   });
+
+  it('does not skip a leading digit that is not a country code', () => {
+    expect(areaCodeOf('25551234567')).toBe('255');
+  });
 });
 
 describe('classifyLead', () => {

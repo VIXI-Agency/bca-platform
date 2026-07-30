@@ -44,7 +44,10 @@ export function cleanPhone(phone: string): { formatted: string; digits: string }
 }
 
 export function areaCodeOf(digits: string): string {
-  return digits.length === 11 ? digits.slice(1, 4) : digits.slice(0, 3);
+  // Only a leading 1 is a country code. Slicing every 11-digit number read the
+  // wrong three digits, letting a blocked area code through.
+  const national = digits.length === 11 && digits.startsWith('1') ? digits.slice(1) : digits;
+  return national.slice(0, 3);
 }
 
 export function classifyLead(lead: RawLead, blocklists: Blocklists): Classification {

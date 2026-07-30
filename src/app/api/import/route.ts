@@ -3,18 +3,8 @@ import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { importValidateSchema } from '@/lib/validators';
 import { buildImportSummaryEmailHTML, sendEmail } from '@/lib/email';
-
-function cleanPhone(phone: string): { formatted: string; digits: string } {
-  const digits = phone.replace(/\D/g, '');
-  // Format as (XXX) XXX-XXXX if 10 digits, +X (XXX) XXX-XXXX if 11
-  let formatted = digits;
-  if (digits.length === 10) {
-    formatted = `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}`;
-  } else if (digits.length === 11 && digits.startsWith('1')) {
-    formatted = `+1 (${digits.slice(1, 4)}) ${digits.slice(4, 7)}-${digits.slice(7)}`;
-  }
-  return { formatted, digits };
-}
+import { classifyLead, describeRejection, NEW_LEAD_STATUS, type RawLead } from '@/lib/leads';
+import { loadBlocklists, findByPhoneDigits, createLead } from '@/lib/leads-db';
 
 function formatReportDate(date: Date): string {
   return new Intl.DateTimeFormat('en-US', {
@@ -57,12 +47,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Load blacklists once before processing
-    const [blockedNames, blockedAreaCodes] = await Promise.all([
-      prisma.blockedName.findMany({ select: { keyword: true } }),
-      prisma.blockedAreaCode.findMany({ select: { areaCode: true } }),
-    ]);
-    const blockedKeywords = blockedNames.map((n) => n.keyword.toLowerCase());
-    const blockedCodes = new Set(blockedAreaCodes.map((c) => c.areaCode));
+    const blocklists = await loadBlocklists();
 
     let imported = 0;
     let skipped = 0;
@@ -73,74 +58,30 @@ export async function POST(request: NextRequest) {
       const rowNum = i + 1;
 
       try {
-        const businessName = row.businessName || row.BusinessName || '';
-        const phone = row.phone || row.Phone || '';
-        const address = row.address || row.Address || '';
-        const location = row.location || row.Location || '';
-        const industry = row.industry || row.Industry || '';
-        const timeZone = row.timeZone || row.TimeZone || row.timezone || '';
+        const lead: RawLead = {
+          businessName: row.businessName || row.BusinessName || '',
+          phone: row.phone || row.Phone || '',
+          address: row.address || row.Address || '',
+          location: row.location || row.Location || '',
+          industry: row.industry || row.Industry || '',
+          timeZone: row.timeZone || row.TimeZone || row.timezone || '',
+        };
 
-        if (!businessName) {
-          errors.push(`Row ${rowNum}: Missing business name`);
+        const verdict = classifyLead(lead, blocklists);
+        if (!verdict.ok) {
+          errors.push(describeRejection(verdict.reason, rowNum, lead.businessName));
           skipped++;
           continue;
         }
 
-        if (!phone) {
-          errors.push(`Row ${rowNum}: Missing phone number`);
-          skipped++;
-          continue;
-        }
-
-        const { formatted, digits } = cleanPhone(phone);
-
-        if (digits.length < 10) {
-          errors.push(`Row ${rowNum}: Invalid phone number "${phone}"`);
-          skipped++;
-          continue;
-        }
-
-        // Check blocked area code
-        const areaCode = digits.length === 11 ? digits.slice(1, 4) : digits.slice(0, 3);
-        if (blockedCodes.has(areaCode)) {
-          errors.push(`Row ${rowNum}: Blocked area code (${areaCode}) — "${businessName}"`);
-          skipped++;
-          continue;
-        }
-
-        // Check blocked business name keywords
-        const nameLower = businessName.toLowerCase();
-        const matchedKeyword = blockedKeywords.find((kw) => nameLower.includes(kw));
-        if (matchedKeyword) {
-          errors.push(`Row ${rowNum}: Blocked business name keyword "${matchedKeyword}" — "${businessName}"`);
-          skipped++;
-          continue;
-        }
-
-        // Check for duplicate phone (by digits)
-        const existingBusiness = await prisma.business.findFirst({
-          where: { phoneDigits: digits },
-        });
-
+        const existingBusiness = await findByPhoneDigits(verdict.digits);
         if (existingBusiness) {
-          errors.push(`Row ${rowNum}: Duplicate phone number "${phone}" (business "${existingBusiness.businessName}")`);
+          errors.push(`Row ${rowNum}: Duplicate phone number "${lead.phone}" (business "${existingBusiness.businessName}")`);
           skipped++;
           continue;
         }
 
-        await prisma.business.create({
-          data: {
-            businessName,
-            phone: formatted,
-            // Do not set phoneDigits: SQL Server defines PhoneDigits as a computed column.
-            // It is populated automatically from Phone and can still be queried for duplicates.
-            address,
-            location,
-            industry,
-            timeZone,
-            idStatus: 3, // available
-          },
-        });
+        await createLead(lead, verdict.formatted);
 
         imported++;
       } catch (err) {
@@ -153,7 +94,7 @@ export async function POST(request: NextRequest) {
     const blackListBusinesses = errors.filter((error) =>
       error.includes('Blocked area code') || error.includes('Blocked business name keyword')
     ).length;
-    const businessesReadyToCall = await prisma.business.count({ where: { idStatus: 3 } });
+    const businessesReadyToCall = await prisma.business.count({ where: { idStatus: NEW_LEAD_STATUS } });
     const importedBy = session.user.name || 'Carlos Aragon';
     const fileName = originalFile?.name || 'import.csv';
 

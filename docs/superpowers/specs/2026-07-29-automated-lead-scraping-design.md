@@ -1,7 +1,7 @@
 # Automated lead scraping
 
 **Date:** 2026-07-29, revised 2026-07-30
-**Status:** Approved design, not yet implemented
+**Status:** Implemented across six pull requests
 
 The revision follows an adversarial review of the first draft against the
 codebase. It changed enough to be worth naming: the lease was not actually
@@ -588,9 +588,10 @@ before the next begins.
    industry names that store an ampersand pre-encoded as `%26`, which
    YellowPages tolerates but which would otherwise reach
    `Businesses.Industry`.
-4. **Worker split.** Extract `scraper_core.py`; `Scrap.py` keeps working in CSV
-   mode against it. Add the unit tests and the HTML fixture here. Nothing new
-   ships yet, and the manual path is unchanged.
+4. **Worker split.** DONE, Scraper PR #1. `scraper_core.py` holds fetching and
+   parsing; `Scrap.py` keeps CSV mode against it, verified identical against the
+   live site. `scrape_pages` returns `(listings, fetch_ok)` so the caller can
+   tell an empty city from a blocked fetch.
 5. **Machine endpoints.** DONE, PR #5. Verified against the live database:
    four concurrent leases of five tasks each returned zero repeated ids, and
    the full flow ran end to end against a dev server. Two things the spec did
@@ -598,13 +599,17 @@ before the next begins.
    returns fewer rows than asked while the queue is still full, so the response
    carries `pendingRemaining`; and rows rejected for a missing name or an
    unusable phone are counted as `Invalid` rather than `Duplicates`.
-6. **`worker.py`.** Queue mode against the live endpoints. First real end-to-end
-   run, triggered manually, against a queue seeded with a handful of tasks and
-   `SCRAPE_DRY_RUN` set (see below).
-7. **Workflow.** Cron plus `workflow_dispatch`, secrets, concurrency group.
-8. **Admin routes and UI.** The page is last on purpose: by this point the
-   pipeline already produces leads, so the UI is a view over working machinery
-   rather than a guess about it.
+6. **`worker.py`.** DONE, Scraper PR #1. Ran end to end against a dev server
+   with `SCRAPE_DRY_RUN=1`: leased, scraped 30 listings, posted 18 imported,
+   detected the drained queue and finished with `reason=empty`. Nothing was
+   written.
+7. **Workflow.** DONE, Scraper PR #1. 07:00 UTC, `workflow_dispatch` with
+   target and budget inputs, `concurrency: scrape`. Not yet exercised on a real
+   trigger: it needs the six repository secrets.
+8. **Admin routes and UI.** DONE, PR #6. Verified that every route under
+   `/api/scrape` except the four worker paths rejects anonymous access, and that
+   the global coverage rule reuses pairs an earlier request already queued. The
+   page itself still needs a click-through under a signed-in role-1 session.
 
 Steps 1 through 7 deliver automated lead flow. Step 8 makes it self-service.
 

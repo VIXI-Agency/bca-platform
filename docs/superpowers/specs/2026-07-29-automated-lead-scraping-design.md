@@ -1,7 +1,7 @@
 # Automated lead scraping
 
 **Date:** 2026-07-29, revised 2026-07-30
-**Status:** Approved design, not yet implemented
+**Status:** Implemented across six pull requests
 
 The revision follows an adversarial review of the first draft against the
 codebase. It changed enough to be worth naming: the lease was not actually
@@ -222,28 +222,38 @@ One cron execution, holding the counters the daily email reports. Columns:
 
 ### Changes to existing tables
 
-**`Businesses` needs a unique index on `PhoneDigits`.** Deduplication today is a
-read-then-write check (`findFirst` then `create`,
-`src/app/api/import/route.ts:121-143`) with no constraint behind it. That was
-adequate for one person uploading a CSV at a time. Under concurrent `results`
-posts it is not: a chain business listed in two adjacent cities, leased in the
-same batch, passes both checks and inserts twice. The unique index is what makes
-"deduplicate against `PhoneDigits`" a guarantee rather than a hope.
+**Done on 2026-07-30.** Recorded in
+`prisma/migrations/20260730_businesses_phonedigits_unique.sql`.
 
-Two prerequisites, both to confirm before building. `PhoneDigits` is a computed
-column, so it must be `PERSISTED` to be indexable. And the 10,824 existing
-duplicate groups have to be resolved before a unique index can be created at
-all.
+Deduplication was a read-then-write check (`findFirst` then `create`) with no
+constraint behind it. That was adequate for one person uploading a CSV at a
+time. Under concurrent `results` posts it is not: a chain business listed in two
+adjacent cities, leased in the same batch, passes both checks and inserts twice.
+`UX_Businesses_PhoneDigits` is what makes "deduplicate against `PhoneDigits`" a
+guarantee rather than a hope.
 
-The same index is needed for speed. `prisma/schema.prisma` declares three
-indexes on `Businesses` and none covers `phoneDigits`, so every dedup check is
-currently a scan over 3.5 million rows evaluating the computed expression per
-row. At roughly 100 listings per `results` post that is 100 scans per task,
-which risks the iisnode request timeout and therefore a worker retry, which
-without the idempotency rule above would double-post. A comment at
-`src/app/api/businesses/route.ts:56` asserts such an index exists; nothing in
-version control creates it, so it either lives only on the server or the comment
-is stale.
+The 10,824 duplicate groups were merged first, since a unique index cannot be
+created over them. Merged rather than deleted: `Calls.IdBusiness` is
+`NO_ACTION` and 3,898 of the rows carried call history, so a straight delete
+would have failed. Calls were repointed to the survivor and its `IdStatus`
+promoted to the most advanced of the pair, which kept 680 already-called leads
+out of the calling queue.
+
+An earlier draft of this section was wrong on two counts, both corrected by
+checking the server rather than `schema.prisma`:
+
+- `PhoneDigits` is **already** `PERSISTED`, deterministic, precise, and
+  indexable. No `ALTER TABLE` was needed.
+- `IX_Businesses_PhoneDigits` **already existed**, keyed on `PhoneDigits` with
+  `INCLUDE (IdBusiness, BusinessName, Phone, IdStatus)`. It covers the dedup
+  query exactly. The claim that every check scanned 3.5 million rows was false,
+  and the comment at `src/app/api/businesses/route.ts:56` asserting the index
+  exists was correct. What was missing was the index's presence in version
+  control, which the migration now supplies.
+
+The unique index is unfiltered: SQL Server rejects a computed column inside a
+filter expression. That is viable because `PhoneDigits` has no NULLs and exactly
+one empty value.
 
 ## API
 
@@ -561,30 +571,45 @@ implementation.
 Each step leaves the system in a working state, and each one is verifiable
 before the next begins.
 
-1. **Extract the lead rules.** Move `cleanPhone`, blacklist loading, area-code
-   derivation, and the dedup-and-insert path out of
-   `src/app/api/import/route.ts` into `src/lib/leads.ts`, with `/api/import`
-   calling the new module. `cleanPhone` is currently module-local and not
-   exported, so without this step "reuse the logic" means copy-paste, producing
-   a third implementation of a rule the Decisions table says must have one.
+1. **Extract the lead rules.** DONE, PR #2. Moved out of
+   `src/app/api/import/route.ts` into `src/lib/leads.ts` (pure rules, no Prisma
+   import) and `src/lib/leads-db.ts` (the three queries), with `/api/import`
+   calling them. The split was not in the original plan: importing Prisma at
+   module scope made the rules untestable without a database, which defeated the
+   point of extracting them. Vitest was added, since the repository had no unit
+   runner. `areaCodeOf` was fixed in its own commit.
    Verified by the existing import path behaving identically.
-2. **Index and duplicates.** Resolve the 10,824 duplicate groups, make
-   `PhoneDigits` `PERSISTED`, and add the unique index.
-3. **Tables and seed.** Migration SQL, `schema.prisma`, and a seed script that
-   loads 127 industries and 2,595 cities from the existing CSVs. Verify by
-   querying row counts and state grouping.
-4. **Worker split.** Extract `scraper_core.py`; `Scrap.py` keeps working in CSV
-   mode against it. Add the unit tests and the HTML fixture here. Nothing new
-   ships yet, and the manual path is unchanged.
-5. **Machine endpoints.** `lease`, `results`, `fail`, `finish` with secret auth
-   and integration tests. Testable with curl before any worker exists.
-6. **`worker.py`.** Queue mode against the live endpoints. First real end-to-end
-   run, triggered manually, against a queue seeded with a handful of tasks and
-   `SCRAPE_DRY_RUN` set (see below).
-7. **Workflow.** Cron plus `workflow_dispatch`, secrets, concurrency group.
-8. **Admin routes and UI.** The page is last on purpose: by this point the
-   pipeline already produces leads, so the UI is a view over working machinery
-   rather than a guess about it.
+2. **Index and duplicates.** DONE, PR #3. The 10,824 groups were merged and
+   `UX_Businesses_PhoneDigits` created. `PERSISTED` turned out to be already set
+   and the covering index already present; see Changes to existing tables.
+3. **Tables and seed.** DONE, PR #4. Five tables plus an idempotent seed:
+   127 industries and 2,592 cities across 36 states. The CSVs hold 2,595 city
+   lines; three are repeated within `cst.csv`. The seed also decodes the 7
+   industry names that store an ampersand pre-encoded as `%26`, which
+   YellowPages tolerates but which would otherwise reach
+   `Businesses.Industry`.
+4. **Worker split.** DONE, Scraper PR #1. `scraper_core.py` holds fetching and
+   parsing; `Scrap.py` keeps CSV mode against it, verified identical against the
+   live site. `scrape_pages` returns `(listings, fetch_ok)` so the caller can
+   tell an empty city from a blocked fetch.
+5. **Machine endpoints.** DONE, PR #5. Verified against the live database:
+   four concurrent leases of five tasks each returned zero repeated ids, and
+   the full flow ran end to end against a dev server. Two things the spec did
+   not anticipate came out of that testing, both now implemented: `READPAST`
+   returns fewer rows than asked while the queue is still full, so the response
+   carries `pendingRemaining`; and rows rejected for a missing name or an
+   unusable phone are counted as `Invalid` rather than `Duplicates`.
+6. **`worker.py`.** DONE, Scraper PR #1. Ran end to end against a dev server
+   with `SCRAPE_DRY_RUN=1`: leased, scraped 30 listings, posted 18 imported,
+   detected the drained queue and finished with `reason=empty`. Nothing was
+   written.
+7. **Workflow.** DONE, Scraper PR #1. 07:00 UTC, `workflow_dispatch` with
+   target and budget inputs, `concurrency: scrape`. Not yet exercised on a real
+   trigger: it needs the six repository secrets.
+8. **Admin routes and UI.** DONE, PR #6. Verified that every route under
+   `/api/scrape` except the four worker paths rejects anonymous access, and that
+   the global coverage rule reuses pairs an earlier request already queued. The
+   page itself still needs a click-through under a signed-in role-1 session.
 
 Steps 1 through 7 deliver automated lead flow. Step 8 makes it self-service.
 
@@ -598,12 +623,51 @@ Two mitigations, both required before the first end-to-end run:
 
 - A `SCRAPE_DRY_RUN` flag on the platform, which makes `results` run every rule
   and return real counts without inserting, and makes `finish` skip mail.
+  Implemented in PR #5. It is not a precaution: the first test run against the
+  endpoints mailed all three summary recipients a report of fake data before
+  the guard existed.
 - The first live run limited to a queue seeded with a handful of tasks, and
   triggered manually rather than by cron.
 
 The scraper's own `DB_TABLE` switch between `Businesses` and `Businesses_Dev`
 does not help here. The `results` endpoint writes through Prisma's `Business`
 model, which is hardcoded to `@@map("Businesses")`.
+
+## What the pre-merge review caught
+
+An adversarial review of all six branches immediately before merge returned
+DO NOT MERGE with six blockers. Recording them because each was a real
+production failure the design had not anticipated, and because the pattern is
+instructive: every one sat in the gap between "the code is correct" and "the
+system works".
+
+**The feature would have been dead on arrival.** `SCRAPER_API_SECRET` appeared
+in no part of `deploy.yml`, which rewrites `/httpdocs/.env` on every deploy. The
+routes fail closed, so the first cron run would have hit 503 on every call and
+exited before creating a run, alerting nobody. This spec had described that
+exact failure and prescribed three additions; none had been made.
+
+**A dry run destroyed coverage.** `SCRAPE_DRY_RUN` skipped only the insert, so
+tasks were still marked `done`. The procedure this document recommends for
+testing safely would have retired 25 industry-city pairs per batch.
+
+**A failed task counted as covered.** Combined with the unique coverage index,
+one transient proxy outage retired an industry and city permanently, with no
+route to requeue it.
+
+**Drift detection could fire at exactly one point.** `tasks_done <= DRIFT_PROBE
+and empty_streak >= DRIFT_PROBE` is satisfiable only when both equal 10, so a
+single non-empty result among the first ten disarmed it for the whole run.
+
+**`finish` could retire a request whose tasks were still inserting**, since zero
+tasks satisfies "nothing pending" and the UI cannot reopen a `done` request.
+
+**A whitespace accident made the merge unreviewable.** A heredoc had rewritten
+`prisma/schema.prisma` from CRLF to LF, turning an 86-line addition into a
+943-line whole-file conflict. Resolving it either way would have silently
+reverted a migration or every new model.
+
+All six were fixed before merge, and the fixes are described in PR #8.
 
 ## Out of scope
 
@@ -658,7 +722,7 @@ exhaustion.
    `Scrap.py` and are visible in that repository's history:
    `WEBSHARE_API_KEY`, `WEBSHARE_DOWNLOAD_TOKEN`, `WEBSHARE_RESIDENTIAL_PLAN`.
    `proxies.txt` was never committed and needs no rotation on that account.
-4. Confirm whether the `PhoneDigits` index asserted by the comment at
-   `src/app/api/businesses/route.ts:56` exists on the server. If it does, bring
-   it into version control; if not, the comment is stale.
-5. Restrict SQL Server port 1433, currently reachable from any internet host.
+4. Restrict SQL Server port 1433, currently reachable from any internet host.
+5. `Call.idBusiness` is declared non-nullable `Int` in `schema.prisma`, but two
+   rows from December 2024 hold NULL. Schema drift, found while verifying the
+   merge. Decide whether to make the field optional or repair the rows.

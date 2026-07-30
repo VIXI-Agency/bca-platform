@@ -222,28 +222,38 @@ One cron execution, holding the counters the daily email reports. Columns:
 
 ### Changes to existing tables
 
-**`Businesses` needs a unique index on `PhoneDigits`.** Deduplication today is a
-read-then-write check (`findFirst` then `create`,
-`src/app/api/import/route.ts:121-143`) with no constraint behind it. That was
-adequate for one person uploading a CSV at a time. Under concurrent `results`
-posts it is not: a chain business listed in two adjacent cities, leased in the
-same batch, passes both checks and inserts twice. The unique index is what makes
-"deduplicate against `PhoneDigits`" a guarantee rather than a hope.
+**Done on 2026-07-30.** Recorded in
+`prisma/migrations/20260730_businesses_phonedigits_unique.sql`.
 
-Two prerequisites, both to confirm before building. `PhoneDigits` is a computed
-column, so it must be `PERSISTED` to be indexable. And the 10,824 existing
-duplicate groups have to be resolved before a unique index can be created at
-all.
+Deduplication was a read-then-write check (`findFirst` then `create`) with no
+constraint behind it. That was adequate for one person uploading a CSV at a
+time. Under concurrent `results` posts it is not: a chain business listed in two
+adjacent cities, leased in the same batch, passes both checks and inserts twice.
+`UX_Businesses_PhoneDigits` is what makes "deduplicate against `PhoneDigits`" a
+guarantee rather than a hope.
 
-The same index is needed for speed. `prisma/schema.prisma` declares three
-indexes on `Businesses` and none covers `phoneDigits`, so every dedup check is
-currently a scan over 3.5 million rows evaluating the computed expression per
-row. At roughly 100 listings per `results` post that is 100 scans per task,
-which risks the iisnode request timeout and therefore a worker retry, which
-without the idempotency rule above would double-post. A comment at
-`src/app/api/businesses/route.ts:56` asserts such an index exists; nothing in
-version control creates it, so it either lives only on the server or the comment
-is stale.
+The 10,824 duplicate groups were merged first, since a unique index cannot be
+created over them. Merged rather than deleted: `Calls.IdBusiness` is
+`NO_ACTION` and 3,898 of the rows carried call history, so a straight delete
+would have failed. Calls were repointed to the survivor and its `IdStatus`
+promoted to the most advanced of the pair, which kept 680 already-called leads
+out of the calling queue.
+
+An earlier draft of this section was wrong on two counts, both corrected by
+checking the server rather than `schema.prisma`:
+
+- `PhoneDigits` is **already** `PERSISTED`, deterministic, precise, and
+  indexable. No `ALTER TABLE` was needed.
+- `IX_Businesses_PhoneDigits` **already existed**, keyed on `PhoneDigits` with
+  `INCLUDE (IdBusiness, BusinessName, Phone, IdStatus)`. It covers the dedup
+  query exactly. The claim that every check scanned 3.5 million rows was false,
+  and the comment at `src/app/api/businesses/route.ts:56` asserting the index
+  exists was correct. What was missing was the index's presence in version
+  control, which the migration now supplies.
+
+The unique index is unfiltered: SQL Server rejects a computed column inside a
+filter expression. That is viable because `PhoneDigits` has no NULLs and exactly
+one empty value.
 
 ## API
 
@@ -561,15 +571,17 @@ implementation.
 Each step leaves the system in a working state, and each one is verifiable
 before the next begins.
 
-1. **Extract the lead rules.** Move `cleanPhone`, blacklist loading, area-code
-   derivation, and the dedup-and-insert path out of
-   `src/app/api/import/route.ts` into `src/lib/leads.ts`, with `/api/import`
-   calling the new module. `cleanPhone` is currently module-local and not
-   exported, so without this step "reuse the logic" means copy-paste, producing
-   a third implementation of a rule the Decisions table says must have one.
+1. **Extract the lead rules.** DONE, PR #2. Moved out of
+   `src/app/api/import/route.ts` into `src/lib/leads.ts` (pure rules, no Prisma
+   import) and `src/lib/leads-db.ts` (the three queries), with `/api/import`
+   calling them. The split was not in the original plan: importing Prisma at
+   module scope made the rules untestable without a database, which defeated the
+   point of extracting them. Vitest was added, since the repository had no unit
+   runner. `areaCodeOf` was fixed in its own commit.
    Verified by the existing import path behaving identically.
-2. **Index and duplicates.** Resolve the 10,824 duplicate groups, make
-   `PhoneDigits` `PERSISTED`, and add the unique index.
+2. **Index and duplicates.** DONE, PR #3. The 10,824 groups were merged and
+   `UX_Businesses_PhoneDigits` created. `PERSISTED` turned out to be already set
+   and the covering index already present; see Changes to existing tables.
 3. **Tables and seed.** Migration SQL, `schema.prisma`, and a seed script that
    loads 127 industries and 2,595 cities from the existing CSVs. Verify by
    querying row counts and state grouping.
@@ -658,7 +670,7 @@ exhaustion.
    `Scrap.py` and are visible in that repository's history:
    `WEBSHARE_API_KEY`, `WEBSHARE_DOWNLOAD_TOKEN`, `WEBSHARE_RESIDENTIAL_PLAN`.
    `proxies.txt` was never committed and needs no rotation on that account.
-4. Confirm whether the `PhoneDigits` index asserted by the comment at
-   `src/app/api/businesses/route.ts:56` exists on the server. If it does, bring
-   it into version control; if not, the comment is stale.
-5. Restrict SQL Server port 1433, currently reachable from any internet host.
+4. Restrict SQL Server port 1433, currently reachable from any internet host.
+5. `Call.idBusiness` is declared non-nullable `Int` in `schema.prisma`, but two
+   rows from December 2024 hold NULL. Schema drift, found while verifying the
+   merge. Decide whether to make the field optional or repair the rows.

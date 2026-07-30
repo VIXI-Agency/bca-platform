@@ -591,8 +591,13 @@ before the next begins.
 4. **Worker split.** Extract `scraper_core.py`; `Scrap.py` keeps working in CSV
    mode against it. Add the unit tests and the HTML fixture here. Nothing new
    ships yet, and the manual path is unchanged.
-5. **Machine endpoints.** `lease`, `results`, `fail`, `finish` with secret auth
-   and integration tests. Testable with curl before any worker exists.
+5. **Machine endpoints.** DONE, PR #5. Verified against the live database:
+   four concurrent leases of five tasks each returned zero repeated ids, and
+   the full flow ran end to end against a dev server. Two things the spec did
+   not anticipate came out of that testing, both now implemented: `READPAST`
+   returns fewer rows than asked while the queue is still full, so the response
+   carries `pendingRemaining`; and rows rejected for a missing name or an
+   unusable phone are counted as `Invalid` rather than `Duplicates`.
 6. **`worker.py`.** Queue mode against the live endpoints. First real end-to-end
    run, triggered manually, against a queue seeded with a handful of tasks and
    `SCRAPE_DRY_RUN` set (see below).
@@ -613,6 +618,9 @@ Two mitigations, both required before the first end-to-end run:
 
 - A `SCRAPE_DRY_RUN` flag on the platform, which makes `results` run every rule
   and return real counts without inserting, and makes `finish` skip mail.
+  Implemented in PR #5. It is not a precaution: the first test run against the
+  endpoints mailed all three summary recipients a report of fake data before
+  the guard existed.
 - The first live run limited to a queue seeded with a handful of tasks, and
   triggered manually rather than by cron.
 

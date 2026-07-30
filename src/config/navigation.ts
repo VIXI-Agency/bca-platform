@@ -1,4 +1,5 @@
 import {
+  Search,
   LayoutDashboard,
   Phone,
   Clock,
@@ -116,6 +117,12 @@ export const adminNavigation: NavItem[] = [
     href: '/admin/rebuttals',
     icon: MessageCircle,
     permissionKey: 'admin_rebuttals',
+  },
+  {
+    label: 'Find New Leads',
+    href: '/admin/find-leads',
+    icon: Search,
+    permissionKey: 'admin_import',
   },
   {
     label: 'Import Leads',

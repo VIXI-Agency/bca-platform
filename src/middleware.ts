@@ -4,11 +4,25 @@ import { getPermissionKeyForRoute, getPermissionKeyForApiRoute } from '@/config/
 
 const publicRoutes = ['/login', '/register', '/forgot-password', '/reset-password', '/api/auth', '/api/sms/webhook'];
 
+// Matched exactly, never by prefix. These four carry their own Bearer-secret
+// auth; a prefix entry for /api/scrape would also exempt the admin routes that
+// live under it, leaving request creation and cancellation open to anyone.
+const publicExactRoutes = [
+  '/api/scrape/worker/lease',
+  '/api/scrape/worker/results',
+  '/api/scrape/worker/fail',
+  '/api/scrape/worker/finish',
+];
+
 export default auth((req) => {
   const { pathname } = req.nextUrl;
 
   // Allow public routes
   if (publicRoutes.some((route) => pathname.startsWith(route))) {
+    return NextResponse.next();
+  }
+
+  if (publicExactRoutes.includes(pathname.replace(/\/+$/, ''))) {
     return NextResponse.next();
   }
 

@@ -582,9 +582,12 @@ before the next begins.
 2. **Index and duplicates.** DONE, PR #3. The 10,824 groups were merged and
    `UX_Businesses_PhoneDigits` created. `PERSISTED` turned out to be already set
    and the covering index already present; see Changes to existing tables.
-3. **Tables and seed.** Migration SQL, `schema.prisma`, and a seed script that
-   loads 127 industries and 2,595 cities from the existing CSVs. Verify by
-   querying row counts and state grouping.
+3. **Tables and seed.** DONE, PR #4. Five tables plus an idempotent seed:
+   127 industries and 2,592 cities across 36 states. The CSVs hold 2,595 city
+   lines; three are repeated within `cst.csv`. The seed also decodes the 7
+   industry names that store an ampersand pre-encoded as `%26`, which
+   YellowPages tolerates but which would otherwise reach
+   `Businesses.Industry`.
 4. **Worker split.** Extract `scraper_core.py`; `Scrap.py` keeps working in CSV
    mode against it. Add the unit tests and the HTML fixture here. Nothing new
    ships yet, and the manual path is unchanged.

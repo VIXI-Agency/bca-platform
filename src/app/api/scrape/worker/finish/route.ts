@@ -50,8 +50,15 @@ export async function POST(request: NextRequest) {
       data: { finishedAt, status: 'finished', finishReason: reason },
     });
 
+    // A request with zero tasks satisfies `none`, so a request created moments
+    // ago whose tasks are still being inserted would be retired here and can
+    // never be reopened. Requiring at least one task closes that window.
     const completed = await prisma.scrapeRequest.updateMany({
-      where: { status: 'active', tasks: { none: { status: { in: ['pending', 'leased'] } } } },
+      where: {
+        status: 'active',
+        tasks: { some: {} },
+        NOT: { tasks: { some: { status: { in: ['pending', 'leased'] } } } },
+      },
       data: { status: 'done' },
     });
 

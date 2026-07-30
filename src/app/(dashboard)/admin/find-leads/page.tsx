@@ -14,6 +14,7 @@ import {
   useCreateRequest,
   useUpdateRequest,
   useCancelRequest,
+  useRetryTasks,
 } from '@/hooks/use-scrape';
 
 const nf = new Intl.NumberFormat('en-US');
@@ -25,6 +26,7 @@ export default function FindLeadsPage() {
   const create = useCreateRequest();
   const update = useUpdateRequest();
   const cancel = useCancelRequest();
+  const retry = useRetryTasks();
 
   const [industries, setIndustries] = useState<string[]>([]);
   const [states, setStates] = useState<string[]>([]);
@@ -227,8 +229,20 @@ export default function FindLeadsPage() {
 
         <Card>
           <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-base">
-              <AlertTriangle className="h-4 w-4" /> Failed searches
+            <CardTitle className="flex items-center justify-between gap-2 text-base">
+              <span className="flex items-center gap-2">
+                <AlertTriangle className="h-4 w-4" /> Failed searches
+              </span>
+              {!!overview.data?.failedTasks.length && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={retry.isPending}
+                  onClick={() => retry.mutate(overview.data!.failedTasks.map((t) => t.id))}
+                >
+                  {retry.isPending ? 'Requeueing…' : 'Requeue all'}
+                </Button>
+              )}
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -240,11 +254,15 @@ export default function FindLeadsPage() {
                     <div className="text-muted-foreground text-xs">
                       {t.attempts} attempts · {t.lastError ?? 'no detail'}
                     </div>
+                    <Button variant="ghost" size="sm" className="mt-1 h-6 px-2 text-xs"
+                      onClick={() => retry.mutate([t.id])}>
+                      Requeue
+                    </Button>
                   </div>
                 ))}
               </div>
             ) : (
-              <p className="text-muted-foreground text-sm">None. Every search either completed or is still queued.</p>
+              <p className="text-muted-foreground text-sm">None. Every search either completed or is still queued. A failed search stays uncovered until requeued.</p>
             )}
           </CardContent>
         </Card>

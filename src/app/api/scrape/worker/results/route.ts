@@ -41,10 +41,15 @@ export async function POST(request: NextRequest) {
     // response retries; without this the run counters double-count and the
     // daily email stops reconciling against Businesses.
     if (task.status === 'done') {
+      // imported is 0, not the stored count: this call imported nothing, and
+      // the worker adds the value to its progress toward DAILY_TARGET. Echoing
+      // the original count would let phantom leads end the run early.
       return NextResponse.json({
-        imported: task.importedCount ?? 0,
+        imported: 0,
         duplicates: 0,
         blacklisted: 0,
+        invalid: 0,
+        previouslyImported: task.importedCount ?? 0,
         alreadyRecorded: true,
       });
     }
@@ -106,6 +111,13 @@ export async function POST(request: NextRequest) {
           throw err;
         }
       }
+    }
+
+    // A dry run must not mark the task done. Coverage is global and permanent:
+    // a 25-task dry batch would otherwise retire 25 industry-city pairs that
+    // were never scraped, and nothing in the product can re-queue them.
+    if (dryRun) {
+      return NextResponse.json({ imported, duplicates, blacklisted, invalid, dryRun });
     }
 
     await prisma.$transaction([

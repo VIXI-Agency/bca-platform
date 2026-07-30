@@ -28,6 +28,9 @@ jobs:
       SMS_USERNAME: ${{ secrets.SMS_USERNAME }}
       SMS_PASSWORD: ${{ secrets.SMS_PASSWORD }}
       SMS_DEVICE_ID: ${{ secrets.SMS_DEVICE_ID }}
+      SMS_WEBHOOK_SECRET: ${{ secrets.SMS_WEBHOOK_SECRET }}
+      SCRAPER_API_SECRET: ${{ secrets.SCRAPER_API_SECRET }}
+      SCRAPE_ALERT_EMAIL: ${{ secrets.SCRAPE_ALERT_EMAIL }}
       NEXT_PUBLIC_APP_NAME: "PulseBC"
     steps:
       - uses: actions/checkout@v4
@@ -383,6 +386,8 @@ jobs:
               f'SMS_PASSWORD={os.environ["SMS_PASSWORD"]}',
               f'SMS_DEVICE_ID={os.environ["SMS_DEVICE_ID"]}',
               f'SMS_WEBHOOK_SECRET={os.environ.get("SMS_WEBHOOK_SECRET", "")}',
+              f'SCRAPER_API_SECRET={os.environ.get("SCRAPER_API_SECRET", "")}',
+              f'SCRAPE_ALERT_EMAIL={os.environ.get("SCRAPE_ALERT_EMAIL", "")}',
               'NEXT_PUBLIC_APP_NAME=PulseBC',
               'NODE_ENV=production',
           ]

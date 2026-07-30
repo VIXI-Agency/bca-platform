@@ -121,3 +121,16 @@ export function useCancelRequest() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['scrape'] }),
   });
 }
+
+export function useRetryTasks() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (taskIds: number[]) =>
+      json<{ requeued: number }>('/api/scrape/tasks/retry', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ taskIds }),
+      }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['scrape'] }),
+  });
+}

@@ -85,8 +85,17 @@ export async function POST(request: NextRequest) {
     // Coverage is global: a pair already queued by an earlier request is not
     // queued again, which is what stops overlapping requests from re-scraping
     // the same territory.
+    //
+    // 'failed' is deliberately not covered. A task that exhausted its attempts
+    // was never scraped, and treating it as covered would retire that pair for
+    // good on a transient proxy outage. The unique index still prevents a
+    // second row, so those pairs are requeued through the failed-task view.
     const existing = await prisma.scrapeTask.findMany({
-      where: { industry: { in: industries }, state: { in: states } },
+      where: {
+        industry: { in: industries },
+        state: { in: states },
+        status: { in: ['pending', 'leased', 'done'] },
+      },
       select: { industry: true, city: true, state: true },
     });
     const covered = new Set(existing.map((t) => `${t.industry}|${t.city}|${t.state.trim()}`));
@@ -105,17 +114,29 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Every selected pair is already queued or covered' }, { status: 409 });
     }
 
-    const created = await prisma.scrapeRequest.create({
-      data: { createdBy: await currentUserName(), createdAt: new Date(), status: 'active', maxPages },
-      select: { id: true },
-    });
+    const createdBy = await currentUserName();
 
-    // Chunked: SQL Server caps a parameterized statement at 2100 parameters.
-    for (let i = 0; i < fresh.length; i += 500) {
-      await prisma.scrapeTask.createMany({
-        data: fresh.slice(i, i + 500).map((p) => ({ ...p, idRequest: created.id, status: 'pending' })),
-      });
-    }
+    // The request and its tasks land together. A committed request with no
+    // tasks yet satisfies finish's "nothing pending" test, which would retire
+    // it before its work exists, and the UI cannot reopen a done request.
+    //
+    // Chunked at 300: each row carries 6 columns, and SQL Server caps a
+    // parameterized statement at 2100.
+    const created = await prisma.$transaction(
+      async (tx) => {
+        const req = await tx.scrapeRequest.create({
+          data: { createdBy, createdAt: new Date(), status: 'active', maxPages },
+          select: { id: true },
+        });
+        for (let i = 0; i < fresh.length; i += 300) {
+          await tx.scrapeTask.createMany({
+            data: fresh.slice(i, i + 300).map((p) => ({ ...p, idRequest: req.id, status: 'pending' })),
+          });
+        }
+        return req;
+      },
+      { timeout: 120_000, maxWait: 10_000 },
+    );
 
     return NextResponse.json(
       { id: created.id, queued: fresh.length, alreadyCovered: pairs.length - fresh.length },

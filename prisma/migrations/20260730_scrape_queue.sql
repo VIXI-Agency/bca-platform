@@ -93,3 +93,12 @@ BEGIN
   CREATE INDEX IX_ScrapeTasks_Status_Request ON dbo.ScrapeTasks (Status, IdRequest);
   CREATE INDEX IX_ScrapeTasks_Request ON dbo.ScrapeTasks (IdRequest);
 END
+
+-- Rows rejected for a missing name, a missing phone, or fewer than ten digits
+-- are neither duplicates nor blacklisted. Folding them into Duplicates made the
+-- daily email overstate how much of a run was wasted on repeats.
+IF COL_LENGTH('dbo.ScrapeRuns', 'Invalid') IS NULL
+BEGIN
+  ALTER TABLE dbo.ScrapeRuns
+    ADD [Invalid] INT NOT NULL CONSTRAINT DF_ScrapeRuns_Invalid DEFAULT 0;
+END

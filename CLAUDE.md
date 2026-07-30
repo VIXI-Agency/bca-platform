@@ -151,7 +151,33 @@ Keys (values live ONLY in the server `.env` files now — `/httpdocs/.env` and
 `/qa/.env` over FTP — rotate them):
 `DATABASE_URL`, `AUTH_SECRET`, `AUTH_TRUST_HOST`, `AUTH_URL`, `SENDGRID_API_KEY`,
 `SMS_API_URL`, `SMS_USERNAME`, `SMS_PASSWORD`, `SMS_DEVICE_ID`,
-`SMS_WEBHOOK_SECRET`, `NEXT_PUBLIC_APP_NAME`, `NODE_ENV`.
+`SMS_WEBHOOK_SECRET`, `NEXT_PUBLIC_APP_NAME`, `NODE_ENV`,
+`SCRAPER_API_SECRET`, `SCRAPE_ALERT_EMAIL`, `SCRAPE_DRY_RUN`.
+
+> Every one of these must appear in **three** places or it is written empty
+> on the next deploy: the repository secrets, the job `env:` block of
+> `deploy.yml`, and its `env_lines` list. `deploy.yml` overwrites
+> `/httpdocs/.env` wholesale on every push to `main`, so editing the file
+> over FTP does not survive. `SMS_WEBHOOK_SECRET` was missing from the
+> `env:` block until 2026-07-30, which left `/api/sms/webhook` running
+> unauthenticated in production.
+
+## Lead scraping prerequisites
+
+Two SQL migrations must be applied **before** the matching app version
+deploys, since this project runs migrations by hand:
+
+- `prisma/migrations/20260730_businesses_phonedigits_unique.sql`
+- `prisma/migrations/20260730_scrape_queue.sql`
+
+Both were applied to `benjaise_BCA` on 2026-07-30. A fresh environment
+also needs the catalog seeded, which reads the sibling Scraper repo:
+
+```bash
+node prisma/seed-scrape-catalog.mjs --source ../Scraper --apply
+```
+
+Without it `/admin/find-leads` renders no industries or states.
 
 > SECURITY: secrets were hardcoded in plaintext in the old deploy scripts (now
 > deleted) and still live in `.env` on the server. Rotate the DB password,

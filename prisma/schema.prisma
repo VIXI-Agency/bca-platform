@@ -73,9 +73,13 @@ model Business {
 
   calls        Call[]
 
+  @@unique([phoneDigits], map: "UX_Businesses_PhoneDigits")
   @@index([idStatus, industry], map: "IX_Businesses_Status_Industry")
   @@index([idStatus, timeZone], map: "IX_Businesses_Status_TimeZone")
   @@index([businessName], map: "IX_Businesses_Name")
+  // IX_Businesses_PhoneDigits also carries INCLUDE (IdBusiness, BusinessName,
+  // Phone, IdStatus), which Prisma cannot express. See the 20260730 migration.
+  @@index([phoneDigits], map: "IX_Businesses_PhoneDigits")
   @@map("Businesses")
   @@schema("dbo")
 }

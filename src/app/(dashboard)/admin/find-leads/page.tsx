@@ -42,6 +42,23 @@ export default function FindLeadsPage() {
   const toggle = (list: string[], set: (v: string[]) => void, value: string) =>
     set(list.includes(value) ? list.filter((v) => v !== value) : [...list, value]);
 
+  const allStatesSelected =
+    (catalog.data?.states.length ?? 0) > 0 && states.length === catalog.data!.states.length;
+
+  const allShownSelected =
+    shownIndustries.length > 0 && shownIndustries.every((i) => industries.includes(i.name));
+
+  // Acts on the filtered list, not the catalog: filter "Air", select the six
+  // matches, clear the filter, and they stay selected.
+  function toggleShownIndustries() {
+    const shown = shownIndustries.map((i) => i.name);
+    setIndustries(
+      allShownSelected
+        ? industries.filter((n) => !shown.includes(n))
+        : [...new Set([...industries, ...shown])],
+    );
+  }
+
   const canSubmit = industries.length > 0 && states.length > 0;
 
   return (
@@ -64,7 +81,13 @@ export default function FindLeadsPage() {
             <div>
               <div className="mb-2 flex items-center justify-between">
                 <span className="text-sm font-medium">Industries ({industries.length} selected)</span>
-                <Button variant="ghost" size="sm" onClick={() => setIndustries([])}>Clear</Button>
+                <div className="flex items-center gap-1">
+                  <Button variant="ghost" size="sm" onClick={toggleShownIndustries}>
+                    {allShownSelected ? 'Deselect' : 'Select'} all
+                    {filter.trim() && ` (${shownIndustries.length})`}
+                  </Button>
+                  <Button variant="ghost" size="sm" onClick={() => setIndustries([])}>Clear</Button>
+                </div>
               </div>
               <Input
                 placeholder="Filter industries…"
@@ -96,7 +119,18 @@ export default function FindLeadsPage() {
             <div>
               <div className="mb-2 flex items-center justify-between">
                 <span className="text-sm font-medium">States ({states.length} selected)</span>
-                <Button variant="ghost" size="sm" onClick={() => setStates([])}>Clear</Button>
+                <div className="flex items-center gap-1">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() =>
+                      setStates(allStatesSelected ? [] : (catalog.data?.states ?? []).map((s) => s.state))
+                    }
+                  >
+                    {allStatesSelected ? 'Deselect' : 'Select'} all
+                  </Button>
+                  <Button variant="ghost" size="sm" onClick={() => setStates([])}>Clear</Button>
+                </div>
               </div>
               <div className="max-h-[22.5rem] overflow-y-auto rounded-md border p-2">
                 {(catalog.data?.states ?? []).map((s) => (

@@ -125,23 +125,20 @@ export const adminNavigation: NavItem[] = [
     icon: MessageCircle,
     permissionKey: 'admin_rebuttals',
   },
+  // Grouped because they are one job: where leads come from, and what is
+  // refused on the way in. Blacklist stays a sibling rather than a section of
+  // Find New Leads — the same two lists also filter the CSV importer, and
+  // burying it under the scraper hides it from whoever imports by hand.
   {
-    label: 'Find New Leads',
+    label: 'Leads',
     href: '/admin/find-leads',
     icon: Search,
     permissionKey: 'admin_import',
-  },
-  {
-    label: 'Import Leads',
-    href: '/admin/import',
-    icon: FileUp,
-    permissionKey: 'admin_import',
-  },
-  {
-    label: 'Blacklist',
-    href: '/admin/blacklist',
-    icon: Ban,
-    permissionKey: 'admin_import',
+    children: [
+      { label: 'Find New Leads', href: '/admin/find-leads', icon: Search, permissionKey: 'admin_import' },
+      { label: 'Import Leads', href: '/admin/import', icon: FileUp, permissionKey: 'admin_import' },
+      { label: 'Blacklist', href: '/admin/blacklist', icon: Ban, permissionKey: 'admin_import' },
+    ],
   },
   {
     label: 'Permissions',

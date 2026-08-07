@@ -3,6 +3,16 @@ import { z } from 'zod';
 import { prisma } from '@/lib/prisma';
 import { requireAdmin, currentUserName } from '@/lib/scrape-admin';
 
+/**
+ * How long a completed search keeps its industry+city off the queue.
+ *
+ * The trade is between wasting searches on a city that has barely changed and
+ * missing businesses that registered since. Ninety days is roughly a quarter,
+ * which is how often this catalog is worth revisiting; the duplicate counter on
+ * the run history is the evidence for moving it either way.
+ */
+const COVERAGE_TTL_DAYS = 90;
+
 const createSchema = z.object({
   industries: z.array(z.string().min(1)).min(1).max(200),
   states: z.array(z.string().length(2)).min(1).max(60),
@@ -82,19 +92,27 @@ export async function POST(request: NextRequest) {
       cities.map((c) => ({ industry, city: c.city, state: c.state.trim(), timeZone: c.timeZone })),
     );
 
-    // Coverage is global: a pair already queued by an earlier request is not
-    // queued again, which is what stops overlapping requests from re-scraping
-    // the same territory.
+    // Coverage keeps overlapping requests from re-scraping the same territory,
+    // but it expires. YellowPages gains businesses continuously, so the same
+    // search a few months later returns ones that did not exist the first time.
+    // Permanent coverage made the scraper a one-shot tool that ran out of legal
+    // work forever once the catalog was covered.
     //
-    // 'failed' is deliberately not covered. A task that exhausted its attempts
-    // was never scraped, and treating it as covered would retire that pair for
-    // good on a transient proxy outage. The unique index still prevents a
-    // second row, so those pairs are requeued through the failed-task view.
+    // Queued work covers regardless of age — a pending task is about to be
+    // scraped, and queueing it twice just wastes a search. A completed one
+    // covers only until the window closes.
+    //
+    // 'failed' covers nothing. It exhausted its attempts without ever being
+    // scraped, so the pair is genuinely uncovered and should come back around.
+    const staleAfter = new Date(Date.now() - COVERAGE_TTL_DAYS * 24 * 60 * 60 * 1000);
     const existing = await prisma.scrapeTask.findMany({
       where: {
         industry: { in: industries },
         state: { in: states },
-        status: { in: ['pending', 'leased', 'done'] },
+        OR: [
+          { status: { in: ['pending', 'leased'] } },
+          { status: 'done', completedAt: { gte: staleAfter } },
+        ],
       },
       select: { industry: true, city: true, state: true },
     });

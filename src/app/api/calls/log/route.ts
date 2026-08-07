@@ -72,10 +72,13 @@ export async function POST(request: NextRequest) {
     const call = await prisma.$transaction(async (tx) => {
       const newCall = await tx.call.create({ data: callData });
 
-      // Mark business as called (idStatus = 2) — matches legacy stored procedure behavior
+      // Mark business as called (idStatus = 2) — matches legacy stored procedure behavior.
+      // Clearing onCallSince retires the handout: the lead has left status 1 for
+      // good, and a stale timestamp would linger on a row the reclaim can never
+      // reach anyway.
       await tx.business.update({
         where: { idBusiness: data.idBusiness },
-        data: { idStatus: 2 },
+        data: { idStatus: 2, onCallSince: null },
       });
 
       return newCall;

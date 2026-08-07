@@ -15,7 +15,7 @@ const args = process.argv.slice(2);
 const apply = args.includes('--apply');
 const source = args[args.indexOf('--source') + 1] ?? '../Scraper';
 
-const TIMEZONES = ['pst', 'mst', 'cst', 'est'];
+const TIMEZONES = ['pst', 'mst', 'cst', 'est', 'hst'];
 
 function readLines(path) {
   return readFileSync(path, 'utf8')

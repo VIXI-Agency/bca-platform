@@ -351,26 +351,83 @@ export function buildCallEmailHTML(data: CallEmailData): string {
 </html>`;
 }
 
-interface ScrapeSummaryEmailData {
-  runId: number;
+export interface ScrapeDigestEmailData {
   reportDate: string;
-  queueDrained: boolean;
-  searchesRun: number;
-  totalRecords: number;
-  duplicatesFound: number;
-  blackListBusinesses: number;
-  businessesImported: number;
-  businessesReadyToCall: number;
+  runCount: number;
+  driftRuns: number;
+  searches: number;
+  found: number;
+  imported: number;
+  duplicates: number;
+  blacklisted: number;
+  byZone: Array<{ label: string; searches: number; found: number; imported: number }>;
+  topIndustries: Array<{ label: string; searches: number; found: number; imported: number }>;
+  otherIndustries: { label: string; searches: number; found: number; imported: number } | null;
+  topCities: Array<{ city: string; state: string; imported: number }>;
+  queuePending: number;
+  failedTasks: number;
+  readyToCall: number;
+  findLeadsUrl: string;
+}
+
+const EYEBROW = (text: string) =>
+  `<p style="margin:0 0 4px 0; font-size:12px; font-weight:800; letter-spacing:1.2px; text-transform:uppercase; color:#0891b2; font-family:Arial,sans-serif;">${escapeHtml(text)}</p>`;
+
+const TH = (label: string, align: 'left' | 'right', radius: string) =>
+  `<th align="${align}" style="padding:9px 12px; font-size:11px; letter-spacing:0.6px; text-transform:uppercase; color:#64748b; font-weight:normal; font-family:Arial,sans-serif; border-radius:${radius};">${escapeHtml(label)}</th>`;
+
+/** One breakdown table: a named thing plus its searches, found and imported. */
+function breakdownTable(
+  firstColumn: string,
+  rows: Array<{ label: string; searches: number; found: number; imported: number }>,
+  tail: { label: string; searches: number; found: number; imported: number } | null,
+): string {
+  const body = rows
+    .map(
+      (row) => `
+      <tr>
+        <td style="padding:10px 12px; color:#0f172a; font-family:Arial,sans-serif; font-size:13px; border-bottom:1px solid #f1f5f9;">${escapeHtml(row.label)}</td>
+        <td align="right" style="padding:10px 12px; color:#475569; font-family:Arial,sans-serif; font-size:13px; border-bottom:1px solid #f1f5f9;">${formatNumber(row.searches)}</td>
+        <td align="right" style="padding:10px 12px; color:#475569; font-family:Arial,sans-serif; font-size:13px; border-bottom:1px solid #f1f5f9;">${formatNumber(row.found)}</td>
+        <td align="right" style="padding:10px 12px; color:#059669; font-weight:bold; font-family:Arial,sans-serif; font-size:13px; border-bottom:1px solid #f1f5f9;">${formatNumber(row.imported)}</td>
+      </tr>`,
+    )
+    .join('');
+
+  const tailRow = tail
+    ? `
+      <tr>
+        <td style="padding:10px 12px; color:#94a3b8; font-style:italic; font-family:Arial,sans-serif; font-size:13px;">${escapeHtml(tail.label)}</td>
+        <td align="right" style="padding:10px 12px; color:#94a3b8; font-family:Arial,sans-serif; font-size:13px;">${formatNumber(tail.searches)}</td>
+        <td align="right" style="padding:10px 12px; color:#94a3b8; font-family:Arial,sans-serif; font-size:13px;">${formatNumber(tail.found)}</td>
+        <td align="right" style="padding:10px 12px; color:#94a3b8; font-family:Arial,sans-serif; font-size:13px;">${formatNumber(tail.imported)}</td>
+      </tr>`
+    : '';
+
+  return `<table width="100%" cellpadding="0" cellspacing="0">
+    <tr style="background:#f8fafc;">
+      ${TH(firstColumn, 'left', '8px 0 0 8px')}
+      ${TH('Searches', 'right', '0')}
+      ${TH('Found', 'right', '0')}
+      ${TH('Imported', 'right', '0 8px 8px 0')}
+    </tr>${body}${tailRow}
+  </table>`;
 }
 
 /**
- * Summary for an automated scraper run.
+ * The daily scraper digest: one mail covering every run of one Central day.
  *
- * Separate from buildImportSummaryEmailHTML rather than a parameter on it: that
- * template hardcodes "X just imported new Businesses" and refers to an attached
- * CSV, and an automated run has neither an importer nor an attachment.
+ * Replaces the per-run summary. Four runs a day each mailing their own totals
+ * trained the recipients to skim past all of them, and totals alone never said
+ * which industries or time zones the leads came from — the question the report
+ * exists to answer.
+ *
+ * Every dark panel carries a `bgcolor` attribute alongside its CSS background.
+ * Gmail strips CSS gradients, and the headline here is white: the previous
+ * template's gradient-only hero rendered white text on a white card, so the
+ * lead sentence of every report was invisible in the client that receives it.
  */
-export function buildScrapeSummaryEmailHTML(data: ScrapeSummaryEmailData): string {
+export function buildScrapeDigestEmailHTML(data: ScrapeDigestEmailData): string {
   const stat = (label: string, value: number, color: string) => `
     <td style="padding:8px;">
       <table width="100%" cellpadding="0" cellspacing="0" style="background:#f8fafc; border-radius:12px;">
@@ -381,12 +438,78 @@ export function buildScrapeSummaryEmailHTML(data: ScrapeSummaryEmailData): strin
       </table>
     </td>`;
 
-  const headline = data.queueDrained
-    ? 'The scraping queue is empty.'
-    : `${formatNumber(data.businessesImported)} new leads were added overnight.`;
-  const subhead = data.queueDrained
-    ? 'Every queued industry and city has been covered. Queue more work from Admin &rsaquo; Find New Leads to keep leads flowing.'
-    : `Run #${data.runId} completed ${formatNumber(data.searchesRun)} searches.`;
+  const idle = data.runCount === 0;
+  const queueEmpty = data.queuePending === 0;
+
+  const headline = idle
+    ? 'The scraper did not run.'
+    : `${formatNumber(data.imported)} new leads were added.`;
+
+  const runWord = data.runCount === 1 ? 'run' : 'runs';
+  const subhead = idle
+    ? 'No scraper run finished on this date. If that repeats, the worker is not reaching the queue.'
+    : `${formatNumber(data.runCount)} ${runWord} &middot; ${formatNumber(data.searches)} searches`;
+
+  // The duplicate rate is the number that explains a small import off a large
+  // find, and as a bare tile it reads as a failure instead of as coverage.
+  const dupeRate = data.found > 0 ? Math.round((data.duplicates / data.found) * 100) : 0;
+  const context = idle
+    ? ''
+    : `Most of what we found was already on file &mdash; <strong style="color:#0f172a;">${formatNumber(data.duplicates)} of ${formatNumber(data.found)} listings (${dupeRate}%)</strong> were duplicates.`;
+
+  const driftNote =
+    data.driftRuns > 0
+      ? ` <strong style="color:#b45309;">${formatNumber(data.driftRuns)} of ${formatNumber(data.runCount)} ${runWord} stopped early</strong> after finding no listings at all, which usually means YellowPages changed its page layout.`
+      : '';
+
+  const cities = data.topCities.length
+    ? data.topCities
+        .map(
+          (row) =>
+            `<p style="margin:0 0 6px 0; font-size:13px; color:#475569; font-family:Arial,sans-serif;">${escapeHtml(row.city)}, ${escapeHtml(row.state)} &mdash; <strong style="color:#0f172a;">${formatNumber(row.imported)}</strong></p>`,
+        )
+        .join('')
+    : '<p style="margin:0; font-size:13px; color:#94a3b8; font-family:Arial,sans-serif;">No new leads today.</p>';
+
+  const queueLines = [
+    queueEmpty
+      ? '<strong style="color:#b45309;">The queue is empty.</strong> Add industries and states in Find New Leads.'
+      : `<strong style="color:#0f172a;">${formatNumber(data.queuePending)}</strong> searches still queued`,
+    data.failedTasks > 0
+      ? `<strong style="color:#0f172a;">${formatNumber(data.failedTasks)}</strong> searches failed after 3 tries`
+      : 'No searches failed',
+  ]
+    .map(
+      (line) =>
+        `<p style="margin:0 0 6px 0; font-size:13px; color:#475569; font-family:Arial,sans-serif;">${line}</p>`,
+    )
+    .join('');
+
+  const breakdowns = idle
+    ? ''
+    : `
+    <tr><td style="padding:22px 40px 0 40px;">
+      ${EYEBROW('Where the new leads landed')}
+      <p style="margin:0 0 12px 0; font-size:13px; color:#64748b; font-family:Arial,sans-serif;">Time zone decides who can call them and when.</p>
+      ${breakdownTable('Zone', data.byZone, null)}
+    </td></tr>
+    <tr><td style="padding:26px 40px 0 40px;">
+      ${EYEBROW('What we searched')}
+      <p style="margin:0 0 12px 0; font-size:13px; color:#64748b; font-family:Arial,sans-serif;">Top industries by new leads.</p>
+      ${breakdownTable('Industry', data.topIndustries, data.otherIndustries)}
+    </td></tr>
+    <tr><td style="padding:26px 40px 0 40px;">
+      <table width="100%" cellpadding="0" cellspacing="0"><tr>
+        <td width="50%" valign="top" style="padding-right:10px;">
+          ${EYEBROW('Top cities')}
+          ${cities}
+        </td>
+        <td width="50%" valign="top" style="padding-left:10px;">
+          ${EYEBROW('Queue')}
+          ${queueLines}
+        </td>
+      </tr></table>
+    </td></tr>`;
 
   return `<!DOCTYPE html>
 <html>
@@ -394,69 +517,43 @@ export function buildScrapeSummaryEmailHTML(data: ScrapeSummaryEmailData): strin
 <body style="margin:0; padding:24px; background:#f1f5f9;">
   <table width="100%" cellpadding="0" cellspacing="0" style="max-width:640px; margin:0 auto; background:#ffffff; border-radius:20px;">
     <tr><td style="padding:32px 40px 8px 40px;">
-      <span style="display:inline-block; padding:7px 14px; background:#ecfeff; color:#0891b2; border-radius:999px; font-size:11px; font-weight:800; letter-spacing:1px; font-family:Arial,sans-serif;">${data.queueDrained ? 'QUEUE EMPTY' : 'AUTOMATED SCRAPER RUN'}</span>
+      <span style="display:inline-block; padding:7px 14px; background:#ecfeff; color:#0891b2; border-radius:999px; font-size:11px; font-weight:800; letter-spacing:1px; font-family:Arial,sans-serif;">DAILY SCRAPER REPORT</span>
     </td></tr>
-    <tr><td style="padding:16px 40px 24px 40px;">
-      <table width="100%" cellpadding="0" cellspacing="0" style="background:linear-gradient(135deg,#0f172a 0%,#1e293b 100%); border-radius:16px;">
-        <tr><td style="padding:34px;">
-          <h1 style="margin:0 0 12px 0; font-size:28px; color:#ffffff; font-family:Arial,sans-serif; line-height:1.25;">${escapeHtml(headline)}</h1>
+    <tr><td style="padding:16px 40px 20px 40px;">
+      <table width="100%" cellpadding="0" cellspacing="0" bgcolor="#0f172a" style="background-color:#0f172a; border-radius:16px;">
+        <tr><td style="padding:32px;">
+          <h1 style="margin:0 0 10px 0; font-size:27px; color:#ffffff; font-family:Arial,sans-serif; line-height:1.25;">${escapeHtml(headline)}</h1>
           <p style="margin:0; font-size:14px; color:#94a3b8; font-family:Arial,sans-serif; line-height:1.6;">${subhead}</p>
         </td></tr>
       </table>
     </td></tr>
-    <tr><td style="padding:0 32px 8px 32px; font-size:13px; color:#64748b; font-family:Arial,sans-serif;">
-      <strong style="color:#0f172a;">Report Date:</strong> ${escapeHtml(data.reportDate)}
+    <tr><td style="padding:0 40px 18px 40px;">
+      <p style="margin:0; font-size:14px; color:#475569; font-family:Arial,sans-serif; line-height:1.6;">
+        ${context}${driftNote} Report date: ${escapeHtml(data.reportDate)}.
+      </p>
     </td></tr>
-    <tr><td style="padding:8px 32px;">
+    <tr><td style="padding:0 32px 8px 32px;">
       <table width="100%" cellpadding="0" cellspacing="0"><tr>
-        ${stat('Found', data.totalRecords, '#0f172a')}
-        ${stat('Imported', data.businessesImported, '#059669')}
+        ${stat('Found', data.found, '#0f172a')}
+        ${stat('Imported', data.imported, '#059669')}
       </tr><tr>
-        ${stat('Duplicates', data.duplicatesFound, '#d97706')}
-        ${stat('Blacklisted', data.blackListBusinesses, '#dc2626')}
+        ${stat('Duplicates', data.duplicates, '#d97706')}
+        ${stat('Blacklisted', data.blacklisted, '#dc2626')}
       </tr></table>
-    </td></tr>
-    <tr><td style="padding:8px 40px 32px 40px;">
-      <table width="100%" cellpadding="0" cellspacing="0" style="background:#0f172a; border-radius:12px;">
+    </td></tr>${breakdowns}
+    <tr><td style="padding:26px 40px 8px 40px;">
+      <table width="100%" cellpadding="0" cellspacing="0" bgcolor="#0f172a" style="background-color:#0f172a; border-radius:12px;">
         <tr><td style="padding:20px; text-align:center; font-family:Arial,sans-serif;">
-          <div style="font-size:26px; font-weight:800; color:#22d3ee;">${formatNumber(data.businessesReadyToCall)}</div>
+          <div style="font-size:26px; font-weight:800; color:#22d3ee;">${formatNumber(data.readyToCall)}</div>
           <div style="font-size:11px; color:#94a3b8; letter-spacing:1px; text-transform:uppercase; padding-top:6px;">Businesses ready to call</div>
         </td></tr>
       </table>
     </td></tr>
-    <tr><td style="padding:0 40px 28px 40px;">
+    <tr><td style="padding:12px 40px 8px 40px; text-align:center;">
+      <a href="${escapeHtml(data.findLeadsUrl)}" style="display:inline-block; padding:12px 26px; background:#0891b2; color:#ffffff; border-radius:999px; font-size:13px; font-weight:bold; text-decoration:none; font-family:Arial,sans-serif;">See the full run in PulseBC</a>
+    </td></tr>
+    <tr><td style="padding:18px 40px 28px 40px;">
       <p style="margin:0; text-align:center; font-size:11px; color:#94a3b8; font-family:Arial,sans-serif;">This is an automated notification from PulseBC Calling System.</p>
-    </td></tr>
-  </table>
-</body>
-</html>`;
-}
-
-interface ScrapeAlertEmailData {
-  runId: number;
-  reportDate: string;
-  message: string;
-}
-
-export function buildScrapeAlertEmailHTML(data: ScrapeAlertEmailData): string {
-  return `<!DOCTYPE html>
-<html>
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"></head>
-<body style="margin:0; padding:24px; background:#f1f5f9;">
-  <table width="100%" cellpadding="0" cellspacing="0" style="max-width:640px; margin:0 auto; background:#ffffff; border-radius:20px;">
-    <tr><td style="padding:32px 40px 8px 40px;">
-      <span style="display:inline-block; padding:7px 14px; background:#fef2f2; color:#dc2626; border-radius:999px; font-size:11px; font-weight:800; letter-spacing:1px; font-family:Arial,sans-serif;">SCRAPER ALERT</span>
-    </td></tr>
-    <tr><td style="padding:16px 40px 24px 40px;">
-      <table width="100%" cellpadding="0" cellspacing="0" style="background:#0f172a; border-radius:16px;">
-        <tr><td style="padding:34px;">
-          <h1 style="margin:0 0 12px 0; font-size:24px; color:#ffffff; font-family:Arial,sans-serif; line-height:1.3;">Run #${data.runId} was aborted.</h1>
-          <p style="margin:0; font-size:14px; color:#94a3b8; font-family:Arial,sans-serif; line-height:1.6;">${escapeHtml(data.message)}</p>
-        </td></tr>
-      </table>
-    </td></tr>
-    <tr><td style="padding:0 40px 28px 40px; font-size:13px; color:#64748b; font-family:Arial,sans-serif;">
-      <strong style="color:#0f172a;">Report Date:</strong> ${escapeHtml(data.reportDate)}
     </td></tr>
   </table>
 </body>

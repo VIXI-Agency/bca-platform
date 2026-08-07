@@ -89,6 +89,72 @@ function post(input: CreateInput) {
   });
 }
 
+export interface IndustryYield {
+  industry: string;
+  searches: number;
+  found: number;
+  imported: number;
+}
+
+export interface RunHistory {
+  runs: ScrapeRunRow[];
+  page: number;
+  pageSize: number;
+  total: number;
+  totalPages: number;
+  summary: {
+    runs: number;
+    searches: number;
+    found: number;
+    imported: number;
+    duplicates: number;
+    blacklisted: number;
+    invalid: number;
+    duplicateRate: number;
+    importedPerRun: number;
+    since: string | null;
+  };
+  queue: {
+    pending: number;
+    done: number;
+    failed: number;
+    leased: number;
+    industriesRemaining: number;
+    nextIndustry: string | null;
+    searchesPerRun: number;
+    runsRemaining: number | null;
+    daysRemaining: number | null;
+  };
+  worstIndustries: IndustryYield[];
+}
+
+export interface RunDetail {
+  run: ScrapeRunRow;
+  industries: IndustryYield[];
+  cities: { city: string; state: string; imported: number }[];
+  zones: { timeZone: string; searches: number; imported: number }[];
+  failures: FailedTaskRow[];
+}
+
+export function useRunHistory(page: number, outcome: string) {
+  return useQuery({
+    queryKey: ['scrape', 'runs', page, outcome],
+    queryFn: () => json<RunHistory>(`/api/scrape/runs?page=${page}&outcome=${outcome}`),
+    // A run in progress moves its counters while the page is open.
+    refetchInterval: 30_000,
+    placeholderData: (previous) => previous,
+  });
+}
+
+/** Fetched only once a row is expanded — one query per run the admin opens. */
+export function useRunDetail(runId: number | null) {
+  return useQuery({
+    queryKey: ['scrape', 'run', runId],
+    queryFn: () => json<RunDetail>(`/api/scrape/runs/${runId}`),
+    enabled: runId !== null,
+  });
+}
+
 export function usePreviewRequest() {
   return useMutation({ mutationFn: (input: CreateInput) => post({ ...input, preview: true }) });
 }

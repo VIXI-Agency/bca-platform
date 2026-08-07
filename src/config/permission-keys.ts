@@ -26,6 +26,10 @@ export const ALL_PERMISSION_KEYS = Object.keys(PERMISSION_LABELS);
 export function getPermissionKeyForRoute(pathname: string): string | null {
   if (pathname === '/') return 'dashboard';
   if (pathname.startsWith('/calls')) return 'calls';
+  // Gated by 'calls', not a key of its own: a new key starts ungranted, so the
+  // page would stay invisible to all 16 agents until somebody edited each of
+  // them. Anyone allowed to call is allowed to see what there is to call.
+  if (pathname.startsWith('/leads-available')) return 'calls';
   if (pathname.startsWith('/clock')) return 'clock';
   if (pathname.startsWith('/clients')) return 'clients';
   if (pathname.startsWith('/training')) return 'training';
@@ -49,6 +53,7 @@ export function getPermissionKeyForRoute(pathname: string): string | null {
 
 // API route → permission key
 export function getPermissionKeyForApiRoute(pathname: string): string | null {
+  if (pathname.startsWith('/api/leads/availability')) return 'calls';
   if (pathname.startsWith('/api/users')) return 'admin_users';
   if (pathname.startsWith('/api/import')) return 'admin_import';
   if (pathname.startsWith('/api/admin/blacklist')) return 'admin_import';

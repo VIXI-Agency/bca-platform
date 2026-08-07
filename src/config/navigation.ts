@@ -19,6 +19,7 @@ import {
   Monitor,
   MonitorCog,
   ClipboardList,
+  ListChecks,
   Ticket,
   Printer,
   Ban,
@@ -44,6 +45,12 @@ export const navigation: NavItem[] = [
     label: 'Calls',
     href: '/calls',
     icon: Phone,
+    permissionKey: 'calls',
+  },
+  {
+    label: 'Leads Available',
+    href: '/leads-available',
+    icon: ListChecks,
     permissionKey: 'calls',
   },
   {

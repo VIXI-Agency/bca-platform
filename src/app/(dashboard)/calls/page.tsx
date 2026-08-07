@@ -59,6 +59,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { LeadAvailabilityPanel } from '@/components/leads/lead-availability-panel';
 import { formatPhone } from '@/lib/utils';
 import {
   useDispositions,
@@ -188,6 +189,8 @@ export default function CallsPage() {
   const { data: filters, isLoading: loadingFilters } = useFilters(timezone);
 
   const [lead, setLead] = useState<LeadBusiness | null>(null);
+  /** Set when a lead request came back empty, so the empty state can explain why. */
+  const [noLeadsFor, setNoLeadsFor] = useState<{ timezone: string; industry: string } | null>(null);
   const [previousLead, setPreviousLead] = useState<LeadBusiness | null>(null);
   const [selectedDisposition, setSelectedDisposition] = useState<number | null>(null);
   const [lastCallId, setLastCallId] = useState<number | null>(null);
@@ -225,20 +228,30 @@ export default function CallsPage() {
   }, []);
 
   /* ---- Fetch a new lead from the server ---- */
-  const doFetchLead = useCallback(() => {
+  // industryOverride exists for the availability panel: it hands back an
+  // industry and wants a lead from it in the same gesture, and reading the
+  // industry state here would still see the value from before that click.
+  const doFetchLead = useCallback((industryOverride?: string) => {
+    const chosen = industryOverride ?? industry;
     nextLead.mutate(
-      { timezone, industry: industry && industry !== 'random' ? industry : undefined },
+      { timezone, industry: chosen && chosen !== 'random' ? chosen : undefined },
       {
         onSuccess: (data) => {
           setLead(data);
+          setNoLeadsFor(null);
           setSelectedDisposition(null);
           reset(defaultValues);
         },
         onError: (err) => {
           setLead(null);
           if (err.message.includes('No leads') || err.message.includes('404')) {
-            showToast('No leads available for the selected filters.', 'error');
+            // Not a toast. A toast says the system is empty and disappears, and
+            // that is the message that reaches the floor as "there are no leads
+            // to call". The empty state below names the industries that do have
+            // work in this agent's timezone.
+            setNoLeadsFor({ timezone, industry: chosen && chosen !== 'random' ? chosen : '' });
           } else {
+            setNoLeadsFor(null);
             showToast(err.message || 'Failed to fetch lead.', 'error');
           }
         },
@@ -598,8 +611,25 @@ export default function CallsPage() {
               </Card>
             )}
 
+            {/* ---- Nothing matched the filters ---- */}
+            {!lead && !nextLead.isPending && noLeadsFor && (
+              <Card>
+                <CardContent className="flex justify-center p-8">
+                  <LeadAvailabilityPanel
+                    timezone={noLeadsFor.timezone}
+                    industry={noLeadsFor.industry || undefined}
+                    onPickIndustry={(picked) => {
+                      setIndustry(picked);
+                      setNoLeadsFor(null);
+                      doFetchLead(picked);
+                    }}
+                  />
+                </CardContent>
+              </Card>
+            )}
+
             {/* ---- Empty State ---- */}
-            {!lead && !nextLead.isPending && (
+            {!lead && !nextLead.isPending && !noLeadsFor && (
               <Card>
                 <CardContent className="flex flex-col items-center justify-center p-16">
                   <div

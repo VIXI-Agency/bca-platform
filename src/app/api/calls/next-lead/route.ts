@@ -4,6 +4,20 @@ import { prisma } from '@/lib/prisma';
 import { Prisma } from '@prisma/client';
 import { getNextLeadSchema } from '@/lib/validators';
 
+/**
+ * How long a lead may sit "On Call" before it is treated as abandoned.
+ *
+ * Long enough to cover a real call plus the notes an agent types afterwards,
+ * short enough that a lead lost to a closed tab is back in the pool the same
+ * shift. A lead released while its agent is still on it is not lost work:
+ * /api/calls/log sets the status by IdBusiness and does not require the lead to
+ * still be On Call.
+ */
+const ON_CALL_EXPIRY_MINUTES = 30;
+
+/** Ceiling on rows released per request, so this never becomes a long write. */
+const RECLAIM_BATCH = 500;
+
 interface LeadRow {
   IdBusiness: number;
   BusinessName: string | null;
@@ -32,6 +46,28 @@ export async function POST(request: NextRequest) {
     }
 
     const { industry, timezone } = parsed.data;
+
+    // Return abandoned leads to the pool before serving a new one.
+    //
+    // Handing a lead out sets IdStatus = 1 immediately, and until this existed
+    // nothing ever set it back: an agent who closed the tab, lost connection or
+    // simply asked for a different lead parked that row forever. By 2026-08-07
+    // 301,133 leads had been handed out and never called even once.
+    //
+    // Done here rather than on a schedule because this route is the only place
+    // that consumes the pool, so it is the one place guaranteed to run whenever
+    // the pool matters. TOP bounds the write so a large backlog costs the agent
+    // waiting on this request a few milliseconds, not a table-wide lock.
+    //
+    // OnCallSince IS NOT NULL excludes the rows that predate the column: those
+    // carry a call record and releasing them means dialling somebody twice.
+    await prisma.$executeRaw`
+      UPDATE TOP (${RECLAIM_BATCH}) Businesses
+      SET IdStatus = 3, OnCallSince = NULL
+      WHERE IdStatus = 1
+        AND OnCallSince IS NOT NULL
+        AND OnCallSince < DATEADD(minute, ${-ON_CALL_EXPIRY_MINUTES}, SYSUTCDATETIME())
+    `;
 
     // Build WHERE conditions for parameterized query
     const conditions: Prisma.Sql[] = [Prisma.sql`IdStatus = 3`];
@@ -72,7 +108,7 @@ export async function POST(request: NextRequest) {
           OFFSET ${randomOffset} ROWS FETCH NEXT 1 ROWS ONLY
         )
         UPDATE cte
-        SET IdStatus = 1
+        SET IdStatus = 1, OnCallSince = SYSUTCDATETIME()
         OUTPUT
           inserted.IdBusiness,
           inserted.BusinessName,

@@ -44,10 +44,12 @@ export async function POST(request: NextRequest) {
       // Delete the call record
       await tx.call.delete({ where: { idCall } });
 
-      // Revert business back to available
+      // Revert business back to available. onCallSince goes with it: the lead is
+      // in nobody's hands now, and leaving the old handout time behind would let
+      // the reclaim "release" a row that is already released.
       await tx.business.update({
         where: { idBusiness },
-        data: { idStatus: 3 },
+        data: { idStatus: 3, onCallSince: null },
       });
     });
 

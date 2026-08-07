@@ -70,12 +70,19 @@ model Business {
   industry     String? @map("Industry")
   timeZone     String? @map("TimeZone")
   idStatus     Int?    @map("IdStatus")
+  /// Set when a lead is handed to an agent; cleared when the call is logged or
+  /// reverted. next-lead releases rows older than the expiry. NULL on the rows
+  /// that were already stuck at status 1 before the expiry existed.
+  onCallSince  DateTime? @map("OnCallSince")
 
   calls        Call[]
 
   @@unique([phoneDigits], map: "UX_Businesses_PhoneDigits")
   @@index([idStatus, industry], map: "IX_Businesses_Status_Industry")
   @@index([idStatus, timeZone], map: "IX_Businesses_Status_TimeZone")
+  // IX_Businesses_OnCallSince is filtered to IdStatus = 1, which Prisma cannot
+  // express. See the 20260807 migration.
+  @@index([onCallSince], map: "IX_Businesses_OnCallSince")
   @@index([businessName], map: "IX_Businesses_Name")
   // IX_Businesses_PhoneDigits also carries INCLUDE (IdBusiness, BusinessName,
   // Phone, IdStatus), which Prisma cannot express. See the 20260730 migration.

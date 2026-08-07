@@ -373,15 +373,50 @@ Request: `{ runId, reason: 'empty' | 'target' | 'budget' | 'drift' }`
 Closes the run, marks as `done` any request whose tasks have all finished, and
 sends mail conditioned on `reason`:
 
+Closes the run and marks as `done` any request whose tasks have all finished.
+
+**Amended 2026-08-07: no run mails anything. One report covers a whole day.**
+
+As designed, every run mailed its own outcome. The worker turned out to run
+roughly every five hours rather than daily, so that was four mails a day, each
+carrying four totals and no indication of what had been searched. The drift
+variant sent seven alerts in a week, since a stretch of blocked proxies
+satisfies the drift condition exactly as a markup change does.
+
+The replacement is one **daily digest** covering every run of one Central day:
+
 | `reason` | Mail |
 |---|---|
-| `target`, `budget` | The daily summary. |
-| `empty` | A "queue drained, nothing left to scrape" notice, not an all-zeros summary. |
-| `drift` | An alert to the technical owner, separate from the daily summary. |
+| any | None directly. `drift` additionally logs a `console.warn`. |
 
-Distinguishing these matters because a run that finds nothing looks identical to
-a healthy run in the summary template. Recipients who receive all-zeros mail
-daily stop reading it, which is also how the drift alert gets ignored.
+**The day boundary is derived from the runs, not from a schedule.** On finish, a
+run compares the previous finished run's Central day against its own; if they
+differ, it mails the report for the previous day. The first run of each day
+therefore sends exactly one report, covering the day that just closed. This is
+the whole reason no scheduler was added: IIS hosts no cron, the worker's
+schedule lives in another repository, and any fixed time would be a second
+place that has to agree about when a day ends. A day with no runs at all is
+still reported by the next run that finishes, and says so rather than mailing
+an aggregate over an empty set.
+
+What the report answers that four totals could not: which time zones the leads
+landed in (it decides who can call them), the top five industries and cities,
+how much queue is left, how many searches failed, and how many runs aborted on
+drift — which is where a real markup change now surfaces, as a streak across
+days rather than as a per-run alert.
+
+`src/lib/scrape-digest.ts` holds the aggregation; every figure is a rollup of
+`ScrapeTasks` rows that `results` and `fail` already write, so no new column was
+needed. `Duplicates` and `Blacklisted` are the exception: they are accumulated
+only on `ScrapeRuns`, never per task, so they appear as day totals and cannot be
+broken down by industry without adding two columns to `ScrapeTasks`.
+
+**A rendering bug found while rewriting the template.** The hero panel set its
+dark background with `background: linear-gradient(...)` and its headline in
+white. Gmail strips CSS gradients, so the background fell back to transparent
+and the lead sentence of every report — the one stating how many leads were
+added — rendered white on white. Every dark panel now carries a `bgcolor`
+attribute alongside the CSS.
 
 ## Worker
 
@@ -417,15 +452,22 @@ It stops at whichever comes first, and reports which to `finish`:
 
 ```yaml
 on:
-  schedule: [{ cron: '0 7 * * *' }]   # 07:00 UTC = 3am EDT, 2am EST
+  schedule: [{ cron: '0 */6 * * *' }]  # superseded the original daily 07:00 UTC
   workflow_dispatch:
 concurrency:
   group: scrape                        # runs never overlap
 ```
 
-GitHub Actions cron is UTC and does not follow daylight saving, so any single
-value drifts an hour across the year. 07:00 UTC keeps the run overnight in
-Eastern time year-round.
+Originally `0 7 * * *`, once a day. It became every six hours on 2026-07-31
+(`CachoMX/BCA-Scraper` PR #3) because the calling team consumes roughly 3,948
+leads a day and a single five-hour run produces about 1,200, so one daily run
+drains the pool rather than replenishing it. The workflow is still named
+"Daily lead scrape".
+
+Two consequences the rest of this document predates: the reporting cadence is
+four mails a day unless something consolidates them (see the digest amendment
+above), and a run that aborts on drift exits non-zero, so drift days appear in
+GitHub Actions as failed workflow runs lasting about ninety seconds.
 
 Required GitHub secrets in the Scraper repository: `SCRAPER_API_SECRET`,
 `PLATFORM_API_URL`, `WEBSHARE_API_KEY`, `WEBSHARE_RESIDENTIAL_PLAN`,
@@ -454,22 +496,23 @@ to an attached CSV. For an automated run there is no importer and no attachment,
 so two of its three sentences are false. `ImportSummaryEmailData` also types
 `fileName` as required.
 
-`buildScrapeSummaryEmailHTML` therefore shares the outer shell and stat blocks
-but takes its own copy and its own type:
+`buildScrapeDigestEmailHTML` therefore shares the outer shell and stat blocks
+but takes its own copy and its own type. Every figure is summed across the
+runs of one Central day (`src/lib/scrape-digest.ts`):
 
 | Template field | Source |
 |---|---|
-| `totalRecords` | `ScrapeRun.LeadsFound` |
-| `duplicatesFound` | `ScrapeRun.Duplicates` |
-| `blackListBusinesses` | `ScrapeRun.Blacklisted` |
-| `businessesImported` | `ScrapeRun.LeadsImported` |
-| `businessesReadyToCall` | `count(IdStatus = 3)` |
-| `reportDate` | `ScrapeRun.FinishedAt`, formatted `America/Chicago` |
-| `searchesRun` | `ScrapeRun.TasksDone` |
+| `found`, `imported`, `duplicates`, `blacklisted` | Same-named `ScrapeRun` counters, summed over the day |
+| `searches`, `runCount`, `driftRuns` | `ScrapeRun.TasksDone` summed; run count and `FinishReason = 'drift'` count |
+| `byZone`, `topIndustries` | `ScrapeTasks` grouped by `TimeZone` / `Industry`, summing `FoundCount` and `ImportedCount` |
+| `topCities` | `ScrapeTasks` grouped by `City, State`, top 5 by `ImportedCount` |
+| `queuePending`, `failedTasks` | `ScrapeTasks` counted by status |
+| `readyToCall` | `count(IdStatus = 3)` |
+| `reportDate` | The digest's own day key, formatted `M/D/YYYY` |
+| `findLeadsUrl` | `AUTH_URL` + `/admin/find-leads` |
 
 Recipients stay as they are today: `support@benjaminchaise.com`,
-`brianna@benjaminchaise.com`, `michael@benjaminchaise.com`. Drift alerts go to
-the technical owner instead, since they need action rather than awareness.
+`brianna@benjaminchaise.com`, `michael@benjaminchaise.com`.
 
 ## Admin UI
 

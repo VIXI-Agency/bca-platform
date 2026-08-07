@@ -154,6 +154,13 @@ Keys (values live ONLY in the server `.env` files now — `/httpdocs/.env` and
 `SMS_WEBHOOK_SECRET`, `NEXT_PUBLIC_APP_NAME`, `NODE_ENV`,
 `SCRAPER_API_SECRET`, `SCRAPE_ALERT_EMAIL`, `SCRAPE_DRY_RUN`.
 
+> `SCRAPE_ALERT_EMAIL` is no longer read by any code as of 2026-08-07, when
+> per-run scraper mail was replaced by one daily digest. It is kept wired
+> through `deploy.yml` so restoring an alert needs a code change only.
+> `AUTH_URL` gained a second job on the same date: the digest builds its
+> "See the full run in PulseBC" link from it, so a wrong value now sends
+> recipients to the wrong environment as well as breaking sign-in.
+
 > Every one of these must appear in **three** places or it is written empty
 > on the next deploy: the repository secrets, the job `env:` block of
 > `deploy.yml`, and its `env_lines` list. `deploy.yml` overwrites
@@ -164,13 +171,17 @@ Keys (values live ONLY in the server `.env` files now — `/httpdocs/.env` and
 
 ## Lead scraping prerequisites
 
-Two SQL migrations must be applied **before** the matching app version
+Three SQL migrations must be applied **before** the matching app version
 deploys, since this project runs migrations by hand:
 
 - `prisma/migrations/20260730_businesses_phonedigits_unique.sql`
 - `prisma/migrations/20260730_scrape_queue.sql`
+- `prisma/migrations/20260807_businesses_oncall_expiry.sql` — **not yet applied**
 
-Both were applied to `benjaise_BCA` on 2026-07-30. A fresh environment
+The 20260730 pair was applied to `benjaise_BCA` on 2026-07-30. The 20260807
+migration adds `Businesses.OnCallSince`; deploying without it breaks
+`/api/calls/next-lead`, `/api/calls/log` and `/api/calls/revert`, which is the
+whole calling flow. A fresh environment
 also needs the catalog seeded, which reads the sibling Scraper repo:
 
 ```bash
@@ -178,6 +189,32 @@ node prisma/seed-scrape-catalog.mjs --source ../Scraper --apply
 ```
 
 Without it `/admin/find-leads` renders no industries or states.
+
+## Lead pool: how a lead becomes uncallable
+
+`CallStatus` is the lookup: 1 On Call, 2 Done, 3 Available, 4 Disabled,
+5 Imported, 6 HandUp, 7 Already a Client. Only **3** is callable, and
+`/api/calls/next-lead` narrows it further by `TimeZone` **and** `Industry` —
+159 industries across 5 zones, so an agent's pool is one cell of a 795-cell
+grid, never the headline total. "There are a million leads" and "I have
+nothing to call" are routinely both true.
+
+Availability as of 2026-08-07: EST 887,265 · CST 470,079 · PST 61,339 ·
+MST 48,434 · HST 559. The west is nearly two orders of magnitude thinner than
+the east.
+
+**The On Call leak (fixed 2026-08-07).** Handing a lead out set `IdStatus = 1`
+and nothing ever set it back, so every closed tab parked a row there forever.
+687,514 rows had accumulated, 301,133 of them never called at all — IdBusiness
+1 through 3,513,630, so it dated to the legacy ASP.NET app. Those were released
+to status 3 (rollback list in `dbo.StuckLeadReset_20260807`), and
+`OnCallSince` + the reclaim in `next-lead` now expire handouts after 30
+minutes. The remaining 386,383 rows sit at status 1 *with* a call on record;
+they were deliberately left alone, since releasing them means dialling somebody
+a second time.
+
+Supply vs demand: the floor logs ~4,000 calls a day across 14-16 agents, while
+the scraper imported 944 on its best recent day and 0 on days it drifted.
 
 > SECURITY: secrets were hardcoded in plaintext in the old deploy scripts (now
 > deleted) and still live in `.env` on the server. Rotate the DB password,

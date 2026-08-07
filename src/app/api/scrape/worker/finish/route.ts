@@ -2,8 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { prisma } from '@/lib/prisma';
 import { requireWorkerAuth } from '@/lib/scrape-auth';
-import { NEW_LEAD_STATUS } from '@/lib/leads';
-import { buildScrapeSummaryEmailHTML, buildScrapeAlertEmailHTML, sendEmail } from '@/lib/email';
+import { buildScrapeDigestEmailHTML, sendEmail } from '@/lib/email';
+import { collectDigest, digestDayFor, formatDayKey, type ScrapeDigest } from '@/lib/scrape-digest';
 
 const bodySchema = z.object({
   runId: z.number().int().positive(),
@@ -16,14 +16,7 @@ const SUMMARY_RECIPIENTS = [
   { email: 'michael@benjaminchaise.com', name: 'Michael' },
 ];
 
-function formatReportDate(date: Date): string {
-  return new Intl.DateTimeFormat('en-US', {
-    timeZone: 'America/Chicago',
-    month: 'numeric',
-    day: 'numeric',
-    year: 'numeric',
-  }).format(date);
-}
+const DEFAULT_APP_URL = 'https://yourdebtcollectors.com';
 
 export async function POST(request: NextRequest) {
   const denied = requireWorkerAuth(request);
@@ -41,8 +34,16 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Unknown run' }, { status: 404 });
     }
     if (run.status !== 'running') {
-      return NextResponse.json({ alreadyRecorded: true, emailSent: false });
+      return NextResponse.json({ alreadyRecorded: true, digestSent: false });
     }
+
+    // Read before this run joins the finished set, so it cannot be its own
+    // predecessor and every run compares against the one that came before it.
+    const previous = await prisma.scrapeRun.findFirst({
+      where: { status: 'finished', finishedAt: { not: null }, id: { not: runId } },
+      orderBy: { finishedAt: 'desc' },
+      select: { finishedAt: true },
+    });
 
     const finishedAt = new Date();
     await prisma.scrapeRun.update({
@@ -62,73 +63,86 @@ export async function POST(request: NextRequest) {
       data: { status: 'done' },
     });
 
-    const emailSent = await sendRunEmail(runId, reason, finishedAt, run);
+    if (reason === 'drift') {
+      console.warn(
+        `Scrape run ${runId} aborted on drift at ${finishedAt.toISOString()}: its first tasks all returned ` +
+          'zero listings, so the queue was left untouched. The daily report counts these; several days of ' +
+          'them means YellowPages changed its markup, so check the XPath selectors in scraper_core.py.',
+      );
+    }
 
-    return NextResponse.json({ requestsCompleted: completed.count, emailSent });
+    const previousFinishedAt = previous?.finishedAt ?? null;
+    const digestDay = digestDayFor(previousFinishedAt, finishedAt);
+
+    // Reporting failures must not fail the call. The run is already closed and
+    // the queue already released by this point; answering 500 over an unsent
+    // mail would tell the worker its run did not land and invite a retry that
+    // can only be a no-op.
+    let digestSent = false;
+    if (digestDay && previousFinishedAt) {
+      try {
+        digestSent = await sendDigest(digestDay, previousFinishedAt);
+      } catch (mailError) {
+        console.error(`Failed to send the ${digestDay} scraper report:`, mailError);
+      }
+    }
+
+    return NextResponse.json({ requestsCompleted: completed.count, digestDay, digestSent });
   } catch (error) {
     console.error('POST /api/scrape/worker/finish error:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }
 
-type RunCounters = {
-  tasksDone: number;
-  leadsFound: number;
-  leadsImported: number;
-  duplicates: number;
-  blacklisted: number;
-};
+function subjectFor(digest: ScrapeDigest, reportDate: string): string {
+  if (digest.runCount === 0) return `Scraper report ${reportDate}: no runs`;
+  if (digest.queuePending === 0) return `Scraper report ${reportDate}: queue is empty`;
+  return `Scraper report ${reportDate}: ${digest.imported.toLocaleString('en-US')} new leads`;
+}
 
 /**
- * The reason decides who hears about the run and how.
+ * Mails one report covering a whole day of runs.
  *
- * A drained queue and a healthy run look identical in the summary template, and
- * recipients who get an all-zeros report every morning stop reading it, which is
- * also how a drift alert goes unnoticed.
+ * Called by the first run to finish on a new day, which is what keeps this to
+ * one mail per day without a scheduler: the worker already runs several times
+ * daily and each run knows when the previous one finished, so the day boundary
+ * is observable from the runs themselves. Nothing else has to stay in sync
+ * with a cron entry, and a day with no runs at all still gets reported by the
+ * next run that does finish.
  */
-async function sendRunEmail(
-  runId: number,
-  reason: string,
-  finishedAt: Date,
-  counters: RunCounters,
-): Promise<boolean> {
+async function sendDigest(dayKey: string, anchor: Date): Promise<boolean> {
   // Recipients are three real people and this database is shared by QA and
   // production, so any test run against it would mail them. The guard is what
   // makes the endpoint exercisable at all.
   if (process.env.SCRAPE_DRY_RUN === '1') {
-    console.warn(`SCRAPE_DRY_RUN set, skipping ${reason} email for run ${runId}`);
+    console.warn(`SCRAPE_DRY_RUN set, skipping the ${dayKey} scraper report`);
     return false;
   }
 
-  if (reason === 'drift') {
-    const to = process.env.SCRAPE_ALERT_EMAIL ?? SUMMARY_RECIPIENTS[0].email;
-    return sendEmail({
-      to: [{ email: to, name: 'Scraper alert' }],
-      subject: 'Scraper aborted: no listings found',
-      html: buildScrapeAlertEmailHTML({
-        runId,
-        reportDate: formatReportDate(finishedAt),
-        message:
-          'The first tasks of this run all returned zero listings, so the run was aborted before consuming more of the queue. YellowPages most likely changed its markup; check the XPath selectors in scraper_core.py.',
-      }),
-    });
-  }
-
-  const readyToCall = await prisma.business.count({ where: { idStatus: NEW_LEAD_STATUS } });
+  const digest = await collectDigest(dayKey, anchor);
+  const reportDate = formatDayKey(dayKey);
+  const appUrl = (process.env.AUTH_URL || DEFAULT_APP_URL).replace(/\/+$/, '');
 
   return sendEmail({
     to: SUMMARY_RECIPIENTS,
-    subject: reason === 'empty' ? 'Scraper queue is empty' : 'New Leads Imported!',
-    html: buildScrapeSummaryEmailHTML({
-      runId,
-      reportDate: formatReportDate(finishedAt),
-      queueDrained: reason === 'empty',
-      searchesRun: counters.tasksDone,
-      totalRecords: counters.leadsFound,
-      duplicatesFound: counters.duplicates,
-      blackListBusinesses: counters.blacklisted,
-      businessesImported: counters.leadsImported,
-      businessesReadyToCall: readyToCall,
+    subject: subjectFor(digest, reportDate),
+    html: buildScrapeDigestEmailHTML({
+      reportDate,
+      runCount: digest.runCount,
+      driftRuns: digest.driftRuns,
+      searches: digest.searches,
+      found: digest.found,
+      imported: digest.imported,
+      duplicates: digest.duplicates,
+      blacklisted: digest.blacklisted,
+      byZone: digest.byZone,
+      topIndustries: digest.topIndustries,
+      otherIndustries: digest.otherIndustries,
+      topCities: digest.topCities,
+      queuePending: digest.queuePending,
+      failedTasks: digest.failedTasks,
+      readyToCall: digest.readyToCall,
+      findLeadsUrl: `${appUrl}/admin/find-leads`,
     }),
   });
 }

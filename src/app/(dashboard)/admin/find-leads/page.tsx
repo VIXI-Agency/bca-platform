@@ -7,6 +7,8 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
+import { RunHistory } from '@/components/scrape/run-history';
+import { QueueProgress } from '@/components/scrape/queue-progress';
 import {
   useScrapeCatalog,
   useScrapeOverview,
@@ -235,31 +237,7 @@ export default function FindLeadsPage() {
       </Card>
 
       <div className="grid gap-6 lg:grid-cols-2">
-        <Card>
-          <CardHeader><CardTitle className="text-base">Recent runs</CardTitle></CardHeader>
-          <CardContent>
-            {overview.data?.runs.length ? (
-              <div className="space-y-2 text-sm">
-                {overview.data.runs.map((run) => (
-                  <div key={run.id} className="flex flex-wrap items-center gap-2 border-b pb-2 last:border-0">
-                    <Badge variant={run.finishReason === 'drift' ? 'destructive' : 'outline'}>
-                      {run.finishReason ?? run.status}
-                    </Badge>
-                    <span className="text-muted-foreground">
-                      {new Date(run.startedAt).toLocaleString()}
-                    </span>
-                    <span className="ml-auto">
-                      {nf.format(run.leadsImported)} imported · {nf.format(run.duplicates)} dupes ·{' '}
-                      {nf.format(run.blacklisted)} blocked · {nf.format(run.invalid)} invalid
-                    </span>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <p className="text-muted-foreground text-sm">No runs yet.</p>
-            )}
-          </CardContent>
-        </Card>
+        <QueueProgress />
 
         <Card>
           <CardHeader>
@@ -301,6 +279,8 @@ export default function FindLeadsPage() {
           </CardContent>
         </Card>
       </div>
+
+      <RunHistory />
     </div>
   );
 }

@@ -516,7 +516,9 @@ model ScrapeTask {
   request ScrapeRequest @relation(fields: [idRequest], references: [id], onDelete: NoAction, onUpdate: NoAction)
   run     ScrapeRun?    @relation(fields: [idRun], references: [id], onDelete: NoAction, onUpdate: NoAction)
 
-  @@unique([industry, city, state], map: "UX_ScrapeTasks_Coverage")
+  // Not unique: coverage expires, so one industry+city holds a row per pass.
+  // See the 20260807_scrape_coverage_expires migration.
+  @@index([industry, state, city], map: "IX_ScrapeTasks_Coverage")
   @@index([status, idRequest], map: "IX_ScrapeTasks_Status_Request")
   @@index([idRequest], map: "IX_ScrapeTasks_Request")
   @@map("ScrapeTasks")

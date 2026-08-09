@@ -110,6 +110,40 @@ describe('classifyLead', () => {
     });
   });
 
+  // Every name here is a real business that the old substring rule discarded.
+  it.each([
+    ['Snowmobile Rentals', 'wm'],
+    ['24 Hour Electrician in Newman CA', 'wm'],
+    ['20th Century Automotive Endowment Fund', 'wm'],
+    ['A Barco Sales', 'arco'],
+    ['1708 Charcol Inc', 'arco'],
+    ['A-1 WarCo Landscapes', 'arco'],
+  ])('keeps %s, which only contains "%s" inside another word', (businessName, keyword) => {
+    expect(classifyLead(lead({ businessName }), lists({ keywords: [keyword] })).ok).toBe(true);
+  });
+
+  it.each([
+    ['WM Trucking', 'wm'],
+    ['131st St BP', 'bp'],
+    ['ARCO Station 4471', 'arco'],
+    ['The Home Depot #6120', 'the home depot'],
+  ])('still blocks %s on "%s"', (businessName, keyword) => {
+    expect(classifyLead(lead({ businessName }), lists({ keywords: [keyword] }))).toEqual({
+      ok: false,
+      reason: { kind: 'blocked-name', keyword },
+    });
+  });
+
+  // \b cannot sit next to punctuation, so a keyword bounded by it needs the
+  // anchor dropped on that side or it can never match.
+  it.each([
+    ['7-Eleven Store 22841', '7-eleven'],
+    ['Best Heating & Air Inc', 'best heating & air'],
+    ['24-7 Water Restoration LLC', '24-7 water restoration'],
+  ])('blocks %s, whose keyword carries punctuation', (businessName, keyword) => {
+    expect(classifyLead(lead({ businessName }), lists({ keywords: [keyword] })).ok).toBe(false);
+  });
+
   it('checks the area code before the name keyword', () => {
     const result = classifyLead(
       lead({ businessName: 'Acme' }),

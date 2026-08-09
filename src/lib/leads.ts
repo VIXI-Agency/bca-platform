@@ -50,6 +50,31 @@ export function areaCodeOf(digits: string): string {
   return national.slice(0, 3);
 }
 
+/** Escapes a keyword so punctuation like "7-eleven" or "best heating & air" stays literal. */
+function escapeRegex(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+/**
+ * Whether a business name contains the keyword as a whole word.
+ *
+ * Plain `includes` was the original rule and it silently discarded real leads:
+ * the two-letter "wm" (for Waste Management) matched Snowmobile, Newman and
+ * Endowment — 3,697 businesses — and "arco" matched Barco, Charcol and Warco,
+ * another 2,447. Every one of those was a business somebody could have called.
+ *
+ * Word boundaries keep the short brand names usable instead of forcing a choice
+ * between blocking a chain and keeping its lookalikes. "BP Gas" still matches
+ * "bp"; "Snowmobile Rentals" no longer matches "wm".
+ */
+function matchesKeyword(nameLower: string, keyword: string): boolean {
+  // \b sits between a word and a non-word character, so a keyword starting or
+  // ending in punctuation ("7-eleven") would never match with it attached.
+  const start = /^\w/.test(keyword) ? '\\b' : '';
+  const end = /\w$/.test(keyword) ? '\\b' : '';
+  return new RegExp(`${start}${escapeRegex(keyword)}${end}`).test(nameLower);
+}
+
 export function classifyLead(lead: RawLead, blocklists: Blocklists): Classification {
   if (!lead.businessName) return { ok: false, reason: { kind: 'missing-name' } };
   if (!lead.phone) return { ok: false, reason: { kind: 'missing-phone' } };
@@ -63,7 +88,7 @@ export function classifyLead(lead: RawLead, blocklists: Blocklists): Classificat
   }
 
   const nameLower = lead.businessName.toLowerCase();
-  const keyword = blocklists.keywords.find((kw) => nameLower.includes(kw));
+  const keyword = blocklists.keywords.find((kw) => matchesKeyword(nameLower, kw));
   if (keyword) return { ok: false, reason: { kind: 'blocked-name', keyword } };
 
   return { ok: true, formatted, digits };

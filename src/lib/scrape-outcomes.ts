@@ -10,7 +10,7 @@
  * grouping used by the filter can never disagree with each other.
  */
 
-export type RunOutcome = 'target' | 'budget' | 'empty' | 'drift';
+export type RunOutcome = 'target' | 'budget' | 'empty' | 'drift' | 'blocked';
 
 /** Buckets the outcome filter offers. */
 export type OutcomeGroup = 'all' | 'productive' | 'aborted' | 'idle';
@@ -41,6 +41,13 @@ const OUTCOMES: Record<RunOutcome, OutcomeInfo> = {
     explanation: 'Nothing left to search. Queue more industries and states above, or the next runs import nothing.',
     tone: 'neutral',
     group: 'idle',
+  },
+  blocked: {
+    label: 'Aborted — blocked',
+    explanation:
+      'YellowPages refused most of this run\'s page requests, so it stopped early. Every search it kept trying would have burned three attempts and marked that city as failed. The worker waits longer before each retry until the block lifts; nothing was lost.',
+    tone: 'bad',
+    group: 'aborted',
   },
   drift: {
     label: 'Aborted — no results',

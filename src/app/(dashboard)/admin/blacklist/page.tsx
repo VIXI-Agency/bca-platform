@@ -8,11 +8,20 @@ import Header from '@/components/layout/header';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
 type BlockedName = { id: number; keyword: string; createdAt: string };
 type BlockedAreaCode = { id: number; areaCode: string; createdAt: string };
+
+/**
+ * Letters at or below which a keyword is flagged for review.
+ *
+ * Not a rule, a prompt to look: "wm" for Waste Management once discarded 3,697
+ * businesses whose names merely contained those letters. Matching now respects
+ * word boundaries, so a short keyword is no longer dangerous by itself — it is
+ * still the kind most likely to catch a brand nobody meant to block.
+ */
+const SHORT_KEYWORD = 3;
 
 export default function BlacklistPage() {
   const { data: session } = useSession();
@@ -154,8 +163,9 @@ export default function BlacklistPage() {
                   Blocked Business Name Keywords
                 </CardTitle>
                 <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>
-                  Any business whose name contains one of these keywords (case-insensitive)
-                  will be skipped during import.
+                  A business is skipped during import when its name contains one of these as a
+                  whole word, case-insensitive. &quot;wm&quot; blocks{' '}
+                  <em>WM Trucking</em> but not <em>Snowmobile Rentals</em>.
                 </p>
               </CardHeader>
               <CardContent className="space-y-4">
@@ -186,23 +196,39 @@ export default function BlacklistPage() {
                     Loading...
                   </p>
                 ) : (
-                  <div className="flex flex-wrap gap-2">
-                    {names.map((n) => (
-                      <Badge
-                        key={n.id}
-                        variant="secondary"
-                        className="flex items-center gap-1.5 py-1 pl-3 pr-1.5 text-sm"
-                      >
-                        {n.keyword}
-                        <button
-                          onClick={() => deleteName.mutate(n.id)}
-                          className="ml-1 rounded-full p-0.5 transition-colors hover:bg-red-100 hover:text-red-600"
-                          title="Remove"
+                  /* One per line in columns rather than wrapped pills. Forty-three
+                     pills of differing widths carry forty-three permanently visible
+                     delete icons, and the eye has no left edge to run down; the
+                     delete only appears on the row under the cursor. */
+                  <div className="columns-1 gap-x-8 sm:columns-2 lg:columns-3">
+                    {[...names]
+                      .sort((a, b) => a.keyword.localeCompare(b.keyword))
+                      .map((n) => (
+                        <div
+                          key={n.id}
+                          className="group flex break-inside-avoid items-center justify-between gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-[var(--bg-elevated)]"
                         >
-                          <Trash2 className="h-3 w-3" />
-                        </button>
-                      </Badge>
-                    ))}
+                          <span className="truncate" style={{ color: 'var(--text-primary)' }}>
+                            {n.keyword}
+                            {n.keyword.replace(/\W/g, '').length <= SHORT_KEYWORD && (
+                              <span
+                                className="ml-2 rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide"
+                                style={{ color: 'var(--warning)', backgroundColor: 'var(--warning-subtle)' }}
+                                title="Short keywords match more names than you expect. Check it blocks only what you mean."
+                              >
+                                {n.keyword.replace(/\W/g, '').length} letters
+                              </span>
+                            )}
+                          </span>
+                          <button
+                            onClick={() => deleteName.mutate(n.id)}
+                            className="shrink-0 rounded p-1 opacity-0 transition-opacity hover:text-red-500 group-hover:opacity-100"
+                            title="Remove"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
+                      ))}
                   </div>
                 )}
               </CardContent>

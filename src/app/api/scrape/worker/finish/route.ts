@@ -7,7 +7,7 @@ import { collectDigest, digestDayFor, formatDayKey, type ScrapeDigest } from '@/
 
 const bodySchema = z.object({
   runId: z.number().int().positive(),
-  reason: z.enum(['empty', 'target', 'budget', 'drift']),
+  reason: z.enum(['empty', 'target', 'budget', 'drift', 'blocked']),
 });
 
 const SUMMARY_RECIPIENTS = [

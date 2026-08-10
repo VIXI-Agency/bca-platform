@@ -18,6 +18,7 @@ type LeasedRow = {
   City: string;
   State: string;
   TimeZone: string;
+  Source: string;
 };
 
 export async function POST(request: NextRequest) {
@@ -59,13 +60,17 @@ export async function POST(request: NextRequest) {
       UPDATE t
       SET Status = 'leased', LeasedAt = ${now}, IdRun = ${runId}
       OUTPUT inserted.Id, inserted.IdRequest, inserted.Industry, inserted.City,
-             inserted.State, inserted.TimeZone
+             inserted.State, inserted.TimeZone, inserted.Source
       FROM (
         SELECT TOP (${limit}) tk.*
         FROM dbo.ScrapeTasks tk WITH (ROWLOCK, UPDLOCK, READPAST)
         JOIN dbo.ScrapeRequests r ON r.Id = tk.IdRequest
         WHERE tk.Status = 'pending' AND r.Status = 'active'
-        ORDER BY r.CreatedAt, tk.Id
+        -- Priority first, then age. Without it a request made today sits behind
+        -- every pending task ever queued: at ~290,000 of those and the observed
+        -- throughput, a new source would wait two months for its first lead,
+        -- which is the whole return on adding one.
+        ORDER BY r.Priority DESC, r.CreatedAt, tk.Id
       ) t`;
 
     const maxPagesByRequest = await loadMaxPages(leased.map((t) => t.IdRequest));
@@ -83,6 +88,7 @@ export async function POST(request: NextRequest) {
         city: t.City,
         state: t.State.trim(),
         timeZone: t.TimeZone,
+        source: t.Source,
         maxPages: maxPagesByRequest.get(t.IdRequest) ?? 3,
       })),
     });

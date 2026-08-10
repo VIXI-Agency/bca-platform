@@ -161,5 +161,205 @@
       "updated": "2026-04-08T19:49:25.804Z",
       "description": "Tasks for master context"
     }
+  },
+  "superpages": {
+    "tasks": [
+      {
+        "id": "1",
+        "title": "Create and apply database migration for multi-source support",
+        "description": "Write the hand-run SQL migration adding Source columns, new ScrapeTasks counters, the rebuilt coverage index, and the ScrapeRequests priority column, following the conventions of the prior five migrations.",
+        "details": "Create `YYYYMMDD_add_source_and_priority.sql` with idempotent guards:\n- `ALTER TABLE ScrapeTasks ADD Source NVARCHAR(10) NOT NULL DEFAULT 'yp'` guarded with `IF COL_LENGTH('ScrapeTasks','Source') IS NULL`; backfill existing rows to 'yp' (default handles this on ADD, but confirm existing rows populated).\n- `ALTER TABLE ScrapeTasks ADD DuplicateCount INT NOT NULL DEFAULT 0, BlacklistedCount INT NOT NULL DEFAULT 0, InvalidCount INT NOT NULL DEFAULT 0` guarded similarly.\n- `ALTER TABLE Businesses ADD Source NVARCHAR(10) NULL` guarded.\n- Drop and recreate `IX_ScrapeTasks_Coverage` as `(Industry, State, City, Source) INCLUDE (Status, CompletedAt)` guarded with `IF EXISTS (SELECT 1 FROM sys.indexes ...) DROP INDEX ...` then `IF NOT EXISTS (...) CREATE INDEX ...`. Preserve the INCLUDE clause and column order exactly (Source trailing) to keep the coverage seek intact.\n- `ALTER TABLE ScrapeRequests ADD Priority INT NOT NULL DEFAULT 0` guarded.\n- Add the standard header comment: 'Run once against production DB before deploying the matching app version.'\n\nPseudo-code:\n```sql\nIF COL_LENGTH('ScrapeTasks','Source') IS NULL\n  ALTER TABLE ScrapeTasks ADD Source NVARCHAR(10) NOT NULL DEFAULT 'yp';\n...\nIF EXISTS (SELECT 1 FROM sys.indexes WHERE name='IX_ScrapeTasks_Coverage')\n  DROP INDEX IX_ScrapeTasks_Coverage ON ScrapeTasks;\nCREATE INDEX IX_ScrapeTasks_Coverage ON ScrapeTasks (Industry, State, City, Source) INCLUDE (Status, CompletedAt);\n```",
+        "testStrategy": "Run migration twice against a scratch copy of production schema to confirm idempotency (no errors on second run). Verify column defaults and nullability with `sp_help` / INFORMATION_SCHEMA. Run `SET STATISTICS IO ON` against a representative coverage query (industry IN (...) AND state IN (...) AND city = ... AND source = ...) and confirm an index seek with no key lookup. Confirm existing ScrapeTasks rows show Source='yp' after migration.",
+        "priority": "high",
+        "dependencies": [],
+        "status": "pending",
+        "subtasks": []
+      },
+      {
+        "id": "2",
+        "title": "Update Prisma/ORM schema and generated types for new columns",
+        "description": "Reflect the new Source, DuplicateCount, BlacklistedCount, InvalidCount, and Priority columns in the application's schema/model layer so the app can read and write them.",
+        "details": "Update the Prisma schema (or equivalent ORM models) for ScrapeTasks (Source, DuplicateCount, BlacklistedCount, InvalidCount), Businesses (Source, nullable), and ScrapeRequests (Priority, default 0). Regenerate the Prisma client. Update any TypeScript types/interfaces that mirror these tables (e.g., RawLead-adjacent types, task DTOs) without adding Source to RawLead itself per the platform design. Ensure default values match the DB (Source default 'yp' only applies at insert time if the app doesn't explicitly set it; confirm app code sets Source explicitly where required).",
+        "testStrategy": "Run `prisma generate` / type-check the full project and fix any compile errors. Write a small integration test that creates a ScrapeTask and ScrapeRequest via the ORM and asserts the new fields round-trip correctly with expected defaults.",
+        "priority": "high",
+        "dependencies": [
+          "1"
+        ],
+        "status": "pending",
+        "subtasks": []
+      },
+      {
+        "id": "3",
+        "title": "Implement SOURCES map and per-source is_usable in worker",
+        "description": "Build the worker-side configuration map holding base URL, six selectors, and zero-result title signature per source, and make is_usable check per-source rather than hardcoding the YellowPages signature.",
+        "details": "In the worker codebase, define:\n```python\nSOURCES = {\n  'yp': {\n    'base_url': 'https://www.yellowpages.com',\n    'selectors': {...six selectors including XPATH_LOCALITY, XPATH_LAST_PAGE, ...},\n    'zero_result_title': 'Yellow Pages',\n  },\n  'sp': {\n    'base_url': 'https://www.superpages.com',\n    'selectors': {... mapped selectors, note .street-address instead of .locality ...},\n    'zero_result_title': '<verified SuperPages zero-result signature>',\n  },\n}\n\ndef is_usable(response, source='yp'):\n    sig = SOURCES[source]['zero_result_title']\n    if response.status != 200:\n        return False\n    if sig not in response.title:\n        return True  # has results\n    return True  # zero-result page is still usable/valid, not a failure\n```\nCRITICALLY: a zero-result page must be distinguished from a blocked/failed page. Refactor is_usable to return an explicit tri-state (e.g., 'ok', 'zero_results', 'blocked') or keep boolean is_usable plus a separate is_zero_result(source) check, so callers can record a completed search with zero listings instead of a fetch failure. Before implementing the SuperPages zero-result signature, manually fetch a known no-results SuperPages search (e.g., an obscure industry/city pair) and capture the title/markup as a fixture.",
+        "testStrategy": "Unit test is_usable/is_zero_result against saved fixture HTML for: YellowPages normal page, YellowPages zero-result page, SuperPages normal page, SuperPages zero-result page. Assert correct classification for all four and that no fixture is classified as 'blocked'. Add a fixture-based regression test that fails loudly if selector logic changes cause misclassification.",
+        "priority": "high",
+        "dependencies": [],
+        "status": "pending",
+        "subtasks": []
+      },
+      {
+        "id": "4",
+        "title": "Add per-source search_url and parse_page with address mapping",
+        "description": "Update search_url to build the correct domain per source, and parse_page to use the correct selector set per source, including mapping SuperPages .street-address to Location instead of Address.",
+        "details": "Modify `search_url(industry, city, state, page, source='yp')` to look up `SOURCES[source]['base_url']` and build the URL accordingly, keeping `source` as a trailing default parameter so existing positional calls from Scrap.py and test_scraper_core.py continue to work unchanged.\n\nModify `parse_page(html, source='yp')` (or equivalent) to select the selector set from SOURCES[source] and map fields:\n- For 'yp': XPATH_LOCALITY -> Location, existing Address mapping unchanged.\n- For 'sp': `.street-address` -> Location; Address left empty/null.\n\nEnsure `scrape_pages` also accepts a trailing `source='yp'` parameter and threads it through to search_url and parse_page. Do not change the existing positional argument order used by Scrap.py.",
+        "testStrategy": "Unit tests calling search_url and parse_page positionally (mirroring Scrap.py's call signature) to confirm backward compatibility with source defaulting to 'yp'. Add fixture-based tests: parse a saved SuperPages listing page and assert Location contains city/state/zip and Address is empty; parse a saved YellowPages page and assert unchanged behavior. Run existing test_scraper_core.py suite unmodified and confirm it still passes.",
+        "priority": "high",
+        "dependencies": [
+          "3"
+        ],
+        "status": "pending",
+        "subtasks": []
+      },
+      {
+        "id": "5",
+        "title": "Implement per-source drift tracking to prevent cross-source run aborts",
+        "description": "Refactor the drift/anomaly counter so mismatched category names or selector drift on one source does not abort searches in flight on the other source.",
+        "details": "Locate the current source-blind drift counter and BLOCK_THRESHOLD logic. Refactor to maintain independent counters keyed by source, e.g. `drift_counts = {'yp': 0, 'sp': 0}`. Only abort/backoff the specific source whose counter exceeds BLOCK_THRESHOLD; the other source's tasks continue processing normally. Ensure the 'blocked' reason and entrypoint.sh backoff logic are scoped per source so a SuperPages-only anomaly does not trigger YellowPages backoff (and vice versa). Update entrypoint.sh if it currently assumes a single global block state.",
+        "testStrategy": "Simulate a batch of SuperPages zero/failed responses that exceed BLOCK_THRESHOLD while interleaving successful YellowPages tasks; assert YellowPages tasks continue completing while SuperPages tasks pause/backoff. Add a unit test for the drift counter data structure confirming independence per source.",
+        "priority": "high",
+        "dependencies": [
+          "3"
+        ],
+        "status": "pending",
+        "subtasks": []
+      },
+      {
+        "id": "6",
+        "title": "Update lease query for source and priority-ordered queue",
+        "description": "Make the task lease endpoint return the source on each task and order by (Priority DESC, CreatedAt, Id) instead of (CreatedAt, Id).",
+        "details": "Update the lease SQL/ORM query to select `Source` from ScrapeTasks and `Priority` from the joined ScrapeRequests, and change ORDER BY to `r.Priority DESC, r.CreatedAt, tk.Id`. Update the lease response payload/DTO to include `source` for each leased task. Update worker code that consumes the lease response to pass `source` through to scrape_pages/search_url/parse_page (trailing arg, default 'yp' if absent for backward compatibility with any cached/older records).",
+        "testStrategy": "Integration test: seed ScrapeRequests with mixed priorities and creation times, lease tasks, and assert lease order matches priority-first ordering, then creation time, then id. Confirm the lease response JSON includes a `source` field matching the underlying task's Source column. Regression test that omitting Priority defaults to 0 and preserves prior FIFO behavior among equal priorities.",
+        "priority": "high",
+        "dependencies": [
+          "1",
+          "2"
+        ],
+        "status": "pending",
+        "subtasks": []
+      },
+      {
+        "id": "7",
+        "title": "Update results route to record source, duplicate/blacklist/invalid counters, and per-source drift",
+        "description": "Update results/route.ts to read task.source, pass it to createLead as a separate argument, and write DuplicateCount, BlacklistedCount, and InvalidCount in the same transaction as FoundCount/ImportedCount.",
+        "details": "In results/route.ts:\n- Read `task.source` from the leased/looked-up ScrapeTask record.\n- Do NOT extend the request body schema to accept source from the worker payload (mirrors existing industry/timezone behavior) — source comes from the task record, not the payload, so the worker doesn't get a say in classification.\n- Pass `source` to `createLead(lead, source)` as a separate explicit argument rather than embedding it in RawLead, so CSV import (which has no source concept) remains unaffected.\n- In the same DB transaction that writes FoundCount and ImportedCount, also write DuplicateCount, BlacklistedCount, and InvalidCount to the ScrapeTasks row.\n- Ensure a zero-result search still writes FoundCount=0 and marks the task Completed rather than Failed (ties into worker is_usable change).",
+        "testStrategy": "Integration test posting a results payload with a mix of new, duplicate, blacklisted, and invalid leads; assert the transaction updates all four counters correctly and that Businesses.Source is set for newly created leads matching task.source. Test that createLead is called with source as separate arg and that CSV import path (no source) is unaffected. Test zero-result payload results in a Completed task with FoundCount=0, not a failure status.",
+        "priority": "high",
+        "dependencies": [
+          "1",
+          "2",
+          "6"
+        ],
+        "status": "pending",
+        "subtasks": []
+      },
+      {
+        "id": "8",
+        "title": "Update requests/route.ts coverage key and pairs generation for multi-source",
+        "description": "Change the coverage lookup key to source|industry|city|state, extend the existing-coverage query to filter/select source, and expand pairs generation to sources x industries x cities.",
+        "details": "In requests/route.ts:\n- Build the coverage key as a composite `source|industry|city|state` string (or equivalent tuple) when checking existing ScrapeTasks/ScrapeRequests, using the new IX_ScrapeTasks_Coverage index (Industry, State, City, Source).\n- Update the `existing` query to filter on and select `Source` so coverage is source-aware; a SuperPages request over YellowPages-covered territory must NOT return the 409 'already queued or covered' unless SuperPages itself is covered.\n- Update `pairs` generation logic to iterate `sources x industries x cities` when 'both' is selected, producing two tasks per industry+city pair when both sources are chosen.\n- Update the preview response shape to return a per-source array: `{ source, totalPairs, newPairs, alreadyCovered }[]` instead of three flat scalars.\n- Update the createMany insert to include the Source column and drop the chunk size from 300 to 250 to stay under SQL Server's ~2100 parameter cap (250 rows x 7 columns = 1750; keep well under 2100).",
+        "testStrategy": "Integration test: with YellowPages coverage existing for Denver/Plumbers, queue a SuperPages request for the same pair and assert it succeeds (not 409). Test 'both' source selection produces two tasks per pair. Test preview response returns correct per-source totalPairs/newPairs/alreadyCovered breakdown for a mixed coverage scenario. Load test createMany with >250 rows x7 columns to confirm no SQL Server parameter-limit error, using a full-size (e.g., 1000+ pair) queue request.",
+        "priority": "high",
+        "dependencies": [
+          "1",
+          "2"
+        ],
+        "status": "pending",
+        "subtasks": []
+      },
+      {
+        "id": "9",
+        "title": "Group worstIndustries, yield hints, and run digests by (industry, source)",
+        "description": "Update worstIndustries in runs/route.ts and the per-industry yield hints in the admin UI to group by (industry, source) instead of industry alone, and update the finish digest and /api/scrape/runs/[id] to group by source alongside industry and zone.",
+        "details": "In runs/route.ts, change the `worstIndustries` aggregation query/grouping to `GROUP BY industry, source` so an industry exhausted on YellowPages but productive on SuperPages is not blended into a single misleading recommendation. Update the API response shape to include source alongside each industry entry. Update the admin UI component rendering per-industry yield hints next to each checkbox group to key off (industry, source) pairs. Update the finish digest logic (wherever a run's completion summary is composed) and the `/api/scrape/runs/[id]` endpoint to include source as a grouping dimension alongside industry and zone, including duplicate rate per source (using the new DuplicateCount).",
+        "testStrategy": "Unit test the worstIndustries aggregation with seeded data showing an industry with poor YP yield but good SP yield; assert it is NOT flagged as universally bad. Integration test /api/scrape/runs/[id] response includes a breakdown array grouped by (industry, source, zone) with correct counts and duplicate rates. Snapshot test the finish digest output structure for a run containing both sources.",
+        "priority": "medium",
+        "dependencies": [
+          "1",
+          "2",
+          "7"
+        ],
+        "status": "pending",
+        "subtasks": []
+      },
+      {
+        "id": "10",
+        "title": "Update calling screen and lead card to display SuperPages Location correctly",
+        "description": "Verify calls/page.tsx and the lead card render Location (populated from .street-address for SuperPages leads) correctly, showing the city instead of an 'N/A' Address field.",
+        "details": "Audit calls/page.tsx and the lead card component to confirm they already read from the `Location` field (as stated in the PRD, this is the field agents see). No mapping change should be needed in the frontend itself since the backend (task 4) now populates Location correctly for SuperPages and leaves Address empty. Add a defensive UI check/fallback so an empty Address does not render as 'N/A' or a broken layout when Location is populated — confirm Address is simply omitted/hidden when null rather than shown as N/A, per the PRD's explicit concern.",
+        "testStrategy": "Component/integration test rendering the lead card and calls page with a mock SuperPages lead (Location populated, Address null) and assert the city is visibly displayed and no 'N/A' placeholder appears for Address. Cross-check a YellowPages lead still renders both Location and Address as before (no regression).",
+        "priority": "medium",
+        "dependencies": [
+          "4",
+          "7"
+        ],
+        "status": "pending",
+        "subtasks": []
+      },
+      {
+        "id": "11",
+        "title": "Build Admin UI source selector and per-source preview in Find New Leads",
+        "description": "Add a source selector (YellowPages, SuperPages, or both) to Find New Leads, render the per-source preview split, and update run history to show source per run and in the expanded breakdown.",
+        "details": "In the Find New Leads admin page:\n- Add a source selector control (radio/checkbox group): YellowPages, SuperPages, Both.\n- On preview fetch, call the updated requests/route.ts preview endpoint and render the returned per-source array `{ source, totalPairs, newPairs, alreadyCovered }`, showing a breakdown table/section per source when 'both' is selected.\n- Reword the preview copy: replace the singular 'were already queued by an earlier request' message with source-aware phrasing that handles the 'both' case (e.g., per-source counts or a combined sentence listing both sources).\n- On submit with 'both' selected, confirm two ScrapeRequests/task sets are created (or one request that fans out to both sources per task 8's pairs logic — align with backend contract from task 8).\n- Update the Run History page/component to display the source of each run, and expand the breakdown drill-down to show per-source metrics (found/imported/duplicate rate) using the API from task 9.",
+        "testStrategy": "Manual/E2E test (e.g., Playwright/Cypress): select 'Both', enter an industry+city set with partial existing coverage, submit, and assert the preview UI shows distinct per-source totals and correct reworded copy. Assert Run History lists source per run and the expanded view shows per-source counts matching seeded test data.",
+        "priority": "medium",
+        "dependencies": [
+          "8",
+          "9"
+        ],
+        "status": "pending",
+        "subtasks": []
+      },
+      {
+        "id": "12",
+        "title": "Pin CONCURRENCY default to 2 in worker.py and entrypoint.sh",
+        "description": "Change the CONCURRENCY default from 4 to 2 in worker.py (and align entrypoint.sh) to prevent a silent revert to the value that caused the 30-hour Cloudflare block, and verify the production machine's setting.",
+        "details": "Locate the CONCURRENCY default in worker.py and entrypoint.sh (currently 4) and change the hardcoded/default value to 2, so that any rebuild or environment reset without the untracked .env override does not silently restore 4. Keep the value overridable via environment variable for explicit operator control, but ensure the fallback/default constant itself is 2. Document in code comments why 2 is the default (references the 2026-08-08 30-hour Cloudflare block after a 6.5x rate increase). Coordinate with ops to confirm the Mac mini's .env still explicitly sets CONCURRENCY=2 as a belt-and-suspenders measure, independent of the code default.",
+        "testStrategy": "Unit test/config test asserting the default CONCURRENCY value read by the app (with no env var set) equals 2. Manual verification step: SSH/inspect the production worker process env and confirm effective concurrency is 2 both before and immediately after a rebuild with no .env present.",
+        "priority": "high",
+        "dependencies": [],
+        "status": "pending",
+        "subtasks": []
+      },
+      {
+        "id": "13",
+        "title": "Verify SuperPages zero-result behavior and catalog industry name matching",
+        "description": "Manually verify what SuperPages returns for a no-results search and check a sample of the 127 catalog industries against SuperPages category names before queueing at volume; treat both as prerequisites, not assumptions.",
+        "details": "1. Manually run several SuperPages searches expected to return zero results (obscure industry/small city combinations) and capture the raw HTML/title as fixtures for task 3's is_usable/zero-result logic.\n2. Take a representative sample of the 127 catalog industries (e.g., all 127 if feasible, or a stratified sample covering common and edge-case names) and manually check whether SuperPages recognizes the same category name/search term as YellowPages, recording mismatches.\n3. Produce a mapping/report of any industries where SuperPages uses a different term, and feed this into the SOURCES map or a category-alias table so `search_url` can translate industry names per source if needed.\n4. This task blocks queueing SuperPages tasks at volume in production; the per-source drift fix (task 5) is the safety net if mismatches slip through, but this verification reduces how often that net is needed.",
+        "testStrategy": "Deliverable: a documented report/spreadsheet of all 127 industries with a pass/fail/mismatch flag against SuperPages, plus at least 2-3 saved zero-result HTML fixtures used in task 3's and task 14's test suites. Sign-off checklist item before enabling SuperPages queueing in the admin UI for real traffic.",
+        "priority": "high",
+        "dependencies": [
+          "3"
+        ],
+        "status": "done",
+        "subtasks": [],
+        "updatedAt": "2026-08-10T15:45:57.150Z"
+      },
+      {
+        "id": "14",
+        "title": "Build fixture-based selector regression test suite for both sources",
+        "description": "Create unit tests covering the six-selector map for both YellowPages and SuperPages against saved HTML fixtures, including a zero-result page for each, serving as both correctness checks and a markup-change regression suite.",
+        "details": "Assemble a fixtures directory with saved HTML pages: yp_normal.html, yp_zero_result.html, sp_normal.html, sp_zero_result.html (using fixtures captured in task 13 for the zero-result cases). Write a test suite that, for each source:\n- Runs parse_page against the normal fixture and asserts all six selectors extract expected non-empty values, including the address-mapping rule (Location populated correctly for both sources; Address empty for SuperPages, populated for YellowPages).\n- Runs is_usable/is_zero_result against the zero-result fixture and asserts it is classified as a completed search with zero listings, not a failure/block.\n- Runs get_last_page (XPATH_LAST_PAGE) against a paginated fixture for each source and asserts the correct page count (e.g., SuperPages Denver/Plumbers returns 3, matching the manual verification in the PRD).\nStructure tests so that if either site changes its markup, the relevant fixture-based test fails, flagging the need to update selectors — per the PRD's explicit intent for these tests to serve as a regression/markup-change alarm.",
+        "testStrategy": "Run the full fixture suite in CI on every commit touching worker/scraper code. Assert 100% of the defined assertions pass on current fixtures. Periodically (or via a scheduled job) re-fetch live pages and diff against fixtures to detect real-world markup drift, flagging for manual fixture refresh and selector review.",
+        "priority": "medium",
+        "dependencies": [
+          "3",
+          "4",
+          "13"
+        ],
+        "status": "pending",
+        "subtasks": []
+      }
+    ],
+    "metadata": {
+      "version": "1.0.0",
+      "lastModified": "2026-08-10T15:45:57.150Z",
+      "taskCount": 14,
+      "completedCount": 1,
+      "tags": [
+        "superpages"
+      ]
+    }
   }
 }

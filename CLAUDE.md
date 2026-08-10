@@ -176,12 +176,12 @@ deploys, since this project runs migrations by hand:
 
 - `prisma/migrations/20260730_businesses_phonedigits_unique.sql`
 - `prisma/migrations/20260730_scrape_queue.sql`
-- `prisma/migrations/20260807_businesses_oncall_expiry.sql` — **not yet applied**
+- `prisma/migrations/20260807_businesses_oncall_expiry.sql`
+- `prisma/migrations/20260807_scrape_coverage_expires.sql`
 
-The 20260730 pair was applied to `benjaise_BCA` on 2026-07-30. The 20260807
-migration adds `Businesses.OnCallSince`; deploying without it breaks
-`/api/calls/next-lead`, `/api/calls/log` and `/api/calls/revert`, which is the
-whole calling flow. A fresh environment
+All four were applied to `benjaise_BCA` — the 20260730 pair on 2026-07-30, both
+20260807 files on 2026-08-07, each verified afterwards through `sys.columns` and
+`sys.indexes`. Nothing is outstanding. A fresh environment
 also needs the catalog seeded, which reads the sibling Scraper repo:
 
 ```bash

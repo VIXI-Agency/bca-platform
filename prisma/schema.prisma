@@ -74,6 +74,9 @@ model Business {
   /// reverted. next-lead releases rows older than the expiry. NULL on the rows
   /// that were already stuck at status 1 before the expiry existed.
   onCallSince  DateTime? @map("OnCallSince")
+  /// Which directory this lead came from. NULL for everything imported before
+  /// there was more than one, which is honest rather than guessing 'yp'.
+  source       String?   @map("Source") @db.NVarChar(10)
 
   calls        Call[]
 
@@ -489,6 +492,9 @@ model ScrapeRequest {
   createdAt DateTime @default(now()) @map("CreatedAt")
   status    String   @map("Status") @db.NVarChar(20)
   maxPages  Int      @default(3) @map("MaxPages")
+  /// Leased before lower numbers regardless of age. 0 keeps a request in plain
+  /// creation order, which is where every existing one stays.
+  priority  Int      @default(0) @map("Priority")
 
   tasks ScrapeTask[]
 
@@ -511,14 +517,23 @@ model ScrapeTask {
   completedAt   DateTime? @map("CompletedAt")
   foundCount    Int?      @map("FoundCount")
   importedCount Int?      @map("ImportedCount")
+  /// Which directory this search reads: 'yp' or 'sp'.
+  source        String    @default("yp") @map("Source") @db.NVarChar(10)
+  /// Why the rest of FoundCount did not become leads. Kept per task, not only
+  /// per run, so the daily report can show a duplicate rate per source.
+  duplicateCount   Int? @map("DuplicateCount")
+  blacklistedCount Int? @map("BlacklistedCount")
+  invalidCount     Int? @map("InvalidCount")
   lastError     String?   @map("LastError") @db.NVarChar(500)
 
   request ScrapeRequest @relation(fields: [idRequest], references: [id], onDelete: NoAction, onUpdate: NoAction)
   run     ScrapeRun?    @relation(fields: [idRun], references: [id], onDelete: NoAction, onUpdate: NoAction)
 
-  // Not unique: coverage expires, so one industry+city holds a row per pass.
-  // See the 20260807_scrape_coverage_expires migration.
-  @@index([industry, state, city], map: "IX_ScrapeTasks_Coverage")
+  // Not unique: coverage expires, so one industry+city holds a row per pass,
+  // and per source. Source is the trailing key column because the lookup
+  // filters on industry and state; the INCLUDE (Status, CompletedAt) that makes
+  // it covering is in the 20260810 migration and cannot be expressed here.
+  @@index([industry, state, city, source], map: "IX_ScrapeTasks_Coverage")
   @@index([status, idRequest], map: "IX_ScrapeTasks_Status_Request")
   @@index([idRequest], map: "IX_ScrapeTasks_Request")
   @@map("ScrapeTasks")

@@ -2,19 +2,13 @@ import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { prisma } from '@/lib/prisma';
 import { requireWorkerAuth } from '@/lib/scrape-auth';
-import { buildScrapeDigestEmailHTML, sendEmail } from '@/lib/email';
+import { buildScrapeDigestEmailHTML, sendEmail, REPORT_RECIPIENTS } from '@/lib/email';
 import { collectDigest, digestDayFor, formatDayKey, type ScrapeDigest } from '@/lib/scrape-digest';
 
 const bodySchema = z.object({
   runId: z.number().int().positive(),
   reason: z.enum(['empty', 'target', 'budget', 'drift', 'blocked']),
 });
-
-const SUMMARY_RECIPIENTS = [
-  { email: 'support@benjaminchaise.com', name: 'BenjaminChaise Support' },
-  { email: 'brianna@benjaminchaise.com', name: 'Brianna' },
-  { email: 'michael@benjaminchaise.com', name: 'Michael' },
-];
 
 const DEFAULT_APP_URL = 'https://yourdebtcollectors.com';
 
@@ -111,7 +105,7 @@ function subjectFor(digest: ScrapeDigest, reportDate: string): string {
  * next run that does finish.
  */
 async function sendDigest(dayKey: string, anchor: Date): Promise<boolean> {
-  // Recipients are three real people and this database is shared by QA and
+  // Recipients are real people and this database is shared by QA and
   // production, so any test run against it would mail them. The guard is what
   // makes the endpoint exercisable at all.
   if (process.env.SCRAPE_DRY_RUN === '1') {
@@ -124,7 +118,7 @@ async function sendDigest(dayKey: string, anchor: Date): Promise<boolean> {
   const appUrl = (process.env.AUTH_URL || DEFAULT_APP_URL).replace(/\/+$/, '');
 
   return sendEmail({
-    to: SUMMARY_RECIPIENTS,
+    to: REPORT_RECIPIENTS,
     subject: subjectFor(digest, reportDate),
     html: buildScrapeDigestEmailHTML({
       reportDate,

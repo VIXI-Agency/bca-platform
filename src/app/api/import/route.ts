@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { importValidateSchema } from '@/lib/validators';
-import { buildImportSummaryEmailHTML, sendEmail } from '@/lib/email';
+import { buildImportSummaryEmailHTML, sendEmail, REPORT_RECIPIENTS } from '@/lib/email';
 import { classifyLead, describeRejection, NEW_LEAD_STATUS, type RawLead } from '@/lib/leads';
 import { loadBlocklists, findByPhoneDigits, createLead } from '@/lib/leads-db';
 
@@ -119,11 +119,7 @@ export async function POST(request: NextRequest) {
       : undefined;
 
     const emailSent = await sendEmail({
-      to: [
-        { email: 'support@benjaminchaise.com', name: 'BenjaminChaise Support' },
-        { email: 'brianna@benjaminchaise.com', name: 'Brianna' },
-        { email: 'michael@benjaminchaise.com', name: 'Michael' },
-      ],
+      to: REPORT_RECIPIENTS,
       subject: 'New Leads Imported!',
       html,
       attachments,

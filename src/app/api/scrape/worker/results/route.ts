@@ -100,7 +100,10 @@ export async function POST(request: NextRequest) {
       }
 
       try {
-        await createLead(lead, verdict.formatted);
+        // task.source, never the payload — the same rule as industry and
+        // timezone above. The worker fetches the URL it was told to and does
+        // not get a say in how the lead is labelled.
+        await createLead(lead, verdict.formatted, task.source);
         seenInBatch.add(verdict.digits);
         imported++;
       } catch (err) {
@@ -129,6 +132,12 @@ export async function POST(request: NextRequest) {
           completedAt: new Date(),
           foundCount: listings.length,
           importedCount: imported,
+          // Kept per task as well as per run: the run totals cannot be split by
+          // source, and the duplicate rate per source is the number that says
+          // whether a second directory is still worth reading.
+          duplicateCount: duplicates,
+          blacklistedCount: blacklisted,
+          invalidCount: invalid,
         },
       }),
       prisma.scrapeRun.update({

@@ -3,6 +3,7 @@
 import { Loading } from '@/components/ui/loading';
 import { Badge } from '@/components/ui/badge';
 import { useRunDetail } from '@/hooks/use-scrape';
+import { SOURCE_LABELS } from '@/lib/scrape-outcomes';
 
 const nf = new Intl.NumberFormat('en-US');
 
@@ -47,6 +48,24 @@ export function RunDetail({ runId }: RunDetailProps) {
 
   return (
     <div className="space-y-5 px-1 py-4">
+      {data.sources.length > 1 && (
+        /* Only when a run read more than one directory. The duplicate rate is
+           the column that says whether the second one still pays. */
+        <div>
+          <h4 className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+            By directory
+          </h4>
+          <div className="flex flex-wrap gap-2">
+            {data.sources.map((row) => (
+              <Badge key={row.source} variant="outline" className="tabular-nums">
+                {SOURCE_LABELS[row.source] ?? row.source}: {nf.format(row.imported)} of{' '}
+                {nf.format(row.found)} · {row.duplicateRate}% on file
+              </Badge>
+            ))}
+          </div>
+        </div>
+      )}
+
       <div>
         <h4 className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
           Industries searched

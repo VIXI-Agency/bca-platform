@@ -56,7 +56,7 @@ export async function GET(request: NextRequest) {
       prisma.scrapeRun.count(),
       prisma.scrapeTask.groupBy({ by: ['status'], _count: { _all: true } }),
       prisma.scrapeTask.groupBy({
-        by: ['industry'],
+        by: ['industry', 'source'],
         where: { status: 'done' },
         _count: { _all: true },
         _sum: { foundCount: true, importedCount: true },
@@ -98,9 +98,13 @@ export async function GET(request: NextRequest) {
     // Yield is what tells an admin which industries are not worth queueing
     // again. Mud Jacking spent 231 searches to import one lead; nothing on the
     // page said so, so it would have been queued again.
+    // Per source, not blended. An industry exhausted on one directory can be
+    // productive on the other, and one averaged ratio describes neither -- it
+    // would recommend against queueing exactly the work worth queueing.
     const worstIndustries = industryTotals
       .map((row) => ({
         industry: row.industry,
+        source: row.source,
         searches: row._count._all,
         found: row._sum.foundCount ?? 0,
         imported: row._sum.importedCount ?? 0,

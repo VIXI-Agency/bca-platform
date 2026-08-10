@@ -29,7 +29,7 @@ export async function GET(_request: NextRequest, context: { params: Promise<{ id
       return NextResponse.json({ error: 'Unknown run' }, { status: 404 });
     }
 
-    const [byIndustry, byCity, byZone, failures] = await Promise.all([
+    const [byIndustry, byCity, byZone, bySource, failures] = await Promise.all([
       prisma.scrapeTask.groupBy({
         by: ['industry'],
         where: { idRun: runId, status: 'done' },
@@ -49,12 +49,35 @@ export async function GET(_request: NextRequest, context: { params: Promise<{ id
         _count: { _all: true },
         _sum: { importedCount: true },
       }),
+      // The duplicate rate per source is what says whether a directory still
+      // pays. It only exists per task; the run counters cannot be split.
+      prisma.scrapeTask.groupBy({
+        by: ['source'],
+        where: { idRun: runId, status: 'done' },
+        _count: { _all: true },
+        _sum: { foundCount: true, importedCount: true, duplicateCount: true },
+      }),
       prisma.scrapeTask.findMany({
         where: { idRun: runId, status: 'failed' },
         select: { id: true, industry: true, city: true, state: true, attempts: true, lastError: true },
         take: 10,
       }),
     ]);
+
+    const sources = bySource
+      .map((row) => {
+        const found = row._sum.foundCount ?? 0;
+        const duplicates = row._sum.duplicateCount ?? 0;
+        return {
+          source: row.source,
+          searches: row._count._all,
+          found,
+          imported: row._sum.importedCount ?? 0,
+          duplicates,
+          duplicateRate: found > 0 ? Math.round((duplicates / found) * 100) : 0,
+        };
+      })
+      .sort((a, b) => b.imported - a.imported);
 
     const industries = byIndustry
       .map((row) => ({
@@ -67,6 +90,7 @@ export async function GET(_request: NextRequest, context: { params: Promise<{ id
 
     return NextResponse.json({
       run,
+      sources,
       industries,
       cities: byCity.map((row) => ({
         city: row.city,

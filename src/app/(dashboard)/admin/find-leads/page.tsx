@@ -7,9 +7,11 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
+import { SOURCE_LABELS } from '@/lib/scrape-outcomes';
 import { RunHistory } from '@/components/scrape/run-history';
 import { QueueProgress } from '@/components/scrape/queue-progress';
 import {
+  type ScrapeSource,
   useScrapeCatalog,
   useScrapeOverview,
   usePreviewRequest,
@@ -20,6 +22,17 @@ import {
 } from '@/hooks/use-scrape';
 
 const nf = new Intl.NumberFormat('en-US');
+
+const SOURCE_OPTIONS: { label: string; value: ScrapeSource[] }[] = [
+  { label: 'YellowPages', value: ['yp'] },
+  { label: 'SuperPages', value: ['sp'] },
+  { label: 'Both', value: ['yp', 'sp'] },
+];
+
+/** Order-insensitive, so ['sp','yp'] still highlights Both. */
+function sameSources(a: ScrapeSource[], b: ScrapeSource[]): boolean {
+  return a.length === b.length && [...a].sort().join() === [...b].sort().join();
+}
 
 export default function FindLeadsPage() {
   const catalog = useScrapeCatalog();
@@ -33,6 +46,7 @@ export default function FindLeadsPage() {
   const [industries, setIndustries] = useState<string[]>([]);
   const [states, setStates] = useState<string[]>([]);
   const [maxPages, setMaxPages] = useState(3);
+  const [sources, setSources] = useState<ScrapeSource[]>(['yp']);
   const [filter, setFilter] = useState('');
 
   const shownIndustries = useMemo(() => {
@@ -151,6 +165,22 @@ export default function FindLeadsPage() {
 
           <div className="flex flex-wrap items-end gap-4">
             <div>
+              <label className="mb-1 block text-sm font-medium">Directories</label>
+              <div className="flex gap-1.5">
+                {SOURCE_OPTIONS.map((opt) => (
+                  <Button
+                    key={opt.label}
+                    type="button"
+                    size="sm"
+                    variant={sameSources(sources, opt.value) ? 'default' : 'outline'}
+                    onClick={() => setSources(opt.value)}
+                  >
+                    {opt.label}
+                  </Button>
+                ))}
+              </div>
+            </div>
+            <div>
               <label className="mb-1 block text-sm font-medium">Pages per search</label>
               <Input
                 type="number"
@@ -164,7 +194,7 @@ export default function FindLeadsPage() {
             <Button
               variant="outline"
               disabled={!canSubmit || preview.isPending}
-              onClick={() => preview.mutate({ industries, states, maxPages })}
+              onClick={() => preview.mutate({ industries, states, sources, maxPages })}
             >
               {preview.isPending ? 'Checking…' : 'Check coverage'}
             </Button>
@@ -172,7 +202,7 @@ export default function FindLeadsPage() {
               disabled={!canSubmit || create.isPending}
               onClick={() => {
                 create.mutate(
-                  { industries, states, maxPages },
+                  { industries, states, sources, maxPages },
                   { onSuccess: () => { setIndustries([]); setStates([]); } },
                 );
               }}
@@ -187,8 +217,20 @@ export default function FindLeadsPage() {
                 <strong>{nf.format(preview.data.totalPairs)}</strong> searches across{' '}
                 {nf.format(preview.data.cities)} cities.{' '}
                 <strong>{nf.format(preview.data.newPairs)}</strong> are new;{' '}
-                {nf.format(preview.data.alreadyCovered)} were already queued by an earlier request.
+                {nf.format(preview.data.alreadyCovered)} are already queued or were read recently.
               </p>
+              {preview.data.bySource.length > 1 && (
+                /* Coverage is per directory, so a pair can be new on one and
+                   covered on the other. One blended number describes neither. */
+                <ul className="mt-2 space-y-0.5">
+                  {preview.data.bySource.map((row) => (
+                    <li key={row.source}>
+                      <strong>{SOURCE_LABELS[row.source]}</strong>: {nf.format(row.newPairs)} new of{' '}
+                      {nf.format(row.totalPairs)}
+                    </li>
+                  ))}
+                </ul>
+              )}
               <p className="text-muted-foreground mt-1">
                 No completion date is shown on purpose: the daily lead target, not the queue size,
                 decides how fast this drains.

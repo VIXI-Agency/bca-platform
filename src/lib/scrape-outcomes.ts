@@ -90,3 +90,11 @@ export const OUTCOME_GROUP_LABELS: Record<OutcomeGroup, string> = {
   aborted: 'Aborted',
   idle: 'Nothing to do',
 };
+
+/** Which directory a search read. Stored as a short code, shown as a name. */
+export type ScrapeSourceCode = 'yp' | 'sp';
+
+export const SOURCE_LABELS: Record<string, string> = {
+  yp: 'YellowPages',
+  sp: 'SuperPages',
+};

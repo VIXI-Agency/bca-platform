@@ -1,0 +1,241 @@
+# PRD: SuperPages as a second lead source
+
+Revised 2026-08-10 after a QA review. Findings from that review are folded into
+the sections below rather than appended; where the first draft was wrong, the
+correction is marked so the reasoning is not lost.
+
+## Why
+
+The scraper's yield has collapsed. YellowPages runs currently import about
+0.34 new leads per search, because the historical database -- 1.49M businesses --
+came from YellowPages in the first place. The scraper is spending four-hour runs
+re-reading pages that are 93% businesses it already has.
+
+SuperPages is owned by Thryv, the same company, and runs on the same platform.
+It is a second index of the same market that this database has never touched.
+
+## What was measured, not assumed
+
+A 50-search probe (5 industries x 10 cities, page 1 only, 2026-08-10):
+
+  1,500 listings, 1,463 unique phone numbers
+  1,218 already in Businesses (83%)
+  245 new (17%)
+  0 failed searches -- SuperPages never blocked
+
+Like-for-like against the 10 identical industry+city pairs YellowPages had
+already scraped:
+
+  YellowPages   900 listings ->  67 new  (7.4%)
+  SuperPages  1,500 listings -> 245 new (16.3%)
+
+SuperPages returns 2.2x the new businesses per listing fetched, on territory
+YellowPages has already covered.
+
+Reachability: SuperPages answers 200 through the existing Webshare US proxy
+pool, using the same Scrapling impersonation the worker already uses. It sits
+behind the same Cloudflare that blocks the office IP, so it is reachable only
+through the proxies -- same as YellowPages.
+
+Pagination verified separately (2026-08-10): get_last_page returns 3 for
+Denver/Plumbers on SuperPages against 5 on YellowPages, and page 2 returns a
+full 30 cards. XPATH_LAST_PAGE works unchanged. The first draft claimed this on
+weaker evidence -- that the selector matched one node, which proves the element
+exists, not that the value is right.
+
+Both open questions were answered on 2026-08-10 (task 13), and both changed
+what gets built:
+
+**Zero-result pages.** SuperPages behaves exactly like YellowPages: HTTP 404
+carrying the full results page, titled "Best 0 <industry> in <City>, ST |
+superpages.com". Verified against four industry+city pairs YellowPages had
+already recorded as empty.
+
+The consequence was measured, not predicted. Running those pairs through the
+worker's normal path, 4 of 5 came back "could not fetch" -- against 2 failures
+in 127 searches that did have results. 80% versus 1.6%. is_usable was rejecting
+every zero-result page and burning eight datacenter proxies plus the whole
+residential list on each one.
+
+So the per-source signature is just the title fragment:
+
+  yp -> "Yellow Pages"
+  sp -> "superpages.com"
+
+Everything else about is_usable is already correct for both.
+
+**Industry names.** All 127 catalog industries were searched on SuperPages in
+Houston: 125 returned results, 0 returned an empty page, 2 failed to download
+(proxy, not naming). SuperPages recognises the catalog as-is. No alias table is
+needed, and Risk "Industry names may not match" is closed.
+
+One side observation worth keeping: Materials Engineering in Malad City, ID
+returned 0 on YellowPages and 2 on SuperPages. The second source finds
+businesses the first misses even in towns of a few thousand people.
+
+## Goals
+
+1. The worker can scrape either source, chosen per task.
+2. An admin can queue YellowPages, SuperPages, or both from Find New Leads.
+3. Coverage is tracked per source: scraping Denver/Plumbers on YellowPages must
+   not mark SuperPages as covered.
+4. Every lead records which source it came from.
+5. The run history and the daily report break down by source, including the
+   duplicate rate -- see Per-task counters.
+6. SuperPages tasks are reachable by the worker in days, not months. See
+   Queue priority.
+
+## Non-goals
+
+- No change to deduplication. PhoneDigits already prevents the same business
+  entering twice from two sources, and that is the desired behaviour.
+- No new proxy capacity in this scope. See Risks.
+- No third source. The design should not make one hard, but SuperPages is what
+  was measured.
+
+## Design
+
+### Database
+
+ScrapeTasks gains `Source NVARCHAR(10) NOT NULL DEFAULT 'yp'`. Existing rows
+backfill to 'yp', which is what they are.
+
+ScrapeTasks also gains `DuplicateCount`, `BlacklistedCount` and `InvalidCount`,
+written in the same transaction that already writes FoundCount and
+ImportedCount (results/route.ts). Without them the digest can split searches,
+found and imported by source but not duplicates -- and the duplicate rate is the
+exact number this PRD's case rests on. Run-level counters stay as they are.
+
+Businesses gains `Source NVARCHAR(10) NULL`. Null means "we do not know", which
+is honest for the 1.49M rows that predate this.
+
+IX_ScrapeTasks_Coverage becomes `(Industry, State, City, Source) INCLUDE
+(Status, CompletedAt)`. Source is a TRAILING key column: the coverage lookup
+filters `industry IN (...) AND state IN (...)`, so leading with a two-value
+column would destroy the seek. The INCLUDE is what makes the query covering and
+must be preserved. The first draft proposed `(Source, Industry, State, City)`
+with no INCLUDE, which regresses both.
+
+ScrapeRequests gains `Priority INT NOT NULL DEFAULT 0`. See Queue priority.
+
+Migration runs by hand before deploy, following the conventions of the five
+before it: `YYYYMMDD_description.sql`, re-runnable guards
+(`IF COL_LENGTH(...) IS NULL`, `IF NOT EXISTS (SELECT 1 FROM sys.indexes ...)`),
+and the "Run once against production DB before deploying the matching app
+version" header.
+
+### Queue priority
+
+lease orders strictly by `r.CreatedAt, tk.Id`. With ~290,000 YellowPages tasks
+pending -- 50 to 70 days at current throughput -- a SuperPages request created
+after this ships would produce its first lead in October. That defers the only
+thing that makes this work pay.
+
+lease orders by `(r.Priority DESC, r.CreatedAt, tk.Id)`. Queueing SuperPages at
+a higher priority is then a choice the admin makes, not a schema change later.
+This is in scope, not a follow-up.
+
+### Worker
+
+- A SOURCES map holding, per source: base URL, the six selectors, and the
+  zero-result title signature ("Yellow Pages" / "superpages.com").
+- `is_usable` takes the source and checks that source's signature. It currently
+  hardcodes "Yellow Pages", which measurably turned 4 of 5 zero-result
+  SuperPages searches into fetch failures. Left alone it would return
+  complete=False on the majority of niche combinations, count toward the block
+  detector, and past BLOCK_THRESHOLD abort the whole run as 'blocked' --
+  stopping YellowPages too, with entrypoint.sh backing off up to 8 hours over a
+  Cloudflare block that never happened. The first draft did not mention this
+  function at all.
+- `search_url` builds the right domain; `parse_page` reads the right selector
+  set and maps the address difference.
+- New parameters are TRAILING and default to 'yp'. `Scrap.py` calls
+  `scrape_pages` positionally and `test_scraper_core.py` calls `search_url`
+  positionally; a leading `source` argument breaks both.
+- Drift is tracked per source. It currently aborts the entire run on a
+  source-blind counter, so mismatched SuperPages category names -- an
+  acknowledged risk -- would discard the YellowPages searches in flight and
+  stall both sources behind the backoff.
+
+### Address mapping
+
+This is a requirement, not a risk. `Location` is the field agents actually see
+on the calling screen (calls/page.tsx, and the lead card), populated from
+XPATH_LOCALITY. SuperPages has no `.locality`; its `.street-address` carries the
+city/state/zip that YellowPages puts in `.locality`.
+
+So for SuperPages: `.street-address` maps to **Location**, and Address is left
+empty. Mapping it to Address instead would show every SuperPages lead an "N/A"
+where the city belongs.
+
+### Platform
+
+- lease returns `source` on each task.
+- results reads `task.source`. The request body is NOT extended: that route
+  deliberately takes industry and timezone from the task and not the payload,
+  so the worker "does not get a say in how the lead is classified", and source
+  is the same kind of field.
+- Source reaches `createLead` as a separate argument. Adding it to `RawLead`
+  would force the CSV import route to supply one.
+- The coverage key in requests/route.ts becomes `source|industry|city|state`,
+  and the `existing` query filters and selects `source`. Changing only the index
+  leaves coverage source-blind, and because pending tasks cover regardless of
+  age, every SuperPages queue over covered territory would return the existing
+  409 "already queued or covered" -- failing closed and silently.
+- `pairs` becomes sources x industries x cities, and the preview returns a
+  per-source `{ source, totalPairs, newPairs, alreadyCovered }` array. Three
+  scalars cannot describe a pair that is covered on one source and open on the
+  other.
+- The createMany chunk drops from 300 to 250. Rows carry 6 columns today
+  (300 x 6 = 1800); Source makes 7, and 300 x 7 = 2100 is exactly SQL Server's
+  parameter cap, before Prisma's overhead. It would fail only on full-size
+  chunks, so a small test queue passes and the first real one throws a 500
+  inside the transaction, rolling back the request with it.
+- `worstIndustries` (runs/route.ts) and the per-industry yield hint next to each
+  checkbox group by `(industry, source)`. Blended, they would recommend against
+  queueing an industry that is exhausted on YellowPages but productive on
+  SuperPages -- the opposite of what that list exists to do.
+- The finish digest and /api/scrape/runs/[id] group by source alongside industry
+  and zone.
+
+### Admin UI
+
+Find New Leads gets a source selector: YellowPages, SuperPages, or both. Both
+creates two tasks per industry+city pair. The preview reports the per-source
+split. The copy at the preview ("were already queued by an earlier request")
+needs rewording for the both case.
+
+Run history shows the source on each run and in the expanded breakdown.
+
+## Risks
+
+**Proxy load.** This doubles the request rate against the same 250 IPs. The pool
+was blocked by Cloudflare for roughly 30 hours on 2026-08-08 after the rate went
+up 6.5x, and only recovered on its own. Adding a second source must not be
+combined with raising concurrency.
+
+CONCURRENCY currently defaults to 4 in worker.py and entrypoint.sh; the
+production value of 2 exists only in an untracked .env on the Mac mini. Any
+rebuild or reset silently restores 4 at exactly the wrong moment. Pin the
+default to 2 in worker.py, and verify it on the machine before queueing.
+
+**Industry names may not match.** Unverified, and now a prerequisite: check a
+sample of the 127 catalog industries against SuperPages before queueing at
+volume. Combined with the per-source drift fix above, a mismatch degrades that
+source instead of stopping everything.
+
+## Acceptance criteria
+
+- A SuperPages task and a YellowPages task for the same industry+city can both
+  be queued and both complete.
+- A business found on both sources is imported once.
+- The preview reports the per-source split before anything is queued.
+- Existing YellowPages tasks keep working with no change in behaviour.
+- Scrap.py and test_scraper_core.py still run unchanged.
+- A zero-result SuperPages search is recorded as a completed search with zero
+  listings, NOT as a fetch failure.
+- A SuperPages lead shows its city on the calling screen.
+- The daily report shows the duplicate rate per source.
+- Unit tests cover the selector map for both sources against saved fixtures,
+  including a zero-result page for each. Those fixtures are also the regression
+  test for either site changing its markup.

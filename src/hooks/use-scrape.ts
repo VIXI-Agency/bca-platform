@@ -51,6 +51,7 @@ export interface Preview {
   newPairs: number;
   alreadyCovered: number;
   cities: number;
+  bySource: SourceSplit[];
 }
 
 async function json<T>(url: string, init?: RequestInit): Promise<T> {
@@ -79,7 +80,23 @@ export function useScrapeOverview() {
   });
 }
 
-type CreateInput = { industries: string[]; states: string[]; maxPages: number; preview?: boolean };
+export type ScrapeSource = 'yp' | 'sp';
+
+export interface SourceSplit {
+  source: ScrapeSource;
+  totalPairs: number;
+  newPairs: number;
+  alreadyCovered: number;
+}
+
+type CreateInput = {
+  industries: string[];
+  states: string[];
+  sources: ScrapeSource[];
+  maxPages: number;
+  priority?: number;
+  preview?: boolean;
+};
 
 function post(input: CreateInput) {
   return json<Preview & { id?: number; queued?: number }>('/api/scrape/requests', {
@@ -91,6 +108,7 @@ function post(input: CreateInput) {
 
 export interface IndustryYield {
   industry: string;
+  source?: ScrapeSource;
   searches: number;
   found: number;
   imported: number;
@@ -128,8 +146,18 @@ export interface RunHistory {
   worstIndustries: IndustryYield[];
 }
 
+export interface RunSourceYield {
+  source: ScrapeSource;
+  searches: number;
+  found: number;
+  imported: number;
+  duplicates: number;
+  duplicateRate: number;
+}
+
 export interface RunDetail {
   run: ScrapeRunRow;
+  sources: RunSourceYield[];
   industries: IndustryYield[];
   cities: { city: string; state: string; imported: number }[];
   zones: { timeZone: string; searches: number; imported: number }[];

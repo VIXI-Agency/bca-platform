@@ -12,6 +12,14 @@ vi.mock('@/lib/scrape-auth', () => ({ requireWorkerAuth: () => null }));
 vi.mock('@/lib/email', () => ({
   sendEmail: (...args: unknown[]) => sendEmail(...(args as [])),
   buildScrapeDigestEmailHTML: () => '<html></html>',
+  // The real list, so the recipient assertion below is testing the route's
+  // wiring rather than a number invented here.
+  REPORT_RECIPIENTS: [
+    { email: 'support@benjaminchaise.com', name: 'BenjaminChaise Support' },
+    { email: 'brianna@benjaminchaise.com', name: 'Brianna' },
+    { email: 'michael@benjaminchaise.com', name: 'Michael' },
+    { email: 'admin@benjaminchaise.com', name: 'Admin' },
+  ],
 }));
 vi.mock('@/lib/prisma', () => ({
   prisma: {
@@ -112,7 +120,8 @@ describe('POST /api/scrape/worker/finish', () => {
     const [year, month, day] = centralDayKey(previous).split('-');
     expect(subject).toContain(`${Number(month)}/${Number(day)}/${year}`);
     expect(subject).toContain('407 new leads');
-    expect(to).toHaveLength(3);
+    expect(to.map((r) => r.email)).toContain('admin@benjaminchaise.com');
+    expect(to).toHaveLength(4);
   });
 
   it('mails nothing on the very first run of a fresh environment', async () => {

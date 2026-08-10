@@ -2,6 +2,21 @@ const SENDGRID_API_KEY = process.env.SENDGRID_API_KEY || '';
 const FROM_EMAIL = 'noreply@yourdebtcollectors.com';
 const FROM_NAME = 'PulseBC Calling System';
 
+/**
+ * Who receives the automated lead reports: the daily scraper digest and the
+ * CSV import summary.
+ *
+ * One list, because there were two identical copies in two routes and nothing
+ * kept them in step — adding a recipient to one and forgetting the other is a
+ * silent half-fix, and the person who is missing has no way to notice.
+ */
+export const REPORT_RECIPIENTS = [
+  { email: 'support@benjaminchaise.com', name: 'BenjaminChaise Support' },
+  { email: 'brianna@benjaminchaise.com', name: 'Brianna' },
+  { email: 'michael@benjaminchaise.com', name: 'Michael' },
+  { email: 'admin@benjaminchaise.com', name: 'Admin' },
+];
+
 /** Escape user-supplied strings before interpolating into HTML emails. */
 function escapeHtml(str: string): string {
   return str

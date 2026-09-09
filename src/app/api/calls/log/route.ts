@@ -95,7 +95,18 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(call, { status: 201 });
   } catch (error) {
     console.error('POST /api/calls/log error:', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    // Surface the underlying cause (internal, authenticated tool) so a failed
+    // submission can be diagnosed instead of showing a bare 500.
+    const detail =
+      error instanceof Prisma.PrismaClientKnownRequestError
+        ? `${error.code}: ${(error.meta?.target as string) ?? error.message.split('\n').pop()?.trim()}`
+        : error instanceof Error
+          ? error.message
+          : String(error);
+    return NextResponse.json(
+      { error: 'Internal server error', detail },
+      { status: 500 },
+    );
   }
 }
 

@@ -8,6 +8,7 @@ import {
   BookOpen,
   Link2,
   Building2,
+  MessageSquare,
   UserCog,
   Timer,
   Star,
@@ -70,6 +71,12 @@ export const navigation: NavItem[] = [
     href: '/training',
     icon: BookOpen,
     permissionKey: 'training',
+  },
+  {
+    label: 'SMS',
+    href: '/sms',
+    icon: MessageSquare,
+    permissionKey: 'sms',
   },
   {
     label: 'Resources',

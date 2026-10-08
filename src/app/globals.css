@@ -371,3 +371,24 @@ a:hover {
     scroll-behavior: auto !important;
   }
 }
+
+/* Printable reports (e.g. the payroll Payment Report): hide everything
+   except the element marked .print-area, and let it fill the page. */
+@media print {
+  body * {
+    visibility: hidden;
+  }
+  .print-area,
+  .print-area * {
+    visibility: visible;
+  }
+  .print-area {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+  }
+  .no-print {
+    display: none !important;
+  }
+}

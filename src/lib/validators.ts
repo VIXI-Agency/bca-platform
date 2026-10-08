@@ -78,6 +78,8 @@ export const createUserSchema = z.object({
   sendEmail: z.boolean().default(false),
   isPartTime: z.boolean().default(false),
   smsAccess: z.boolean().default(false),
+  payRate: z.number().nonnegative().max(9999999.99).optional(),
+  otPayRate: z.number().nonnegative().max(9999999.99).optional(),
 });
 
 export const updateUserSchema = createUserSchema.partial().omit({ password: true }).extend({

@@ -54,6 +54,8 @@ export async function GET(
       city: user.city ?? '',
       state: user.state ?? '',
       country: user.country ?? '',
+      payRate: user.payRate ? Number(user.payRate) : null,
+      otPayRate: user.otPayRate ? Number(user.otPayRate) : null,
       schedules: user.schedules,
     });
   } catch (error) {

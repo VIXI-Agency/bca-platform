@@ -3,9 +3,18 @@ import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { z } from 'zod';
 
+export const DISCONNECTION_TYPES = [
+  'absence',
+  'early_leave',
+  'power_outage',
+  'internet_outage',
+  'other',
+] as const;
+
 const disconnectSchema = z.object({
   userId: z.number().int().positive(),
   action: z.enum(['disconnect', 'reconnect']),
+  type: z.enum(DISCONNECTION_TYPES).optional(),
   reason: z.string().max(500).optional(),
 });
 
@@ -32,7 +41,7 @@ export async function POST(request: Request) {
       );
     }
 
-    const { userId, action, reason } = parsed.data;
+    const { userId, action, type, reason } = parsed.data;
     const now = new Date();
 
     // Verify the target user exists and is active
@@ -68,6 +77,7 @@ export async function POST(request: Request) {
           disconnectionTime: now,
           disconnectionDate: new Date(now.getFullYear(), now.getMonth(), now.getDate()),
           disconnectedBy: String(adminUserId),
+          disconnectionType: type || null,
           reason: reason || null,
         },
       });

@@ -76,6 +76,8 @@ export async function GET(request: NextRequest) {
       city: user.city ?? '',
       state: user.state ?? '',
       country: user.country ?? '',
+      payRate: user.payRate ? Number(user.payRate) : null,
+      otPayRate: user.otPayRate ? Number(user.otPayRate) : null,
     }));
 
     return NextResponse.json(safeUsers);
@@ -147,6 +149,8 @@ export async function POST(request: NextRequest) {
       city: user.city ?? '',
       state: user.state ?? '',
       country: user.country ?? '',
+      payRate: user.payRate ? Number(user.payRate) : null,
+      otPayRate: user.otPayRate ? Number(user.otPayRate) : null,
     }, { status: 201 });
   } catch (error) {
     console.error('POST /api/users error:', error);

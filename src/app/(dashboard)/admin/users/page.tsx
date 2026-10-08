@@ -86,6 +86,8 @@ interface UserFormState {
   isPartTime: boolean;
   smsAccess: boolean;
   sendEmail: boolean;
+  payRate: string;
+  otPayRate: string;
 }
 
 const INITIAL_FORM: UserFormState = {
@@ -101,6 +103,8 @@ const INITIAL_FORM: UserFormState = {
   isPartTime: false,
   smsAccess: false,
   sendEmail: false,
+  payRate: '',
+  otPayRate: '',
 };
 
 export default function UsersPage() {
@@ -184,6 +188,8 @@ export default function UsersPage() {
       isPartTime: user.isPartTime,
       smsAccess: user.smsAccess,
       sendEmail: user.sendEmail,
+      payRate: user.payRate != null ? String(user.payRate) : '',
+      otPayRate: user.otPayRate != null ? String(user.otPayRate) : '',
     });
     setShowSchedule(false);
     setDialogOpen(true);
@@ -217,6 +223,16 @@ export default function UsersPage() {
       return;
     }
 
+    const payRate = form.payRate.trim() ? Number(form.payRate) : undefined;
+    const otPayRate = form.otPayRate.trim() ? Number(form.otPayRate) : undefined;
+    if (
+      (payRate !== undefined && (isNaN(payRate) || payRate < 0)) ||
+      (otPayRate !== undefined && (isNaN(otPayRate) || otPayRate < 0))
+    ) {
+      setFormError('Pay rate must be a valid non-negative number');
+      return;
+    }
+
     try {
       if (editingUser) {
         await updateUser.mutateAsync({
@@ -233,6 +249,8 @@ export default function UsersPage() {
           isPartTime: form.isPartTime,
           smsAccess: form.smsAccess,
           sendEmail: form.sendEmail,
+          payRate,
+          otPayRate,
         });
       } else {
         if (!form.password) return;
@@ -248,6 +266,8 @@ export default function UsersPage() {
           country: form.country.trim(),
           isPartTime: form.isPartTime,
           sendEmail: form.sendEmail,
+          payRate,
+          otPayRate,
         });
       }
 
@@ -526,6 +546,34 @@ export default function UsersPage() {
               <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
                 Minimum 6 characters
               </p>
+            </div>
+
+            {/* Pay rate row */}
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-1.5">
+                <Label htmlFor="user-pay-rate">Pay Rate ($/hr)</Label>
+                <Input
+                  id="user-pay-rate"
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={form.payRate}
+                  onChange={(e) => updateForm('payRate', e.target.value)}
+                  placeholder="8.00"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="user-ot-pay-rate">OT Pay Rate ($/hr)</Label>
+                <Input
+                  id="user-ot-pay-rate"
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={form.otPayRate}
+                  onChange={(e) => updateForm('otPayRate', e.target.value)}
+                  placeholder="12.00"
+                />
+              </div>
             </div>
 
             {/* Role */}

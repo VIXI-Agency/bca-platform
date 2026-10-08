@@ -12,7 +12,11 @@ export async function GET() {
     const { todayStart } = getTodayRangePST();
     const currentPeriodStart = getPayPeriodStart(todayStart);
 
-    // Generate pay period start dates (Fridays) for the last ~24 months
+    // Generate pay period start dates (Fridays) for the last ~24 months.
+    // periodStart/endDate are UTC-midnight instants — use the UTC getters/setters
+    // and format with timeZone: 'UTC' throughout, so the label doesn't shift by a
+    // day on a server whose local timezone isn't UTC (a UTC-midnight timestamp
+    // falls in the *previous* local calendar day west of Greenwich).
     const weeks: { date: string; label: string }[] = [];
     const maxWeeks = 24 * 4.33; // Approximately 24 months of weeks (~104 weeks)
     const tempDate = new Date(currentPeriodStart);
@@ -20,10 +24,10 @@ export async function GET() {
     for (let i = 0; i < Math.ceil(maxWeeks); i++) {
       const dateStr = tempDate.toISOString().split('T')[0];
       const endDate = new Date(tempDate);
-      endDate.setDate(endDate.getDate() + 6); // Friday + 6 = Thursday
-      const label = `${tempDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} - ${endDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`;
+      endDate.setUTCDate(endDate.getUTCDate() + 6); // Friday + 6 = Thursday
+      const label = `${tempDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' })} - ${endDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' })}`;
       weeks.push({ date: dateStr, label });
-      tempDate.setDate(tempDate.getDate() - 7);
+      tempDate.setUTCDate(tempDate.getUTCDate() - 7);
     }
 
     return NextResponse.json({ data: weeks });

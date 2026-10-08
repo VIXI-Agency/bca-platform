@@ -57,14 +57,19 @@ import {
 /*  Helpers                                            */
 /* -------------------------------------------------- */
 
-/** Get the Monday that starts the work week containing `date`. */
-function getWorkWeekStart(date: Date): Date {
+/**
+ * Get the Friday that starts the pay period containing `date`. Pay periods
+ * run Friday through Thursday (not a calendar Mon–Sun week) — a Monday the
+ * employee's schedule is still Mon–Fri, but payroll groups it with the
+ * Friday that precedes it, not the Friday later in the same calendar week.
+ */
+function getPayPeriodStart(date: Date): Date {
   const d = new Date(date);
   d.setHours(0, 0, 0, 0);
   // 0=Sun,1=Mon,...,5=Fri,6=Sat
   const day = d.getDay();
-  // Days since last Monday: Mon=0, Tue=1, ..., Fri=4, Sat=5, Sun=6
-  const diff = (day + 6) % 7;
+  // Days since last Friday: Fri=0, Sat=1, Sun=2, Mon=3, Tue=4, Wed=5, Thu=6
+  const diff = (day + 2) % 7;
   d.setDate(d.getDate() - diff);
   return d;
 }
@@ -73,22 +78,22 @@ function formatDateISO(d: Date): string {
   return d.toISOString().split('T')[0];
 }
 
-function formatWeekLabel(monday: Date): string {
-  const friday = new Date(monday);
-  friday.setDate(friday.getDate() + 4); // Monday + 4 = Friday
+function formatWeekLabel(friday: Date): string {
+  const thursday = new Date(friday);
+  thursday.setDate(thursday.getDate() + 6); // Friday + 6 = Thursday
   const opts: Intl.DateTimeFormatOptions = { month: 'short', day: 'numeric' };
-  return `${monday.toLocaleDateString('en-US', opts)} - ${friday.toLocaleDateString('en-US', opts)}, ${friday.getFullYear()}`;
+  return `${friday.toLocaleDateString('en-US', opts)} - ${thursday.toLocaleDateString('en-US', opts)}, ${thursday.getFullYear()}`;
 }
 
 function generateWeekOptions(count: number): { value: string; label: string }[] {
   const weeks: { value: string; label: string }[] = [];
-  const current = getWorkWeekStart(new Date());
+  const current = getPayPeriodStart(new Date());
   for (let i = 0; i < count; i++) {
-    const monday = new Date(current);
-    monday.setDate(monday.getDate() - i * 7);
+    const friday = new Date(current);
+    friday.setDate(friday.getDate() - i * 7);
     weeks.push({
-      value: formatDateISO(monday),
-      label: formatWeekLabel(monday),
+      value: formatDateISO(friday),
+      label: formatWeekLabel(friday),
     });
   }
   return weeks;

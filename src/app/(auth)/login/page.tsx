@@ -36,7 +36,13 @@ export default function LoginPage() {
       });
 
       if (result?.error) {
-        setError('Invalid email or password');
+        if (result.code === 'account-pending') {
+          setError('Your account is pending activation. Please contact an admin.');
+        } else if (result.code === 'rate-limited') {
+          setError('Too many failed attempts. Please wait a few minutes and try again.');
+        } else {
+          setError('Invalid email or password');
+        }
         return;
       }
 

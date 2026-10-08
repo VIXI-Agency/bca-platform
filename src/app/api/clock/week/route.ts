@@ -2,20 +2,7 @@ import { NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { clockWeekSchema } from '@/lib/validators';
-import { getTodayRangePST } from '@/lib/time';
-
-/**
- * Get the Monday start date for the work week containing the given date.
- * Pay period: Monday to Friday (no weekends).
- */
-function getMondayStart(date: Date): Date {
-  const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
-  const dayOfWeek = d.getUTCDay(); // 0=Sun, 1=Mon, ..., 5=Fri, 6=Sat
-  // Days since last Monday: Mon(1)->0, Tue(2)->1, ..., Fri(5)->4, Sat(6)->5, Sun(0)->6
-  const daysSinceMonday = (dayOfWeek + 6) % 7;
-  d.setDate(d.getDate() - daysSinceMonday);
-  return d;
-}
+import { getTodayRangePST, getPayPeriodStart } from '@/lib/time';
 
 interface TimeLogRow {
   timeLogId: number;
@@ -118,34 +105,34 @@ export async function GET(request: Request) {
       );
     }
 
-    // Determine the Monday start date
-    let mondayStart: Date;
+    // Determine the pay period start (Friday)
+    let periodStart: Date;
     if (parsed.data.week) {
       const parts = parsed.data.week.split('-').map(Number);
       const inputDate = new Date(parts[0], parts[1] - 1, parts[2]);
-      mondayStart = getMondayStart(inputDate);
+      periodStart = getPayPeriodStart(inputDate);
     } else {
       const { todayStart } = getTodayRangePST();
-      mondayStart = getMondayStart(todayStart);
+      periodStart = getPayPeriodStart(todayStart);
     }
 
-    // Week end = Monday + 5 days (Saturday, exclusive) → covers Mon–Fri only
-    const weekEnd = new Date(mondayStart);
-    weekEnd.setDate(weekEnd.getDate() + 5);
+    // Pay period end = Friday + 7 days (next Friday, exclusive) → covers Fri–Thu
+    const weekEnd = new Date(periodStart);
+    weekEnd.setDate(weekEnd.getDate() + 7);
 
-    // Fetch all logs for this week
+    // Fetch all logs for this pay period
     const logs = await prisma.employeeTimeLog.findMany({
       where: {
         idUser: userId,
         logDate: {
-          gte: mondayStart,
+          gte: periodStart,
           lt: weekEnd,
         },
       },
       orderBy: { logDate: 'asc' },
     });
 
-    // Defensive: exclude Saturday (6) and Sunday (0) — pay period is Mon–Fri
+    // Defensive: exclude Saturday (6) and Sunday (0) — no work falls on weekends
     const filteredLogs = logs.filter((log) => {
       const day = new Date(log.logDate).getUTCDay();
       return day !== 0 && day !== 6;

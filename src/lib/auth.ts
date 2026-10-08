@@ -1,8 +1,22 @@
-import NextAuth from 'next-auth';
+import NextAuth, { CredentialsSignin } from 'next-auth';
 import Credentials from 'next-auth/providers/credentials';
 import bcrypt from 'bcryptjs';
 import { prisma } from './prisma';
 import { rateLimit } from './rate-limit';
+
+// Distinguishable failure reasons for the login form. The default behavior
+// (returning null from authorize) collapses every failure — wrong password,
+// a pending/blocked account, and rate-limiting — into the same generic
+// "Invalid email or password", which made it impossible to tell a wrong
+// password apart from an account admins had already fixed but which was
+// still rate-limited from earlier failed attempts.
+class AccountPendingSignin extends CredentialsSignin {
+  code = 'account-pending';
+}
+
+class RateLimitedSignin extends CredentialsSignin {
+  code = 'rate-limited';
+}
 
 export const { handlers, signIn, signOut, auth } = NextAuth({
   secret: process.env.AUTH_SECRET || process.env.NEXTAUTH_SECRET,
@@ -22,15 +36,17 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
 
         // Rate limit: 5 attempts per 15 minutes per email
         const limiter = rateLimit(`login:${email}`, 5, 15 * 60 * 1000);
-        if (!limiter.success) return null;
+        if (!limiter.success) throw new RateLimitedSignin();
 
         const user = await prisma.user.findUnique({
           where: { email },
           include: { role: true },
         });
 
+        if (!user) return null;
+
         // Status convention: status=true means blocked/inactive, null/false means active
-        if (!user || user.status === true) return null;
+        if (user.status === true) throw new AccountPendingSignin();
 
         if (!user.password) return null;
 

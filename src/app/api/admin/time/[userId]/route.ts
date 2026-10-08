@@ -2,19 +2,7 @@ import { NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { clockWeekSchema } from '@/lib/validators';
-import { getTodayRangePST } from '@/lib/time';
-
-/**
- * Get the Monday start date for the work week containing the given date.
- * Pay period: Monday to Friday (no weekends).
- */
-function getMondayStart(date: Date): Date {
-  const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
-  const dayOfWeek = d.getUTCDay();
-  const daysSinceMonday = (dayOfWeek + 6) % 7;
-  d.setDate(d.getDate() - daysSinceMonday);
-  return d;
-}
+import { getTodayRangePST, getPayPeriodStart, getPayPeriodWorkDates } from '@/lib/time';
 
 interface TimeLogRow {
   timeLogId: number;
@@ -125,20 +113,20 @@ export async function GET(
       );
     }
 
-    // Determine the Monday start date
-    let mondayStart: Date;
+    // Determine the pay period start (Friday)
+    let periodStart: Date;
     if (parsed.data.week) {
       const parts = parsed.data.week.split('-').map(Number);
       const inputDate = new Date(parts[0], parts[1] - 1, parts[2]);
-      mondayStart = getMondayStart(inputDate);
+      periodStart = getPayPeriodStart(inputDate);
     } else {
       const { todayStart } = getTodayRangePST();
-      mondayStart = getMondayStart(todayStart);
+      periodStart = getPayPeriodStart(todayStart);
     }
 
-    // Week end = Monday + 5 days (Saturday, exclusive) → Mon–Fri only
-    const weekEnd = new Date(mondayStart);
-    weekEnd.setDate(weekEnd.getDate() + 5);
+    // Pay period end = Friday + 7 days (next Friday, exclusive) → covers Fri–Thu
+    const weekEnd = new Date(periodStart);
+    weekEnd.setDate(weekEnd.getDate() + 7);
 
     // Fetch time logs and audit trail in parallel
     const [logs, audits, user] = await Promise.all([
@@ -146,7 +134,7 @@ export async function GET(
         where: {
           idUser: targetUserId,
           logDate: {
-            gte: mondayStart,
+            gte: periodStart,
             lt: weekEnd,
           },
         },
@@ -156,7 +144,7 @@ export async function GET(
         where: {
           idUser: String(targetUserId),
           modifiedDate: {
-            gte: mondayStart,
+            gte: periodStart,
             lt: weekEnd,
           },
         },
@@ -230,17 +218,13 @@ export async function GET(
       isModifiedByAdmin: d.isModifiedByAdmin ?? false,
     }));
 
-    // Return a row for every weekday (Mon–Fri), filling days with no log with
-    // an empty placeholder. This lets admins click an empty cell to add hours
-    // for a day the employee never clocked (e.g. forgot to clock in entirely);
-    // the edit endpoint creates the log on first save. weekStart is UTC-midnight
-    // and day dates serialize via toISOString, so generate the same way to match.
-    const weekStartStr = mondayStart.toISOString().split('T')[0];
+    // Return a row for every working day in the pay period (Fri, Mon, Tue, Wed,
+    // Thu — no weekends), filling days with no log with an empty placeholder.
+    // This lets admins click an empty cell to add hours for a day the employee
+    // never clocked (e.g. forgot to clock in entirely); the edit endpoint
+    // creates the log on first save.
     const byDate = new Map(transformedDays.map((d) => [d.date, d]));
-    const fullWeek = Array.from({ length: 5 }, (_, i) => {
-      const d = new Date(weekStartStr + 'T00:00:00Z');
-      d.setUTCDate(d.getUTCDate() + i);
-      const date = d.toISOString().split('T')[0];
+    const fullWeek = getPayPeriodWorkDates(periodStart).map((date) => {
       return (
         byDate.get(date) ?? {
           date,
@@ -280,7 +264,7 @@ export async function GET(
       data: fullWeek,
       audits: transformedAudits,
       employee: user,
-      weekStart: mondayStart.toISOString().split('T')[0],
+      weekStart: periodStart.toISOString().split('T')[0],
       weekEnd: new Date(weekEnd.getTime() - 1).toISOString().split('T')[0],
       weekTotals,
     });

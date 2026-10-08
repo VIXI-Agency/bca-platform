@@ -108,3 +108,35 @@ export function minutesSinceStored(stored: Date): number {
   }
   return diff / 60;
 }
+
+/**
+ * Pay period boundary: Friday through Thursday (a 7-day calendar span), not
+ * Monday–Sunday. Employees are still scheduled Monday–Friday, but the pay
+ * period used for timesheets/payroll is anchored on Friday — confirmed
+ * against the company's existing manual timesheets (e.g. "Week Starts:
+ * 6/26/2026 [Fri] — Week Ends: 7/2/2026 [Thu]"). A Monday–Thursday block
+ * belongs to the pay period that started on the *preceding* Friday, not the
+ * Friday that falls later in the same calendar week.
+ */
+
+/** Day offsets (from the Friday start) of the actual working days in one pay period: Fri, Mon, Tue, Wed, Thu. */
+export const PAY_PERIOD_DAY_OFFSETS = [0, 3, 4, 5, 6] as const;
+
+/** Get the Friday (UTC midnight) that starts the pay period containing `date`. */
+export function getPayPeriodStart(date: Date): Date {
+  const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+  const dayOfWeek = d.getUTCDay(); // 0=Sun, 1=Mon, ..., 5=Fri, 6=Sat
+  // Days since last Friday: Fri(5)->0, Sat(6)->1, Sun(0)->2, Mon(1)->3, Tue(2)->4, Wed(3)->5, Thu(4)->6
+  const daysSinceFriday = (dayOfWeek + 2) % 7;
+  d.setUTCDate(d.getUTCDate() - daysSinceFriday);
+  return d;
+}
+
+/** ISO date strings (YYYY-MM-DD) for the working days of a pay period, given its Friday start. */
+export function getPayPeriodWorkDates(periodStart: Date): string[] {
+  return PAY_PERIOD_DAY_OFFSETS.map((offset) => {
+    const d = new Date(periodStart);
+    d.setUTCDate(d.getUTCDate() + offset);
+    return d.toISOString().split('T')[0];
+  });
+}

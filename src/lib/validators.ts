@@ -116,7 +116,9 @@ export const timeEditSchema = z.object({
   ]),
   // HH:mm to set a time, or empty string to clear the entry (e.g. a skipped break/lunch)
   value: z.string().regex(/^(\d{2}:\d{2})?$/, 'Must be HH:mm format or empty to clear'),
-  reason: z.string().min(1, 'Reason is required').max(500),
+  // min(8) blocks placeholder junk like "0" or "-" — a real audit trail needs
+  // an actual explanation, not just a non-empty field.
+  reason: z.string().trim().min(8, 'Explain why this time is being changed (at least 8 characters)').max(500),
 });
 
 // Quotes

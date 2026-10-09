@@ -760,8 +760,9 @@ function EditTimeTab() {
 
   async function handleEditSave() {
     // An empty value is allowed — it clears the entry (e.g. a skipped break/lunch).
-    // Only the reason is mandatory.
-    if (!editingDay || !editReason.trim()) return;
+    // The reason is mandatory and has to be an actual explanation (min 8
+    // chars) — a bare "0" used to pass and made the audit trail useless.
+    if (!editingDay || editReason.trim().length < 8) return;
     await editMutation.mutateAsync({
       userId: parseInt(selectedUserId, 10),
       date: editingDay.date,
@@ -1191,9 +1192,12 @@ function EditTimeTab() {
                 value={editReason}
                 onChange={(e) => setEditReason(e.target.value)}
                 rows={3}
-                placeholder="Explain why this time is being changed..."
+                placeholder="Explain why this time is being changed... (e.g. employee forgot to clock in)"
                 className="flex w-full rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--bg-card)] px-3 py-2 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:border-[var(--accent)] focus:outline-none focus:ring-2 focus:ring-[var(--accent-subtle)]"
               />
+              <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
+                At least 8 characters — this shows up on the employee&apos;s Payment Report.
+              </p>
             </div>
           </div>
 
@@ -1207,7 +1211,7 @@ function EditTimeTab() {
             </Button>
             <Button
               onClick={handleEditSave}
-              disabled={!editReason.trim() || editMutation.isPending}
+              disabled={editReason.trim().length < 8 || editMutation.isPending}
             >
               {editMutation.isPending ? (
                 <>
@@ -2172,10 +2176,10 @@ function AuditTable({
               </td>
               <td
                 className="py-3 pl-3 max-w-[200px] truncate print:py-[2px] print:pl-[6px]"
-                style={{ color: 'var(--text-secondary)' }}
-                title={audit.reason}
+                style={{ color: audit.reason.trim().length < 8 ? 'var(--danger)' : 'var(--text-secondary)' }}
+                title={audit.reason.trim().length < 8 ? `No real reason given: "${audit.reason}"` : audit.reason}
               >
-                {audit.reason}
+                {audit.reason.trim().length < 8 ? `⚠ "${audit.reason}" (no real reason given)` : audit.reason}
               </td>
             </tr>
           ))}

@@ -247,6 +247,28 @@ export async function GET(
       );
     });
 
+    // modifiedBy is stored as a raw idUser string — resolve it to a name so
+    // the audit trail doesn't just show "262".
+    const modifierIds = Array.from(
+      new Set(
+        audits
+          .map((a) => a.modifiedBy)
+          .filter((v): v is string => !!v && /^\d+$/.test(v))
+      )
+    ).map(Number);
+    const modifiers = modifierIds.length
+      ? await prisma.user.findMany({
+          where: { idUser: { in: modifierIds } },
+          select: { idUser: true, name: true, lastname: true },
+        })
+      : [];
+    const modifierNames = new Map(
+      modifiers.map((m) => [
+        String(m.idUser),
+        `${m.name ?? ''} ${m.lastname ?? ''}`.trim() || `User #${m.idUser}`,
+      ])
+    );
+
     const transformedAudits = audits.map((a) => ({
       id: a.auditId,
       userId: targetUserId,
@@ -255,7 +277,7 @@ export async function GET(
       field: a.fieldModified ?? '',
       oldValue: a.oldValue,
       newValue: a.newValue ?? '',
-      modifiedBy: a.modifiedBy ?? '',
+      modifiedBy: a.modifiedBy ? (modifierNames.get(a.modifiedBy) ?? a.modifiedBy) : '',
       modifiedAt: a.modifiedDate?.toISOString() ?? '',
       reason: a.reason ?? '',
     }));

@@ -245,3 +245,25 @@ export function useDisconnectEmployee() {
     },
   });
 }
+
+/** Minimal pay-rate update: PUTs only payRate/otPayRate, not the full user
+ *  edit form — lets the Payment Report set a rate inline without needing
+ *  the rest of the user's profile fields on hand. */
+export function useUpdatePayRate() {
+  const qc = useQueryClient();
+  return useMutation<
+    unknown,
+    Error,
+    { userId: number; payRate?: number; otPayRate?: number }
+  >({
+    mutationFn: ({ userId, ...rest }) =>
+      fetchJson(`/api/users/${userId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(rest),
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['admin-time-employees'] });
+    },
+  });
+}

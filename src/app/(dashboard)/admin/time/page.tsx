@@ -50,6 +50,7 @@ import {
   useDisconnectEmployee,
   useTimeHistory,
   useDisconnections,
+  useUpdatePayRate,
   type EmployeeStatus,
   type DayLog,
   type Audit,
@@ -1670,10 +1671,13 @@ function formatCurrency(amount: number): string {
 
 function PaymentReportTab() {
   const { data: employees, isLoading: empLoading } = useEmployeeList();
+  const updatePayRate = useUpdatePayRate();
 
   const [selectedUserId, setSelectedUserId] = useState<string>('');
   const [selectedWeek, setSelectedWeek] = useState<string>('');
   const [empSearch, setEmpSearch] = useState('');
+  const [payRateInput, setPayRateInput] = useState('');
+  const [otPayRateInput, setOtPayRateInput] = useState('');
 
   const weekOptions = useMemo(() => generateWeekOptions(24), []);
 
@@ -1692,6 +1696,14 @@ function PaymentReportTab() {
     [employees, userId],
   );
 
+  // Seed the rate inputs from the employee's saved rate whenever the
+  // selected employee changes (not on every render — the admin may be
+  // actively typing a correction).
+  useEffect(() => {
+    setPayRateInput(employee?.payRate != null ? String(employee.payRate) : '');
+    setOtPayRateInput(employee?.otPayRate != null ? String(employee.otPayRate) : '');
+  }, [employee?.userId, employee?.payRate, employee?.otPayRate]);
+
   const filteredEmployees = useMemo(() => {
     if (!employees) return [];
     if (!empSearch) return employees;
@@ -1709,12 +1721,31 @@ function PaymentReportTab() {
   const isLoading = timesheetLoading || disconnectionsLoading;
   const dayLogs = timesheet?.data ?? [];
   const totals = timesheet?.weekTotals;
-  const payRate = employee?.payRate ?? null;
-  const otPayRate = employee?.otPayRate ?? null;
+
+  // The rate used for the live calculation and for print comes from what's
+  // currently typed, not from the saved record — so the total updates as
+  // the admin types, before (or instead of) saving it.
+  const parsedPayRate = payRateInput.trim() ? Number(payRateInput) : null;
+  const parsedOtPayRate = otPayRateInput.trim() ? Number(otPayRateInput) : null;
+  const payRate = parsedPayRate != null && !isNaN(parsedPayRate) && parsedPayRate >= 0 ? parsedPayRate : null;
+  const otPayRate = parsedOtPayRate != null && !isNaN(parsedOtPayRate) && parsedOtPayRate >= 0 ? parsedOtPayRate : null;
   const regularPay = payRate != null && totals ? totals.totalHours * payRate : null;
   const otPay = otPayRate != null && totals ? totals.overtime * otPayRate : null;
   const totalPay = regularPay != null && otPay != null ? regularPay + otPay : null;
   const periodLabel = weekOptions.find((w) => w.value === selectedWeek)?.label ?? '';
+
+  const rateIsDirty =
+    employee != null &&
+    (payRate !== (employee.payRate ?? null) || otPayRate !== (employee.otPayRate ?? null));
+
+  async function handleSaveRate() {
+    if (!employee) return;
+    await updatePayRate.mutateAsync({
+      userId: employee.userId,
+      payRate: payRate ?? undefined,
+      otPayRate: otPayRate ?? undefined,
+    });
+  }
 
   return (
     <div className="space-y-6 pt-4">
@@ -1846,7 +1877,7 @@ function PaymentReportTab() {
                   </p>
                   <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>{periodLabel}</p>
                   {payRate != null && (
-                    <p className="mt-1 text-xs" style={{ color: 'var(--text-muted)' }}>
+                    <p className="print-only mt-1 text-xs" style={{ color: 'var(--text-muted)' }}>
                       Rate: {formatCurrency(payRate)}/hr
                       {otPayRate != null && ` · OT: ${formatCurrency(otPayRate)}/hr`}
                     </p>
@@ -1854,12 +1885,58 @@ function PaymentReportTab() {
                 </div>
               </div>
 
-              {(payRate == null || otPayRate == null) && (
-                <div className="flex items-center gap-2 rounded-lg border border-yellow-500/20 bg-yellow-500/10 px-3.5 py-2.5 text-sm text-yellow-400">
-                  <AlertTriangle className="h-4 w-4 shrink-0" />
-                  No pay rate set for this employee — set it under Admin → Users to see calculated payment.
+              {/* Rate editor — typing here recalculates the totals below
+                  immediately; Save persists it to the employee's profile. */}
+              <div
+                className="no-print flex flex-wrap items-end gap-3 rounded-lg border p-3"
+                style={{ borderColor: 'var(--border)', backgroundColor: 'var(--bg-secondary)' }}
+              >
+                <div className="space-y-1">
+                  <Label htmlFor="report-pay-rate" className="text-xs">Pay Rate ($/hr)</Label>
+                  <Input
+                    id="report-pay-rate"
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    className="h-8 w-28"
+                    value={payRateInput}
+                    onChange={(e) => setPayRateInput(e.target.value)}
+                    placeholder="8.00"
+                  />
                 </div>
-              )}
+                <div className="space-y-1">
+                  <Label htmlFor="report-ot-rate" className="text-xs">OT Rate ($/hr)</Label>
+                  <Input
+                    id="report-ot-rate"
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    className="h-8 w-28"
+                    value={otPayRateInput}
+                    onChange={(e) => setOtPayRateInput(e.target.value)}
+                    placeholder="12.00"
+                  />
+                </div>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={handleSaveRate}
+                  disabled={!rateIsDirty || updatePayRate.isPending}
+                >
+                  {updatePayRate.isPending ? (
+                    <Loading size="sm" />
+                  ) : rateIsDirty ? (
+                    'Save Rate'
+                  ) : (
+                    'Saved'
+                  )}
+                </Button>
+                {payRate == null && (
+                  <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
+                    Enter a rate to calculate payment for this period.
+                  </p>
+                )}
+              </div>
 
               {/* Timesheet table */}
               <div className="overflow-x-auto">

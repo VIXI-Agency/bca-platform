@@ -1730,7 +1730,10 @@ function PaymentReportTab() {
   const payRate = parsedPayRate != null && !isNaN(parsedPayRate) && parsedPayRate >= 0 ? parsedPayRate : null;
   const otPayRate = parsedOtPayRate != null && !isNaN(parsedOtPayRate) && parsedOtPayRate >= 0 ? parsedOtPayRate : null;
   const regularPay = payRate != null && totals ? totals.totalHours * payRate : null;
-  const otPay = otPayRate != null && totals ? totals.overtime * otPayRate : null;
+  // No OT this period? Don't make an OT rate a precondition for showing the
+  // total — only block on it when there's actual overtime to price.
+  const hasOvertime = (totals?.overtime ?? 0) > 0;
+  const otPay = totals ? (hasOvertime ? (otPayRate != null ? totals.overtime * otPayRate : null) : 0) : null;
   const totalPay = regularPay != null && otPay != null ? regularPay + otPay : null;
   const periodLabel = weekOptions.find((w) => w.value === selectedWeek)?.label ?? '';
 

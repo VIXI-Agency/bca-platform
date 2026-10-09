@@ -380,9 +380,24 @@ a:hover {
 }
 
 @media print {
+  /* Margins only — NOT a forced orientation. `size: landscape` here fights
+     the print dialog's own Layout control on some drivers (confirmed:
+     Microsoft Print to PDF renders the whole page rotated 90° and spills
+     content onto a second, blank-dark page when both are in play). Pick
+     Landscape from the dialog's Layout dropdown instead — the 8-column
+     table wants it, but it has to come from the dialog, not @page. */
   @page {
-    size: landscape;
     margin: 12mm;
+  }
+
+  /* Belt-and-suspenders: the dark theme's body background must not show
+     through anywhere .print-area doesn't fully cover (a second page from
+     pagination, a rotated/overflowed layout, etc.) — body is an ancestor
+     of .print-area, so the custom-property override below never reaches
+     it; it needs its own explicit white. */
+  html,
+  body {
+    background: #ffffff !important;
   }
 
   body * {

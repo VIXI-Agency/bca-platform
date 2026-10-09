@@ -1849,38 +1849,38 @@ function PaymentReportTab() {
       )}
 
       {selectedUserId && !isLoading && timesheet && (
-        <div className="print-area space-y-6">
+        <div className="print-area space-y-6 print:space-y-2">
           {/* Letterhead: print only */}
-          <div className="print-only mb-2 flex items-center justify-between border-b-2 pb-3" style={{ borderColor: 'var(--text-primary)' }}>
+          <div className="print-only mb-2 flex items-center justify-between border-b-2 pb-3 print:mb-1 print:pb-1" style={{ borderColor: 'var(--text-primary)' }}>
             <div>
-              <p className="text-xl font-bold tracking-tight" style={{ color: 'var(--text-primary)' }}>
+              <p className="text-xl font-bold tracking-tight print:text-[15px]" style={{ color: 'var(--text-primary)' }}>
                 Pulse<span style={{ color: 'var(--accent)' }}>BC</span>
               </p>
-              <p className="text-xs" style={{ color: 'var(--text-secondary)' }}>Benjamin Chaise &amp; Associates</p>
+              <p className="text-xs print:text-[8px]" style={{ color: 'var(--text-secondary)' }}>Benjamin Chaise &amp; Associates</p>
             </div>
-            <p className="text-xs uppercase tracking-widest" style={{ color: 'var(--text-muted)' }}>Payment Report</p>
+            <p className="text-xs uppercase tracking-widest print:text-[8px]" style={{ color: 'var(--text-muted)' }}>Payment Report</p>
           </div>
 
           <Card>
-            <CardContent className="space-y-6 py-6">
+            <CardContent className="space-y-6 py-6 print:space-y-2 print:py-2">
               {/* Header */}
-              <div className="flex flex-wrap items-start justify-between gap-4 border-b pb-4" style={{ borderColor: 'var(--border)' }}>
+              <div className="flex flex-wrap items-start justify-between gap-4 border-b pb-4 print:gap-2 print:pb-1" style={{ borderColor: 'var(--border)' }}>
                 <div>
-                  <h2 className="text-lg font-bold" style={{ color: 'var(--text-primary)' }}>
+                  <h2 className="text-lg font-bold print:text-[13px]" style={{ color: 'var(--text-primary)' }}>
                     {employee?.name}
                   </h2>
-                  <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>
+                  <p className="text-sm print:text-[9.5px]" style={{ color: 'var(--text-secondary)' }}>
                     {employee?.email}
                   </p>
-                  {employee?.isPartTime && <Badge variant="warning" className="mt-1">Part-time</Badge>}
+                  {employee?.isPartTime && <Badge variant="warning" className="mt-1 print:text-[7.5px]">Part-time</Badge>}
                 </div>
                 <div className="text-right">
-                  <p className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>
+                  <p className="text-sm font-semibold print:text-[10px]" style={{ color: 'var(--text-primary)' }}>
                     Pay Period
                   </p>
-                  <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>{periodLabel}</p>
+                  <p className="text-sm print:text-[9.5px]" style={{ color: 'var(--text-secondary)' }}>{periodLabel}</p>
                   {payRate != null && (
-                    <p className="print-only mt-1 text-xs" style={{ color: 'var(--text-muted)' }}>
+                    <p className="print-only mt-1 text-xs print:text-[8.5px]" style={{ color: 'var(--text-muted)' }}>
                       Rate: {formatCurrency(payRate)}/hr
                       {otPayRate != null && ` · OT: ${formatCurrency(otPayRate)}/hr`}
                     </p>
@@ -1943,20 +1943,20 @@ function PaymentReportTab() {
 
               {/* Timesheet table */}
               <div className="overflow-x-auto">
-                <table className="w-full text-sm">
+                <table className="w-full text-sm print:text-[9px]">
                   <thead>
                     <tr
-                      className="border-b text-left text-xs font-medium uppercase tracking-wider"
+                      className="border-b text-left text-xs font-medium uppercase tracking-wider print:text-[7.5px]"
                       style={{ borderColor: 'var(--border)', color: 'var(--text-muted)' }}
                     >
-                      <th className="pb-2 pr-3">Day</th>
-                      <th className="pb-2 px-3">Clock In</th>
-                      <th className="pb-2 px-3">1st Break</th>
-                      <th className="pb-2 px-3">Lunch</th>
-                      <th className="pb-2 px-3">2nd Break</th>
-                      <th className="pb-2 px-3">Clock Out</th>
-                      <th className="pb-2 px-3 text-right">Total</th>
-                      <th className="pb-2 pl-3 text-right">OT</th>
+                      <th className="pb-2 pr-3 print:pb-[3px] print:pr-[6px]">Day</th>
+                      <th className="pb-2 px-3 print:pb-[3px] print:px-[6px]">Clock In</th>
+                      <th className="pb-2 px-3 print:pb-[3px] print:px-[6px]">1st Break</th>
+                      <th className="pb-2 px-3 print:pb-[3px] print:px-[6px]">Lunch</th>
+                      <th className="pb-2 px-3 print:pb-[3px] print:px-[6px]">2nd Break</th>
+                      <th className="pb-2 px-3 print:pb-[3px] print:px-[6px]">Clock Out</th>
+                      <th className="pb-2 px-3 text-right print:pb-[3px] print:px-[6px]">Total</th>
+                      <th className="pb-2 pl-3 text-right print:pb-[3px] print:pl-[6px]">OT</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -1966,33 +1966,33 @@ function PaymentReportTab() {
                       const wasModified = day.isModifiedByAdmin || (day.modifiedFields?.length ?? 0) > 0;
                       return (
                         <tr key={day.date} className="border-b" style={{ borderColor: 'var(--border)' }}>
-                          <td className="py-2 pr-3 font-medium" style={{ color: 'var(--text-primary)' }}>
+                          <td className="py-2 pr-3 font-medium print:py-[3px] print:pr-[6px]" style={{ color: 'var(--text-primary)' }}>
                             <span className="inline-flex items-center gap-1.5">
                               {dayLabel}
                               {wasModified && (
                                 <Pencil
-                                  className="h-3 w-3 shrink-0"
+                                  className="h-3 w-3 shrink-0 print:h-[7px] print:w-[7px]"
                                   style={{ color: 'var(--accent)' }}
                                   aria-label="Modified by admin"
                                 />
                               )}
                             </span>
                           </td>
-                          <td className="px-3 py-2" style={{ color: 'var(--text-secondary)' }}>{formatTime(day.clockIn)}</td>
-                          <td className="px-3 py-2" style={{ color: 'var(--text-secondary)' }}>
+                          <td className="px-3 py-2 print:px-[6px] print:py-[3px]" style={{ color: 'var(--text-secondary)' }}>{formatTime(day.clockIn)}</td>
+                          <td className="px-3 py-2 print:px-[6px] print:py-[3px]" style={{ color: 'var(--text-secondary)' }}>
                             {day.firstBreakOut ? `${formatTime(day.firstBreakOut)} - ${formatTime(day.firstBreakIn)}` : '--'}
                           </td>
-                          <td className="px-3 py-2" style={{ color: 'var(--text-secondary)' }}>
+                          <td className="px-3 py-2 print:px-[6px] print:py-[3px]" style={{ color: 'var(--text-secondary)' }}>
                             {day.lunchOut ? `${formatTime(day.lunchOut)} - ${formatTime(day.lunchIn)}` : '--'}
                           </td>
-                          <td className="px-3 py-2" style={{ color: 'var(--text-secondary)' }}>
+                          <td className="px-3 py-2 print:px-[6px] print:py-[3px]" style={{ color: 'var(--text-secondary)' }}>
                             {day.secondBreakOut ? `${formatTime(day.secondBreakOut)} - ${formatTime(day.secondBreakIn)}` : '--'}
                           </td>
-                          <td className="px-3 py-2" style={{ color: 'var(--text-secondary)' }}>{formatTime(day.clockOut)}</td>
-                          <td className="px-3 py-2 text-right font-medium" style={{ color: 'var(--text-primary)' }}>
+                          <td className="px-3 py-2 print:px-[6px] print:py-[3px]" style={{ color: 'var(--text-secondary)' }}>{formatTime(day.clockOut)}</td>
+                          <td className="px-3 py-2 text-right font-medium print:px-[6px] print:py-[3px]" style={{ color: 'var(--text-primary)' }}>
                             {day.totalHours != null ? formatDuration(Math.round(day.totalHours * 60)) : '--'}
                           </td>
-                          <td className="pl-3 py-2 text-right" style={{ color: day.overtime ? 'var(--accent)' : 'var(--text-muted)' }}>
+                          <td className="pl-3 py-2 text-right print:pl-[6px] print:py-[3px]" style={{ color: day.overtime ? 'var(--accent)' : 'var(--text-muted)' }}>
                             {day.overtime ? formatDuration(Math.round(day.overtime * 60)) : '--'}
                           </td>
                         </tr>
@@ -2002,13 +2002,13 @@ function PaymentReportTab() {
                   {totals && (
                     <tfoot>
                       <tr className="border-t-2" style={{ borderColor: 'var(--border)' }}>
-                        <td colSpan={6} className="py-2 text-right text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>
+                        <td colSpan={6} className="py-2 text-right text-sm font-semibold print:py-[4px] print:text-[9px]" style={{ color: 'var(--text-primary)' }}>
                           Totals
                         </td>
-                        <td className="py-2 px-3 text-right text-sm font-bold" style={{ color: 'var(--text-primary)' }}>
+                        <td className="py-2 px-3 text-right text-sm font-bold print:py-[4px] print:px-[6px] print:text-[9px]" style={{ color: 'var(--text-primary)' }}>
                           {formatDuration(Math.round(totals.totalHours * 60))}
                         </td>
-                        <td className="py-2 pl-3 text-right text-sm font-bold" style={{ color: 'var(--accent)' }}>
+                        <td className="py-2 pl-3 text-right text-sm font-bold print:py-[4px] print:pl-[6px] print:text-[9px]" style={{ color: 'var(--accent)' }}>
                           {formatDuration(Math.round(totals.overtime * 60))}
                         </td>
                       </tr>
@@ -2020,21 +2020,21 @@ function PaymentReportTab() {
               {/* Disconnections summary */}
               {disconnections && disconnections.data.length > 0 && (
                 <div>
-                  <p className="mb-2 text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>
+                  <p className="mb-2 text-sm font-semibold print:mb-1 print:text-[10px]" style={{ color: 'var(--text-primary)' }}>
                     Disconnections
                   </p>
-                  <div className="flex flex-wrap gap-2">
+                  <div className="flex flex-wrap gap-2 print:gap-1">
                     {(Object.keys(DISCONNECTION_TYPE_LABELS) as DisconnectionType[])
                       .filter((type) => disconnections.counts[type] > 0)
                       .map((type) => (
-                        <Badge key={type} variant="outline">
+                        <Badge key={type} variant="outline" className="print:px-[5px] print:py-0 print:text-[7.5px]">
                           {DISCONNECTION_TYPE_LABELS[type]}: {disconnections.counts[type]}
                         </Badge>
                       ))}
                   </div>
-                  <div className="mt-3 space-y-1">
+                  <div className="mt-3 space-y-1 print:mt-1 print:space-y-0">
                     {disconnections.data.map((d) => (
-                      <p key={d.id} className="text-xs" style={{ color: 'var(--text-muted)' }}>
+                      <p key={d.id} className="text-xs print:text-[8px]" style={{ color: 'var(--text-muted)' }}>
                         {new Date(d.date + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
                         {' — '}
                         {DISCONNECTION_TYPE_LABELS[d.type]}
@@ -2049,7 +2049,7 @@ function PaymentReportTab() {
                   report doesn't silently hide an adjustment or a missing reason. */}
               {timesheet.audits.length > 0 && (
                 <div>
-                  <p className="mb-2 text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>
+                  <p className="mb-2 text-sm font-semibold print:mb-1 print:text-[10px]" style={{ color: 'var(--text-primary)' }}>
                     Modifications This Period
                   </p>
                   <AuditTable audits={timesheet.audits} showEmployee={false} />
@@ -2058,18 +2058,18 @@ function PaymentReportTab() {
 
               {/* Payment summary */}
               {totalPay != null && (
-                <div className="space-y-1 border-t pt-4" style={{ borderColor: 'var(--border)' }}>
-                  <div className="flex justify-between text-sm" style={{ color: 'var(--text-secondary)' }}>
+                <div className="space-y-1 border-t pt-4 print:space-y-0 print:pt-[6px]" style={{ borderColor: 'var(--border)' }}>
+                  <div className="flex justify-between text-sm print:text-[9.5px]" style={{ color: 'var(--text-secondary)' }}>
                     <span>Regular ({formatDuration(Math.round((totals?.totalHours ?? 0) * 60))} × {formatCurrency(payRate!)})</span>
                     <span>{formatCurrency(regularPay!)}</span>
                   </div>
                   {otPay! > 0 && (
-                    <div className="flex justify-between text-sm" style={{ color: 'var(--text-secondary)' }}>
+                    <div className="flex justify-between text-sm print:text-[9.5px]" style={{ color: 'var(--text-secondary)' }}>
                       <span>Overtime ({formatDuration(Math.round((totals?.overtime ?? 0) * 60))} × {formatCurrency(otPayRate!)})</span>
                       <span>{formatCurrency(otPay!)}</span>
                     </div>
                   )}
-                  <div className="flex justify-between pt-2 text-base font-bold" style={{ color: 'var(--text-primary)' }}>
+                  <div className="flex justify-between pt-2 text-base font-bold print:pt-[3px] print:text-[11px]" style={{ color: 'var(--text-primary)' }}>
                     <span>Total Payment</span>
                     <span>{formatCurrency(totalPay)}</span>
                   </div>
@@ -2096,22 +2096,22 @@ function AuditTable({
 }) {
   return (
     <div className="overflow-x-auto">
-      <table className="w-full text-sm">
+      <table className="w-full text-sm print:text-[8.5px]">
         <thead>
           <tr
-            className="border-b text-left text-xs font-medium uppercase tracking-wider"
+            className="border-b text-left text-xs font-medium uppercase tracking-wider print:text-[7.5px]"
             style={{
               borderColor: 'var(--border)',
               color: 'var(--text-muted)',
             }}
           >
-            <th className="pb-3 pr-3">Date</th>
-            {showEmployee && <th className="pb-3 px-3">Employee</th>}
-            <th className="pb-3 px-3">Field</th>
-            <th className="pb-3 px-3">Old Value</th>
-            <th className="pb-3 px-3">New Value</th>
-            <th className="pb-3 px-3">Modified By</th>
-            <th className="pb-3 pl-3">Reason</th>
+            <th className="pb-3 pr-3 print:pb-[2px] print:pr-[6px]">Date</th>
+            {showEmployee && <th className="pb-3 px-3 print:pb-[2px] print:px-[6px]">Employee</th>}
+            <th className="pb-3 px-3 print:pb-[2px] print:px-[6px]">Field</th>
+            <th className="pb-3 px-3 print:pb-[2px] print:px-[6px]">Old Value</th>
+            <th className="pb-3 px-3 print:pb-[2px] print:px-[6px]">New Value</th>
+            <th className="pb-3 px-3 print:pb-[2px] print:px-[6px]">Modified By</th>
+            <th className="pb-3 pl-3 print:pb-[2px] print:pl-[6px]">Reason</th>
           </tr>
         </thead>
         <tbody>
@@ -2122,7 +2122,7 @@ function AuditTable({
               style={{ borderColor: 'var(--border)' }}
             >
               <td
-                className="py-3 pr-3"
+                className="py-3 pr-3 print:py-[2px] print:pr-[6px]"
                 style={{ color: 'var(--text-primary)' }}
               >
                 <div className="whitespace-nowrap">
@@ -2135,7 +2135,7 @@ function AuditTable({
                     }
                   )}
                 </div>
-                <div className="text-xs text-[var(--text-muted)]">
+                <div className="text-xs text-[var(--text-muted)] print:hidden">
                   {new Date(audit.modifiedAt).toLocaleString('en-US', {
                     month: 'short',
                     day: 'numeric',
@@ -2146,32 +2146,32 @@ function AuditTable({
               </td>
               {showEmployee && (
                 <td
-                  className="px-3 py-3 font-medium"
+                  className="px-3 py-3 font-medium print:px-[6px] print:py-[2px]"
                   style={{ color: 'var(--text-primary)' }}
                 >
                   {audit.employeeName}
                 </td>
               )}
-              <td className="px-3 py-3">
-                <Badge variant="outline">{fieldLabel(audit.field)}</Badge>
+              <td className="px-3 py-3 print:px-[6px] print:py-[2px]">
+                <Badge variant="outline" className="print:px-[5px] print:py-0 print:text-[7.5px]">{fieldLabel(audit.field)}</Badge>
               </td>
-              <td className="px-3 py-3 text-[var(--text-secondary)]">
+              <td className="px-3 py-3 text-[var(--text-secondary)] print:px-[6px] print:py-[2px]">
                 {audit.oldValue ? formatTime(audit.oldValue) : '--:--'}
               </td>
               <td
-                className="px-3 py-3 font-medium"
+                className="px-3 py-3 font-medium print:px-[6px] print:py-[2px]"
                 style={{ color: 'var(--accent)' }}
               >
                 {formatTime(audit.newValue)}
               </td>
               <td
-                className="px-3 py-3"
+                className="px-3 py-3 print:px-[6px] print:py-[2px]"
                 style={{ color: 'var(--text-secondary)' }}
               >
                 {audit.modifiedBy}
               </td>
               <td
-                className="py-3 pl-3 max-w-[200px] truncate"
+                className="py-3 pl-3 max-w-[200px] truncate print:py-[2px] print:pl-[6px]"
                 style={{ color: 'var(--text-secondary)' }}
                 title={audit.reason}
               >

@@ -420,23 +420,13 @@ a:hover {
     display: block;
   }
 
-  /* Fit on one landscape sheet. `zoom` (not `transform: scale`, which only
-     affects the painted pixels after layout and does nothing for
-     pagination) shrinks the rendered box model itself, so Chrome's print
-     engine reflows at the smaller size and the whole report's measured
-     height drops below one page. The compensating width keeps the content
-     spanning the full page width instead of leaving the shrunk box's extra
-     100%-of-page-minus-zoomed-size as blank margin on the right.
-     Calibrated against an actual worst-case printed report (an employee
-     with 7 logged edits that period): needed roughly 0.78x to fit; kept at
-     0.7x for headroom against the browser's own "headers and footers"
-     print option, which eats real vertical space this CSS can't see or
-     turn off — worth telling admins to disable it in the print dialog for
-     the cleanest result. */
-  .print-area {
-    zoom: 0.7;
-    width: 142.86%;
-  }
+  /* Fitting one landscape sheet is done with real, smaller font-sizes and
+     padding on the report's own elements (print: variants in the JSX),
+     NOT a zoom/scale trick — confirmed the hard way: `zoom` shrinks what
+     Chrome *paints*, but its print-pagination math doesn't reliably use
+     the zoomed height, so it both left blank margin (width compensation
+     landed wrong) and still produced a blank second page. Genuinely
+     smaller content has no such gap between layout and pagination. */
 
   /* The app is dark-themed everywhere else; the printed report is its own
      light, professional palette, scoped to .print-area so the on-screen

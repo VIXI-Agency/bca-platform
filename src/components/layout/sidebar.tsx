@@ -350,7 +350,7 @@ export default function Sidebar() {
       {/* Mobile hamburger button */}
       <button
         onClick={() => setMobileOpen(true)}
-        className="fixed left-4 top-4 z-50 flex h-10 w-10 items-center justify-center rounded-lg border lg:hidden"
+        className="fixed left-4 top-4 z-50 flex h-10 w-10 items-center justify-center rounded-lg border lg:hidden print:hidden"
         style={{
           backgroundColor: 'var(--bg-card)',
           borderColor: 'var(--border)',
@@ -364,15 +364,20 @@ export default function Sidebar() {
       {/* Mobile overlay */}
       {mobileOpen && (
         <div
-          className="fixed inset-0 z-40 bg-black/50 lg:hidden"
+          className="fixed inset-0 z-40 bg-black/50 lg:hidden print:hidden"
           onClick={closeMobile}
         />
       )}
 
-      {/* Sidebar - always visible on lg+, slide-in on mobile */}
+      {/* Sidebar - always visible on lg+, slide-in on mobile. print:hidden is
+          load-bearing, not cosmetic: a fixed-position element isn't removed
+          from print pagination by visibility:hidden alone (Chromium can
+          still reserve/repeat space for it per page), which was silently
+          forcing a blank second page on every printed report regardless of
+          how little content that report had. */}
       <aside
         className={cn(
-          'fixed left-0 top-0 z-50 flex h-screen w-[260px] flex-col border-r transition-transform duration-300',
+          'fixed left-0 top-0 z-50 flex h-screen w-[260px] flex-col border-r transition-transform duration-300 print:hidden',
           mobileOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0',
         )}
         style={{

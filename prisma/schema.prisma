@@ -38,6 +38,7 @@ model User {
   timeLogs             EmployeeTimeLog[]
   schedules            EmployeeSchedule[]
   disconnections       EmployeeDisconnection[] @relation("DisconnectedUser")
+  bonuses              PayrollBonus[]          @relation("BonusUser")
   videoViews           VideoView[]
   activityLogs         UserActivityLog[]
 
@@ -223,6 +224,22 @@ model EmployeeDisconnection {
   user               User      @relation("DisconnectedUser", fields: [idUser], references: [idUser], onDelete: NoAction, onUpdate: NoAction)
 
   @@map("EmployeeDisconnections")
+  @@schema("benjaise_sqluser2")
+}
+
+model PayrollBonus {
+  idBonus     Int      @id @default(autoincrement()) @map("IdBonus")
+  idUser      Int      @map("IdUser")
+  periodStart DateTime @map("PeriodStart") @db.Date
+  amount      Decimal  @map("Amount") @db.Decimal(10, 2)
+  note        String?  @map("Note") @db.NVarChar(500)
+  modifiedBy  String?  @map("ModifiedBy")
+  modifiedAt  DateTime @default(now()) @map("ModifiedAt")
+
+  user        User     @relation("BonusUser", fields: [idUser], references: [idUser], onDelete: NoAction, onUpdate: NoAction)
+
+  @@unique([idUser, periodStart], map: "UQ_PayrollBonus_User_Period")
+  @@map("PayrollBonuses")
   @@schema("benjaise_sqluser2")
 }
 

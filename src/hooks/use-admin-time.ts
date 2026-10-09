@@ -92,6 +92,11 @@ export interface DisconnectionsResponse {
   counts: Record<DisconnectionType, number>;
 }
 
+export interface BonusResponse {
+  amount: number | null;
+  note: string | null;
+}
+
 export interface Audit {
   id: number;
   userId: number;
@@ -198,6 +203,15 @@ export function useDisconnections(userId: number, week: string) {
   });
 }
 
+export function useBonus(userId: number, week: string) {
+  return useQuery<BonusResponse>({
+    queryKey: ['admin-bonus', userId, week],
+    queryFn: () =>
+      fetchJson<BonusResponse>(`/api/admin/time/${userId}/bonus?week=${week}`),
+    enabled: !!userId && !!week,
+  });
+}
+
 /* -------------------------------------------------- */
 /*  Mutations                                          */
 /* -------------------------------------------------- */
@@ -264,6 +278,28 @@ export function useUpdatePayRate() {
       }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['admin-time-employees'] });
+    },
+  });
+}
+
+/** Upserts the discretionary bonus for one employee's pay period — a manual
+ *  dollar amount the admin types in, not computed from any formula, that
+ *  gets added into the Payment Report's total and shown on the printed PDF. */
+export function useSaveBonus() {
+  const qc = useQueryClient();
+  return useMutation<
+    BonusResponse,
+    Error,
+    { userId: number; week: string; amount: number; note?: string }
+  >({
+    mutationFn: ({ userId, week, amount, note }) =>
+      fetchJson(`/api/admin/time/${userId}/bonus`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ period: week, amount, note }),
+      }),
+    onSuccess: (_data, variables) => {
+      qc.invalidateQueries({ queryKey: ['admin-bonus', variables.userId, variables.week] });
     },
   });
 }

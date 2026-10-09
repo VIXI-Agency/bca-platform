@@ -51,6 +51,8 @@ import {
   useTimeHistory,
   useDisconnections,
   useUpdatePayRate,
+  useBonus,
+  useSaveBonus,
   type EmployeeStatus,
   type DayLog,
   type Audit,
@@ -1676,12 +1678,14 @@ function formatCurrency(amount: number): string {
 function PaymentReportTab() {
   const { data: employees, isLoading: empLoading } = useEmployeeList();
   const updatePayRate = useUpdatePayRate();
+  const saveBonus = useSaveBonus();
 
   const [selectedUserId, setSelectedUserId] = useState<string>('');
   const [selectedWeek, setSelectedWeek] = useState<string>('');
   const [empSearch, setEmpSearch] = useState('');
   const [payRateInput, setPayRateInput] = useState('');
   const [otPayRateInput, setOtPayRateInput] = useState('');
+  const [bonusInput, setBonusInput] = useState('');
 
   const weekOptions = useMemo(() => generateWeekOptions(24), []);
 
@@ -1694,6 +1698,7 @@ function PaymentReportTab() {
   const userId = selectedUserId ? parseInt(selectedUserId, 10) : 0;
   const { data: timesheet, isLoading: timesheetLoading } = useEmployeeTimesheet(userId, selectedWeek);
   const { data: disconnections, isLoading: disconnectionsLoading } = useDisconnections(userId, selectedWeek);
+  const { data: bonus, isLoading: bonusLoading } = useBonus(userId, selectedWeek);
 
   const employee = useMemo(
     () => employees?.find((e) => e.userId === userId),
@@ -1707,6 +1712,12 @@ function PaymentReportTab() {
     setPayRateInput(employee?.payRate != null ? String(employee.payRate) : '');
     setOtPayRateInput(employee?.otPayRate != null ? String(employee.otPayRate) : '');
   }, [employee?.userId, employee?.payRate, employee?.otPayRate]);
+
+  // Bonus is scoped per employee + pay period (not a standing rate), so it
+  // re-seeds whenever either changes, from whatever's saved for that period.
+  useEffect(() => {
+    setBonusInput(bonus?.amount != null ? String(bonus.amount) : '');
+  }, [userId, selectedWeek, bonus?.amount]);
 
   const filteredEmployees = useMemo(() => {
     if (!employees) return [];
@@ -1738,12 +1749,17 @@ function PaymentReportTab() {
   // total — only block on it when there's actual overtime to price.
   const hasOvertime = (totals?.overtime ?? 0) > 0;
   const otPay = totals ? (hasOvertime ? (otPayRate != null ? totals.overtime * otPayRate : null) : 0) : null;
-  const totalPay = regularPay != null && otPay != null ? regularPay + otPay : null;
+  // Discretionary bonus: a manually-entered dollar amount, not computed from
+  // any formula — kept separate from the hourly/OT math and simply added in.
+  const parsedBonus = bonusInput.trim() ? Number(bonusInput) : null;
+  const bonusAmount = parsedBonus != null && !isNaN(parsedBonus) && parsedBonus >= 0 ? parsedBonus : 0;
+  const totalPay = regularPay != null && otPay != null ? regularPay + otPay + bonusAmount : null;
   const periodLabel = weekOptions.find((w) => w.value === selectedWeek)?.label ?? '';
 
   const rateIsDirty =
     employee != null &&
     (payRate !== (employee.payRate ?? null) || otPayRate !== (employee.otPayRate ?? null));
+  const bonusIsDirty = bonusAmount !== (bonus?.amount ?? 0);
 
   async function handleSaveRate() {
     if (!employee) return;
@@ -1752,6 +1768,11 @@ function PaymentReportTab() {
       payRate: payRate ?? undefined,
       otPayRate: otPayRate ?? undefined,
     });
+  }
+
+  async function handleSaveBonus() {
+    if (!userId || !selectedWeek) return;
+    await saveBonus.mutateAsync({ userId, week: selectedWeek, amount: bonusAmount });
   }
 
   return (
@@ -1945,6 +1966,46 @@ function PaymentReportTab() {
                 )}
               </div>
 
+              {/* Discretionary bonus — manual per-period amount, separate from
+                  the hourly rate, added straight into the total below and
+                  shown on the printed report. */}
+              <div
+                className="no-print flex flex-wrap items-end gap-3 rounded-lg border p-3"
+                style={{ borderColor: 'var(--border)', backgroundColor: 'var(--bg-secondary)' }}
+              >
+                <div className="space-y-1">
+                  <Label htmlFor="report-bonus" className="text-xs">Discretionary Bonus ($)</Label>
+                  <Input
+                    id="report-bonus"
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    className="h-8 w-32"
+                    value={bonusInput}
+                    onChange={(e) => setBonusInput(e.target.value)}
+                    placeholder="0.00"
+                    disabled={bonusLoading}
+                  />
+                </div>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={handleSaveBonus}
+                  disabled={!bonusIsDirty || saveBonus.isPending || bonusLoading}
+                >
+                  {saveBonus.isPending ? (
+                    <Loading size="sm" />
+                  ) : bonusIsDirty ? (
+                    'Save Bonus'
+                  ) : (
+                    'Saved'
+                  )}
+                </Button>
+                <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
+                  Manual amount for this pay period only — not calculated automatically.
+                </p>
+              </div>
+
               {/* Timesheet table */}
               <div className="overflow-x-auto">
                 <table className="w-full text-sm print:text-[9px]">
@@ -2071,6 +2132,12 @@ function PaymentReportTab() {
                     <div className="flex justify-between text-sm print:text-[9.5px]" style={{ color: 'var(--text-secondary)' }}>
                       <span>Overtime ({formatDuration(Math.round((totals?.overtime ?? 0) * 60))} × {formatCurrency(otPayRate!)})</span>
                       <span>{formatCurrency(otPay!)}</span>
+                    </div>
+                  )}
+                  {bonusAmount > 0 && (
+                    <div className="flex justify-between text-sm print:text-[9.5px]" style={{ color: 'var(--text-secondary)' }}>
+                      <span>Discretionary Bonus</span>
+                      <span>{formatCurrency(bonusAmount)}</span>
                     </div>
                   )}
                   <div className="flex justify-between pt-2 text-base font-bold print:pt-[3px] print:text-[11px]" style={{ color: 'var(--text-primary)' }}>

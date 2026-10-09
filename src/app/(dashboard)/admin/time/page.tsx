@@ -1872,9 +1872,21 @@ function PaymentReportTab() {
                     {dayLogs.map((day) => {
                       const dayDate = new Date(day.date + 'T00:00:00');
                       const dayLabel = `${dayDate.toLocaleDateString('en-US', { weekday: 'short' })} ${dayDate.getMonth() + 1}/${dayDate.getDate()}`;
+                      const wasModified = day.isModifiedByAdmin || (day.modifiedFields?.length ?? 0) > 0;
                       return (
                         <tr key={day.date} className="border-b" style={{ borderColor: 'var(--border)' }}>
-                          <td className="py-2 pr-3 font-medium" style={{ color: 'var(--text-primary)' }}>{dayLabel}</td>
+                          <td className="py-2 pr-3 font-medium" style={{ color: 'var(--text-primary)' }}>
+                            <span className="inline-flex items-center gap-1.5">
+                              {dayLabel}
+                              {wasModified && (
+                                <Pencil
+                                  className="h-3 w-3 shrink-0"
+                                  style={{ color: 'var(--accent)' }}
+                                  aria-label="Modified by admin"
+                                />
+                              )}
+                            </span>
+                          </td>
                           <td className="px-3 py-2" style={{ color: 'var(--text-secondary)' }}>{formatTime(day.clockIn)}</td>
                           <td className="px-3 py-2" style={{ color: 'var(--text-secondary)' }}>
                             {day.firstBreakOut ? `${formatTime(day.firstBreakOut)} - ${formatTime(day.firstBreakIn)}` : '--'}
@@ -1939,6 +1951,17 @@ function PaymentReportTab() {
                       </p>
                     ))}
                   </div>
+                </div>
+              )}
+
+              {/* Modifications: every manual edit behind this period's numbers, so the
+                  report doesn't silently hide an adjustment or a missing reason. */}
+              {timesheet.audits.length > 0 && (
+                <div>
+                  <p className="mb-2 text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>
+                    Modifications This Period
+                  </p>
+                  <AuditTable audits={timesheet.audits} showEmployee={false} />
                 </div>
               )}
 

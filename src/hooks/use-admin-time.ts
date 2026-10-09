@@ -33,6 +33,11 @@ export interface EmployeeStatus {
 export interface Employee {
   userId: number;
   name: string;
+  email: string;
+  role: number | null;
+  isPartTime: boolean;
+  payRate: number | null;
+  otPayRate: number | null;
 }
 
 export interface DayLog {
@@ -46,7 +51,45 @@ export interface DayLog {
   secondBreakIn?: string;
   clockOut?: string;
   totalHours?: number;
+  overtime?: number;
   modifiedFields?: string[];
+  isModifiedByAdmin?: boolean;
+}
+
+export interface WeekTotals {
+  totalHours: number;
+  overtime: number;
+  firstBreakExcess: number;
+  secondBreakExcess: number;
+}
+
+export interface TimesheetResponse {
+  data: DayLog[];
+  audits: Audit[];
+  employee: { idUser: number; name: string | null; lastname: string | null; isPartTime: boolean | null };
+  weekStart: string;
+  weekEnd: string;
+  weekTotals: WeekTotals;
+}
+
+export type DisconnectionType =
+  | 'absence'
+  | 'early_leave'
+  | 'power_outage'
+  | 'internet_outage'
+  | 'other';
+
+export interface DisconnectionEntry {
+  id: number;
+  date: string;
+  type: DisconnectionType;
+  reason: string;
+  disconnectedBy: string;
+}
+
+export interface DisconnectionsResponse {
+  data: DisconnectionEntry[];
+  counts: Record<DisconnectionType, number>;
 }
 
 export interface Audit {
@@ -73,6 +116,7 @@ export interface EditTimePayload {
 export interface DisconnectPayload {
   userId: number;
   action: 'disconnect' | 'reconnect';
+  type?: DisconnectionType;
   reason?: string;
 }
 
@@ -135,11 +179,20 @@ export function useEmployeeList() {
 }
 
 export function useEmployeeTimesheet(userId: number, week: string) {
-  return useQuery<{ data: DayLog[]; audits: Audit[] }>({
+  return useQuery<TimesheetResponse>({
     queryKey: ['admin-timesheet', userId, week],
     queryFn: () =>
-      fetchJson<{ data: DayLog[]; audits: Audit[] }>(
-        `/api/admin/time/${userId}?week=${week}`
+      fetchJson<TimesheetResponse>(`/api/admin/time/${userId}?week=${week}`),
+    enabled: !!userId && !!week,
+  });
+}
+
+export function useDisconnections(userId: number, week: string) {
+  return useQuery<DisconnectionsResponse>({
+    queryKey: ['admin-disconnections', userId, week],
+    queryFn: () =>
+      fetchJson<DisconnectionsResponse>(
+        `/api/admin/time/${userId}/disconnections?week=${week}`
       ),
     enabled: !!userId && !!week,
   });

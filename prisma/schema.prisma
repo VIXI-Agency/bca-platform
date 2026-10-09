@@ -28,6 +28,8 @@ model User {
   photo       String?  @map("Photo") @db.NVarChar(Max)
   resetToken  String?  @map("ResetToken") @db.NVarChar(200)
   resetExpires DateTime? @map("ResetExpires")
+  payRate     Decimal? @map("PayRate") @db.Decimal(10, 2)
+  otPayRate   Decimal? @map("OtPayRate") @db.Decimal(10, 2)
 
   role        Role?    @relation(fields: [idRole], references: [idRole])
   calls       Call[]   @relation("UserCalls")
@@ -213,6 +215,7 @@ model EmployeeDisconnection {
   disconnectionTime  DateTime  @map("DisconnectionTime") @db.Time
   reconnectionTime   DateTime? @map("ReconnectionTime") @db.Time
   reason             String?   @map("Reason")
+  disconnectionType  String?   @map("DisconnectionType")
   disconnectedBy     String?   @map("DisconnectedBy")
   reconnectedBy      String?   @map("ReconnectedBy")
   isActive           Boolean?  @default(true) @map("IsActive")

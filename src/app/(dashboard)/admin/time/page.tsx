@@ -16,6 +16,8 @@ import {
   AlertTriangle,
   RefreshCw,
   History,
+  DollarSign,
+  Printer,
 } from 'lucide-react';
 import Header from '@/components/layout/header';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -47,10 +49,12 @@ import {
   useEditTime,
   useDisconnectEmployee,
   useTimeHistory,
+  useDisconnections,
   type EmployeeStatus,
   type DayLog,
   type Audit,
   type TimeHistoryEntry,
+  type DisconnectionType,
 } from '@/hooks/use-admin-time';
 
 /* -------------------------------------------------- */
@@ -208,6 +212,14 @@ function fieldLabel(key: string): string {
   return EDITABLE_FIELDS.find((f) => f.key === key)?.label ?? key;
 }
 
+const DISCONNECTION_TYPE_OPTIONS: { value: DisconnectionType; label: string }[] = [
+  { value: 'absence', label: 'Absence' },
+  { value: 'early_leave', label: 'Early Leave' },
+  { value: 'power_outage', label: 'Power Outage' },
+  { value: 'internet_outage', label: 'Internet Outage' },
+  { value: 'other', label: 'Other' },
+];
+
 /* -------------------------------------------------- */
 /*  Sub-components                                     */
 /* -------------------------------------------------- */
@@ -296,6 +308,10 @@ export default function AdminTimePage() {
               <FileText className="h-4 w-4" />
               Audit Log
             </TabsTrigger>
+            <TabsTrigger value="report" className="gap-1.5">
+              <DollarSign className="h-4 w-4" />
+              Payment Report
+            </TabsTrigger>
           </TabsList>
 
           <TabsContent value="status">
@@ -312,6 +328,10 @@ export default function AdminTimePage() {
 
           <TabsContent value="audit">
             <AuditLogTab />
+          </TabsContent>
+
+          <TabsContent value="report">
+            <PaymentReportTab />
           </TabsContent>
         </Tabs>
       </div>
@@ -334,6 +354,7 @@ function EmployeeStatusTab() {
   const [disconnectTarget, setDisconnectTarget] =
     useState<EmployeeStatus | null>(null);
   const [disconnectReason, setDisconnectReason] = useState('');
+  const [disconnectType, setDisconnectType] = useState<DisconnectionType | ''>('');
   const [disconnectAction, setDisconnectAction] = useState<
     'disconnect' | 'reconnect'
   >('disconnect');
@@ -367,6 +388,7 @@ function EmployeeStatusTab() {
     setDisconnectTarget(emp);
     setDisconnectAction(action);
     setDisconnectReason('');
+    setDisconnectType('');
   }
 
   async function handleDisconnect() {
@@ -374,10 +396,12 @@ function EmployeeStatusTab() {
     await disconnectMutation.mutateAsync({
       userId: disconnectTarget.userId,
       action: disconnectAction,
+      type: disconnectAction === 'disconnect' && disconnectType ? disconnectType : undefined,
       reason: disconnectReason || undefined,
     });
     setDisconnectTarget(null);
     setDisconnectReason('');
+    setDisconnectType('');
   }
 
   const lastUpdate = dataUpdatedAt
@@ -601,6 +625,26 @@ function EmployeeStatusTab() {
                 ? `Are you sure you want to disconnect ${disconnectTarget?.name}? They will be clocked out immediately.`
                 : `Are you sure you want to reconnect ${disconnectTarget?.name}?`}
             </p>
+            {disconnectAction === 'disconnect' && (
+              <div className="space-y-2">
+                <Label htmlFor="disconnect-type">Category</Label>
+                <Select
+                  value={disconnectType}
+                  onValueChange={(v) => setDisconnectType(v as DisconnectionType)}
+                >
+                  <SelectTrigger id="disconnect-type">
+                    <SelectValue placeholder="Select a category..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {DISCONNECTION_TYPE_OPTIONS.map((opt) => (
+                      <SelectItem key={opt.value} value={opt.value}>
+                        {opt.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
             <div className="space-y-2">
               <Label htmlFor="disconnect-reason">
                 Reason {disconnectAction === 'disconnect' ? '(recommended)' : '(optional)'}
@@ -1603,6 +1647,323 @@ function AuditLogTab() {
             )}
           </CardContent>
         </Card>
+      )}
+    </div>
+  );
+}
+
+/* ================================================== */
+/*  TAB 5: Payment Report                              */
+/* ================================================== */
+
+const DISCONNECTION_TYPE_LABELS: Record<DisconnectionType, string> = {
+  absence: 'Absences',
+  early_leave: 'Early Leave',
+  power_outage: 'Power Outage',
+  internet_outage: 'Internet Outage',
+  other: 'Other',
+};
+
+function formatCurrency(amount: number): string {
+  return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(amount);
+}
+
+function PaymentReportTab() {
+  const { data: employees, isLoading: empLoading } = useEmployeeList();
+
+  const [selectedUserId, setSelectedUserId] = useState<string>('');
+  const [selectedWeek, setSelectedWeek] = useState<string>('');
+  const [empSearch, setEmpSearch] = useState('');
+
+  const weekOptions = useMemo(() => generateWeekOptions(24), []);
+
+  useEffect(() => {
+    if (!selectedWeek && weekOptions.length > 0) {
+      setSelectedWeek(weekOptions[0].value);
+    }
+  }, [weekOptions, selectedWeek]);
+
+  const userId = selectedUserId ? parseInt(selectedUserId, 10) : 0;
+  const { data: timesheet, isLoading: timesheetLoading } = useEmployeeTimesheet(userId, selectedWeek);
+  const { data: disconnections, isLoading: disconnectionsLoading } = useDisconnections(userId, selectedWeek);
+
+  const employee = useMemo(
+    () => employees?.find((e) => e.userId === userId),
+    [employees, userId],
+  );
+
+  const filteredEmployees = useMemo(() => {
+    if (!employees) return [];
+    if (!empSearch) return employees;
+    return employees.filter((e) => e.name.toLowerCase().includes(empSearch.toLowerCase()));
+  }, [employees, empSearch]);
+
+  function navigateWeek(direction: -1 | 1) {
+    const idx = weekOptions.findIndex((w) => w.value === selectedWeek);
+    const newIdx = idx - direction;
+    if (newIdx >= 0 && newIdx < weekOptions.length) {
+      setSelectedWeek(weekOptions[newIdx].value);
+    }
+  }
+
+  const isLoading = timesheetLoading || disconnectionsLoading;
+  const dayLogs = timesheet?.data ?? [];
+  const totals = timesheet?.weekTotals;
+  const payRate = employee?.payRate ?? null;
+  const otPayRate = employee?.otPayRate ?? null;
+  const regularPay = payRate != null && totals ? totals.totalHours * payRate : null;
+  const otPay = otPayRate != null && totals ? totals.overtime * otPayRate : null;
+  const totalPay = regularPay != null && otPay != null ? regularPay + otPay : null;
+  const periodLabel = weekOptions.find((w) => w.value === selectedWeek)?.label ?? '';
+
+  return (
+    <div className="space-y-6 pt-4">
+      {/* Selectors */}
+      <Card className="no-print">
+        <CardContent className="py-4">
+          <div className="flex flex-wrap items-end gap-4">
+            <div className="min-w-[240px] flex-1 space-y-2">
+              <Label>Employee</Label>
+              <Select value={selectedUserId} onValueChange={setSelectedUserId}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select employee..." />
+                </SelectTrigger>
+                <SelectContent>
+                  <div className="px-2 pb-2">
+                    <Input
+                      placeholder="Search..."
+                      value={empSearch}
+                      onChange={(e) => setEmpSearch(e.target.value)}
+                      className="h-8"
+                    />
+                  </div>
+                  {empLoading && (
+                    <div className="flex justify-center py-4">
+                      <Loading size="sm" />
+                    </div>
+                  )}
+                  {filteredEmployees.map((emp) => (
+                    <SelectItem key={emp.userId} value={String(emp.userId)}>
+                      {emp.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="min-w-[280px] flex-1 space-y-2">
+              <Label>Pay Period</Label>
+              <div className="flex items-center gap-1">
+                <Button
+                  variant="outline"
+                  size="icon"
+                  className="h-10 w-10 shrink-0"
+                  onClick={() => navigateWeek(-1)}
+                  disabled={weekOptions.findIndex((w) => w.value === selectedWeek) >= weekOptions.length - 1}
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                </Button>
+                <Select value={selectedWeek} onValueChange={setSelectedWeek}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select period..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {weekOptions.map((w) => (
+                      <SelectItem key={w.value} value={w.value}>
+                        {w.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Button
+                  variant="outline"
+                  size="icon"
+                  className="h-10 w-10 shrink-0"
+                  onClick={() => navigateWeek(1)}
+                  disabled={weekOptions.findIndex((w) => w.value === selectedWeek) <= 0}
+                >
+                  <ChevronRight className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
+
+            {selectedUserId && (
+              <Button variant="outline" onClick={() => window.print()} className="gap-1.5">
+                <Printer className="h-4 w-4" />
+                Print / Save as PDF
+              </Button>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+
+      {!selectedUserId && (
+        <Card>
+          <CardContent className="flex flex-col items-center justify-center py-16">
+            <DollarSign className="mb-4 h-10 w-10" style={{ color: 'var(--text-muted)' }} />
+            <p className="text-sm font-medium" style={{ color: 'var(--text-secondary)' }}>
+              Select an employee and pay period to generate a payment report.
+            </p>
+          </CardContent>
+        </Card>
+      )}
+
+      {selectedUserId && isLoading && (
+        <div className="flex items-center justify-center py-16">
+          <Loading />
+        </div>
+      )}
+
+      {selectedUserId && !isLoading && timesheet && (
+        <div className="print-area space-y-6">
+          <Card>
+            <CardContent className="space-y-6 py-6">
+              {/* Header */}
+              <div className="flex flex-wrap items-start justify-between gap-4 border-b pb-4" style={{ borderColor: 'var(--border)' }}>
+                <div>
+                  <h2 className="text-lg font-bold" style={{ color: 'var(--text-primary)' }}>
+                    {employee?.name}
+                  </h2>
+                  <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>
+                    {employee?.email}
+                  </p>
+                  {employee?.isPartTime && <Badge variant="warning" className="mt-1">Part-time</Badge>}
+                </div>
+                <div className="text-right">
+                  <p className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>
+                    Pay Period
+                  </p>
+                  <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>{periodLabel}</p>
+                  {payRate != null && (
+                    <p className="mt-1 text-xs" style={{ color: 'var(--text-muted)' }}>
+                      Rate: {formatCurrency(payRate)}/hr
+                      {otPayRate != null && ` · OT: ${formatCurrency(otPayRate)}/hr`}
+                    </p>
+                  )}
+                </div>
+              </div>
+
+              {(payRate == null || otPayRate == null) && (
+                <div className="flex items-center gap-2 rounded-lg border border-yellow-500/20 bg-yellow-500/10 px-3.5 py-2.5 text-sm text-yellow-400">
+                  <AlertTriangle className="h-4 w-4 shrink-0" />
+                  No pay rate set for this employee — set it under Admin → Users to see calculated payment.
+                </div>
+              )}
+
+              {/* Timesheet table */}
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr
+                      className="border-b text-left text-xs font-medium uppercase tracking-wider"
+                      style={{ borderColor: 'var(--border)', color: 'var(--text-muted)' }}
+                    >
+                      <th className="pb-2 pr-3">Day</th>
+                      <th className="pb-2 px-3">Clock In</th>
+                      <th className="pb-2 px-3">1st Break</th>
+                      <th className="pb-2 px-3">Lunch</th>
+                      <th className="pb-2 px-3">2nd Break</th>
+                      <th className="pb-2 px-3">Clock Out</th>
+                      <th className="pb-2 px-3 text-right">Total</th>
+                      <th className="pb-2 pl-3 text-right">OT</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {dayLogs.map((day) => {
+                      const dayDate = new Date(day.date + 'T00:00:00');
+                      const dayLabel = `${dayDate.toLocaleDateString('en-US', { weekday: 'short' })} ${dayDate.getMonth() + 1}/${dayDate.getDate()}`;
+                      return (
+                        <tr key={day.date} className="border-b" style={{ borderColor: 'var(--border)' }}>
+                          <td className="py-2 pr-3 font-medium" style={{ color: 'var(--text-primary)' }}>{dayLabel}</td>
+                          <td className="px-3 py-2" style={{ color: 'var(--text-secondary)' }}>{formatTime(day.clockIn)}</td>
+                          <td className="px-3 py-2" style={{ color: 'var(--text-secondary)' }}>
+                            {day.firstBreakOut ? `${formatTime(day.firstBreakOut)} - ${formatTime(day.firstBreakIn)}` : '--'}
+                          </td>
+                          <td className="px-3 py-2" style={{ color: 'var(--text-secondary)' }}>
+                            {day.lunchOut ? `${formatTime(day.lunchOut)} - ${formatTime(day.lunchIn)}` : '--'}
+                          </td>
+                          <td className="px-3 py-2" style={{ color: 'var(--text-secondary)' }}>
+                            {day.secondBreakOut ? `${formatTime(day.secondBreakOut)} - ${formatTime(day.secondBreakIn)}` : '--'}
+                          </td>
+                          <td className="px-3 py-2" style={{ color: 'var(--text-secondary)' }}>{formatTime(day.clockOut)}</td>
+                          <td className="px-3 py-2 text-right font-medium" style={{ color: 'var(--text-primary)' }}>
+                            {day.totalHours != null ? formatDuration(Math.round(day.totalHours * 60)) : '--'}
+                          </td>
+                          <td className="pl-3 py-2 text-right" style={{ color: day.overtime ? 'var(--accent)' : 'var(--text-muted)' }}>
+                            {day.overtime ? formatDuration(Math.round(day.overtime * 60)) : '--'}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                  {totals && (
+                    <tfoot>
+                      <tr className="border-t-2" style={{ borderColor: 'var(--border)' }}>
+                        <td colSpan={6} className="py-2 text-right text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>
+                          Totals
+                        </td>
+                        <td className="py-2 px-3 text-right text-sm font-bold" style={{ color: 'var(--text-primary)' }}>
+                          {formatDuration(Math.round(totals.totalHours * 60))}
+                        </td>
+                        <td className="py-2 pl-3 text-right text-sm font-bold" style={{ color: 'var(--accent)' }}>
+                          {formatDuration(Math.round(totals.overtime * 60))}
+                        </td>
+                      </tr>
+                    </tfoot>
+                  )}
+                </table>
+              </div>
+
+              {/* Disconnections summary */}
+              {disconnections && disconnections.data.length > 0 && (
+                <div>
+                  <p className="mb-2 text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>
+                    Disconnections
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    {(Object.keys(DISCONNECTION_TYPE_LABELS) as DisconnectionType[])
+                      .filter((type) => disconnections.counts[type] > 0)
+                      .map((type) => (
+                        <Badge key={type} variant="outline">
+                          {DISCONNECTION_TYPE_LABELS[type]}: {disconnections.counts[type]}
+                        </Badge>
+                      ))}
+                  </div>
+                  <div className="mt-3 space-y-1">
+                    {disconnections.data.map((d) => (
+                      <p key={d.id} className="text-xs" style={{ color: 'var(--text-muted)' }}>
+                        {new Date(d.date + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
+                        {' — '}
+                        {DISCONNECTION_TYPE_LABELS[d.type]}
+                        {d.reason && `: ${d.reason}`}
+                      </p>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Payment summary */}
+              {totalPay != null && (
+                <div className="space-y-1 border-t pt-4" style={{ borderColor: 'var(--border)' }}>
+                  <div className="flex justify-between text-sm" style={{ color: 'var(--text-secondary)' }}>
+                    <span>Regular ({formatDuration(Math.round((totals?.totalHours ?? 0) * 60))} × {formatCurrency(payRate!)})</span>
+                    <span>{formatCurrency(regularPay!)}</span>
+                  </div>
+                  {otPay! > 0 && (
+                    <div className="flex justify-between text-sm" style={{ color: 'var(--text-secondary)' }}>
+                      <span>Overtime ({formatDuration(Math.round((totals?.overtime ?? 0) * 60))} × {formatCurrency(otPayRate!)})</span>
+                      <span>{formatCurrency(otPay!)}</span>
+                    </div>
+                  )}
+                  <div className="flex justify-between pt-2 text-base font-bold" style={{ color: 'var(--text-primary)' }}>
+                    <span>Total Payment</span>
+                    <span>{formatCurrency(totalPay)}</span>
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </div>
       )}
     </div>
   );

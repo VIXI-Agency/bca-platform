@@ -20,6 +20,8 @@ export interface User {
   city: string;
   state: string;
   country: string;
+  payRate: number | null;
+  otPayRate: number | null;
 }
 
 export interface CreateUserPayload {
@@ -34,6 +36,8 @@ export interface CreateUserPayload {
   country: string;
   isPartTime: boolean;
   sendEmail: boolean;
+  payRate?: number;
+  otPayRate?: number;
 }
 
 export interface UpdateUserPayload {
@@ -50,6 +54,8 @@ export interface UpdateUserPayload {
   isPartTime: boolean;
   smsAccess: boolean;
   sendEmail: boolean;
+  payRate?: number;
+  otPayRate?: number;
 }
 
 export interface ScheduleDay {

@@ -23,8 +23,11 @@ export async function GET() {
         idUser: true,
         name: true,
         lastname: true,
+        email: true,
         idRole: true,
         isPartTime: true,
+        payRate: true,
+        otPayRate: true,
       },
       orderBy: [{ name: 'asc' }, { lastname: 'asc' }],
     });
@@ -32,8 +35,11 @@ export async function GET() {
     const data = employees.map((emp) => ({
       userId: emp.idUser,
       name: `${emp.name ?? ''} ${emp.lastname ?? ''}`.trim(),
+      email: emp.email ?? '',
       role: emp.idRole,
       isPartTime: emp.isPartTime,
+      payRate: emp.payRate ? Number(emp.payRate) : null,
+      otPayRate: emp.otPayRate ? Number(emp.otPayRate) : null,
     }));
 
     return NextResponse.json({ data });

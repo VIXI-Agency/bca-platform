@@ -373,8 +373,18 @@ a:hover {
 }
 
 /* Printable reports (e.g. the payroll Payment Report): hide everything
-   except the element marked .print-area, and let it fill the page. */
+   except the element marked .print-area, and let it fill the page.
+   Shown only in print — a letterhead line, for example. */
+.print-only {
+  display: none;
+}
+
 @media print {
+  @page {
+    size: landscape;
+    margin: 12mm;
+  }
+
   body * {
     visibility: hidden;
   }
@@ -390,5 +400,51 @@ a:hover {
   }
   .no-print {
     display: none !important;
+  }
+  .print-only {
+    display: block;
+  }
+
+  /* The app is dark-themed everywhere else; the printed report is its own
+     light, professional palette, scoped to .print-area so the on-screen
+     dashboard is untouched. Every component here (Card, Badge, etc.) is
+     already styled off these custom properties, so redefining them is
+     enough to repaint the whole report — no component markup to touch. */
+  .print-area {
+    --bg-primary: #ffffff;
+    --bg-secondary: #f4f4f6;
+    --bg-card: #ffffff;
+    --bg-elevated: #f4f4f6;
+
+    --accent: #1d4ed8;
+    --accent-hover: #1e40af;
+    --accent-subtle: #eef2ff;
+    --accent-glow: transparent;
+    --accent-glow-sm: transparent;
+    --accent-contrast: #ffffff;
+    --purple: #7e22ce;
+    --purple-subtle: #f5eeff;
+
+    --text-primary: #0f172a;
+    --text-secondary: #475569;
+    --text-muted: #64748b;
+
+    --success: #15803d;
+    --danger: #b91c1c;
+    --warning: #b45309;
+    --success-subtle: #f0fdf4;
+    --danger-subtle: #fef2f2;
+    --warning-subtle: #fffbeb;
+
+    --border: #cbd5e1;
+    --border-strong: #94a3b8;
+
+    --shadow-sm: none;
+    --shadow-md: none;
+    --shadow-lg: none;
+    --shadow-glow: none;
+
+    background: #ffffff;
+    color: #0f172a;
   }
 }

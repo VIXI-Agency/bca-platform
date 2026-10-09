@@ -1816,6 +1816,17 @@ function PaymentReportTab() {
 
       {selectedUserId && !isLoading && timesheet && (
         <div className="print-area space-y-6">
+          {/* Letterhead: print only */}
+          <div className="print-only mb-2 flex items-center justify-between border-b-2 pb-3" style={{ borderColor: 'var(--text-primary)' }}>
+            <div>
+              <p className="text-xl font-bold tracking-tight" style={{ color: 'var(--text-primary)' }}>
+                Pulse<span style={{ color: 'var(--accent)' }}>BC</span>
+              </p>
+              <p className="text-xs" style={{ color: 'var(--text-secondary)' }}>Benjamin Chaise &amp; Associates</p>
+            </div>
+            <p className="text-xs uppercase tracking-widest" style={{ color: 'var(--text-muted)' }}>Payment Report</p>
+          </div>
+
           <Card>
             <CardContent className="space-y-6 py-6">
               {/* Header */}

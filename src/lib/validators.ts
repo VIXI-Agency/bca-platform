@@ -121,6 +121,13 @@ export const timeEditSchema = z.object({
   reason: z.string().trim().min(8, 'Explain why this time is being changed (at least 8 characters)').max(500),
 });
 
+// Payroll — discretionary bonus (manual, per employee per pay period)
+export const payrollBonusSchema = z.object({
+  period: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Date must be YYYY-MM-DD format'),
+  amount: z.number().nonnegative().max(999999.99),
+  note: z.string().max(500).optional(),
+});
+
 // Quotes
 export const quoteSchema = z.object({
   quote: z.string().min(1).max(1000),
@@ -290,6 +297,7 @@ export type ReportFilterInput = z.infer<typeof reportFilterSchema>;
 export type CreateUserInput = z.infer<typeof createUserSchema>;
 export type UpdateUserInput = z.infer<typeof updateUserSchema>;
 export type TimeEditInput = z.infer<typeof timeEditSchema>;
+export type PayrollBonusInput = z.infer<typeof payrollBonusSchema>;
 export type QuoteInput = z.infer<typeof quoteSchema>;
 export type RebuttalInput = z.infer<typeof rebuttalSchema>;
 export type SendSmsInput = z.infer<typeof sendSmsSchema>;

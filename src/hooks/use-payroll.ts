@@ -153,3 +153,24 @@ export function usePaymentHistory(filters: PaymentHistoryFilters) {
     queryFn: () => fetchJson(`/api/admin/payroll/history?${params}`),
   });
 }
+
+export interface PayrollEmployee {
+  userId: number;
+  name: string;
+}
+
+/** Employees with payroll history — not just currently-active staff, so a
+ *  terminated employee's past statements stay filterable. Separate from
+ *  useEmployeeList() in use-admin-time (Administrator-only, active staff
+ *  only) so a role-2 manager granted admin_payroll can still use this
+ *  filter even though Time Management itself is locked to Administrator. */
+export function usePayrollEmployees() {
+  return useQuery<PayrollEmployee[]>({
+    queryKey: ['payroll-employees'],
+    queryFn: async () => {
+      const json = await fetchJson<{ data: PayrollEmployee[] }>('/api/admin/payroll/employees');
+      return json.data;
+    },
+    staleTime: 5 * 60 * 1000,
+  });
+}

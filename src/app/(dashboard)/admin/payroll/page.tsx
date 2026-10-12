@@ -40,9 +40,9 @@ import {
   useMarkStatementsPaid,
   useVoidPayRun,
   usePaymentHistory,
+  usePayrollEmployees,
   type PayStatementRow,
 } from '@/hooks/use-payroll';
-import { useEmployeeList } from '@/hooks/use-admin-time';
 import { PAYMENT_METHODS, PAYMENT_METHOD_LABELS, type PaymentMethod } from '@/lib/payroll/constants';
 import { getPayPeriodStart } from '@/lib/time';
 
@@ -480,7 +480,7 @@ function PaymentHistoryTab() {
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [page, setPage] = useState(1);
 
-  const { data: employees } = useEmployeeList();
+  const { data: employees } = usePayrollEmployees();
   const { data, isLoading } = usePaymentHistory({
     userId: employeeFilter !== 'all' ? Number(employeeFilter) : undefined,
     status: statusFilter !== 'all' ? (statusFilter as 'pending' | 'paid' | 'void') : undefined,

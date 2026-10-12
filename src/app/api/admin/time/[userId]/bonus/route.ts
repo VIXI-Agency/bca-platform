@@ -4,6 +4,20 @@ import { prisma } from '@/lib/prisma';
 import { clockWeekSchema, payrollBonusSchema } from '@/lib/validators';
 import { getTodayRangePST, getPayPeriodStart } from '@/lib/time';
 
+const BONUS_FIELDS = [
+  'discretionaryBonus',
+  'collectionsBonus',
+  'trainingBonus',
+  'managerBonus',
+  'wheelSpins',
+  'accounts',
+  'reloads',
+  'verifiedLeads',
+] as const;
+
+type BonusFieldKey = (typeof BONUS_FIELDS)[number];
+type BonusAmounts = Record<BonusFieldKey, number | null>;
+
 function resolvePeriodStart(week: string | null): Date {
   if (week) {
     const parts = week.split('-').map(Number);
@@ -50,10 +64,11 @@ export async function GET(
       where: { idUser_periodStart: { idUser: targetUserId, periodStart } },
     });
 
-    return NextResponse.json({
-      amount: bonus ? Number(bonus.amount) : null,
-      note: bonus?.note ?? null,
-    });
+    const amounts: BonusAmounts = Object.fromEntries(
+      BONUS_FIELDS.map((key) => [key, bonus?.[key] != null ? Number(bonus[key]) : null]),
+    ) as BonusAmounts;
+
+    return NextResponse.json(amounts);
   } catch (error) {
     console.error('Admin time bonus GET error:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
@@ -91,28 +106,34 @@ export async function PUT(
       );
     }
 
-    const { period, amount, note } = parsed.data;
+    const { period, ...fields } = parsed.data;
     const parts = period.split('-').map(Number);
     const periodStart = getPayPeriodStart(new Date(parts[0], parts[1] - 1, parts[2]));
+
+    const fieldData = Object.fromEntries(
+      BONUS_FIELDS.map((key) => [key, fields[key] ?? null]),
+    );
 
     const bonus = await prisma.payrollBonus.upsert({
       where: { idUser_periodStart: { idUser: targetUserId, periodStart } },
       create: {
         idUser: targetUserId,
         periodStart,
-        amount,
-        note: note || null,
+        ...fieldData,
         modifiedBy: String(adminUserId),
       },
       update: {
-        amount,
-        note: note || null,
+        ...fieldData,
         modifiedBy: String(adminUserId),
         modifiedAt: new Date(),
       },
     });
 
-    return NextResponse.json({ amount: Number(bonus.amount), note: bonus.note ?? null });
+    const amounts: BonusAmounts = Object.fromEntries(
+      BONUS_FIELDS.map((key) => [key, bonus[key] != null ? Number(bonus[key]) : null]),
+    ) as BonusAmounts;
+
+    return NextResponse.json(amounts);
   } catch (error) {
     console.error('Admin time bonus PUT error:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });

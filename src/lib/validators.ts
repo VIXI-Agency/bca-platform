@@ -121,11 +121,19 @@ export const timeEditSchema = z.object({
   reason: z.string().trim().min(8, 'Explain why this time is being changed (at least 8 characters)').max(500),
 });
 
-// Payroll — discretionary bonus (manual, per employee per pay period)
+// Payroll — bonus/incentive categories (manual, per employee per pay period)
+const bonusAmountField = z.number().nonnegative().max(999999.99).nullable().optional();
+
 export const payrollBonusSchema = z.object({
   period: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Date must be YYYY-MM-DD format'),
-  amount: z.number().nonnegative().max(999999.99),
-  note: z.string().max(500).optional(),
+  discretionaryBonus: bonusAmountField,
+  collectionsBonus: bonusAmountField,
+  trainingBonus: bonusAmountField,
+  managerBonus: bonusAmountField,
+  wheelSpins: bonusAmountField,
+  accounts: bonusAmountField,
+  reloads: bonusAmountField,
+  verifiedLeads: bonusAmountField,
 });
 
 // Quotes

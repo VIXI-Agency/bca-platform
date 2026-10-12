@@ -53,6 +53,8 @@ import {
   useUpdatePayRate,
   useBonus,
   useSaveBonus,
+  BONUS_FIELDS,
+  type BonusFieldKey,
   type EmployeeStatus,
   type DayLog,
   type Audit,
@@ -1671,6 +1673,17 @@ const DISCONNECTION_TYPE_LABELS: Record<DisconnectionType, string> = {
   other: 'Other',
 };
 
+const BONUS_FIELD_LABELS: Record<BonusFieldKey, string> = {
+  discretionaryBonus: 'Discretionary Bonus',
+  collectionsBonus: 'Collections Bonus',
+  trainingBonus: 'Training Bonus',
+  managerBonus: 'Manager Bonus',
+  wheelSpins: 'Wheel Spins',
+  accounts: 'Accounts',
+  reloads: 'Reloads',
+  verifiedLeads: 'Verified Leads',
+};
+
 function formatCurrency(amount: number): string {
   return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(amount);
 }
@@ -1685,7 +1698,9 @@ function PaymentReportTab() {
   const [empSearch, setEmpSearch] = useState('');
   const [payRateInput, setPayRateInput] = useState('');
   const [otPayRateInput, setOtPayRateInput] = useState('');
-  const [bonusInput, setBonusInput] = useState('');
+  const [bonusInputs, setBonusInputs] = useState<Record<BonusFieldKey, string>>(
+    () => Object.fromEntries(BONUS_FIELDS.map((key) => [key, ''])) as Record<BonusFieldKey, string>,
+  );
 
   const weekOptions = useMemo(() => generateWeekOptions(24), []);
 
@@ -1713,11 +1728,16 @@ function PaymentReportTab() {
     setOtPayRateInput(employee?.otPayRate != null ? String(employee.otPayRate) : '');
   }, [employee?.userId, employee?.payRate, employee?.otPayRate]);
 
-  // Bonus is scoped per employee + pay period (not a standing rate), so it
-  // re-seeds whenever either changes, from whatever's saved for that period.
+  // Bonus categories are scoped per employee + pay period (not a standing
+  // rate), so they re-seed whenever either changes, from whatever's saved
+  // for that period.
   useEffect(() => {
-    setBonusInput(bonus?.amount != null ? String(bonus.amount) : '');
-  }, [userId, selectedWeek, bonus?.amount]);
+    setBonusInputs(
+      Object.fromEntries(
+        BONUS_FIELDS.map((key) => [key, bonus?.[key] != null ? String(bonus[key]) : '']),
+      ) as Record<BonusFieldKey, string>,
+    );
+  }, [userId, selectedWeek, bonus]);
 
   const filteredEmployees = useMemo(() => {
     if (!employees) return [];
@@ -1749,17 +1769,22 @@ function PaymentReportTab() {
   // total — only block on it when there's actual overtime to price.
   const hasOvertime = (totals?.overtime ?? 0) > 0;
   const otPay = totals ? (hasOvertime ? (otPayRate != null ? totals.overtime * otPayRate : null) : 0) : null;
-  // Discretionary bonus: a manually-entered dollar amount, not computed from
-  // any formula — kept separate from the hourly/OT math and simply added in.
-  const parsedBonus = bonusInput.trim() ? Number(bonusInput) : null;
-  const bonusAmount = parsedBonus != null && !isNaN(parsedBonus) && parsedBonus >= 0 ? parsedBonus : 0;
-  const totalPay = regularPay != null && otPay != null ? regularPay + otPay + bonusAmount : null;
+  // Bonus/incentive categories: manually-entered dollar amounts, not computed
+  // from any formula — kept separate from the hourly/OT math and summed in.
+  const bonusAmounts = Object.fromEntries(
+    BONUS_FIELDS.map((key) => {
+      const raw = bonusInputs[key].trim() ? Number(bonusInputs[key]) : null;
+      return [key, raw != null && !isNaN(raw) && raw >= 0 ? raw : 0];
+    }),
+  ) as Record<BonusFieldKey, number>;
+  const bonusTotal = BONUS_FIELDS.reduce((sum, key) => sum + bonusAmounts[key], 0);
+  const totalPay = regularPay != null && otPay != null ? regularPay + otPay + bonusTotal : null;
   const periodLabel = weekOptions.find((w) => w.value === selectedWeek)?.label ?? '';
 
   const rateIsDirty =
     employee != null &&
     (payRate !== (employee.payRate ?? null) || otPayRate !== (employee.otPayRate ?? null));
-  const bonusIsDirty = bonusAmount !== (bonus?.amount ?? 0);
+  const bonusIsDirty = BONUS_FIELDS.some((key) => bonusAmounts[key] !== (bonus?.[key] ?? 0));
 
   async function handleSaveRate() {
     if (!employee) return;
@@ -1772,7 +1797,7 @@ function PaymentReportTab() {
 
   async function handleSaveBonus() {
     if (!userId || !selectedWeek) return;
-    await saveBonus.mutateAsync({ userId, week: selectedWeek, amount: bonusAmount });
+    await saveBonus.mutateAsync({ userId, week: selectedWeek, ...bonusAmounts });
   }
 
   return (
@@ -1966,44 +1991,50 @@ function PaymentReportTab() {
                 )}
               </div>
 
-              {/* Discretionary bonus — manual per-period amount, separate from
-                  the hourly rate, added straight into the total below and
-                  shown on the printed report. */}
+              {/* Bonus/incentive categories — manual per-period amounts, separate
+                  from the hourly rate, added straight into the total below and
+                  shown as their own line items on the printed report. */}
               <div
-                className="no-print flex flex-wrap items-end gap-3 rounded-lg border p-3"
+                className="no-print space-y-3 rounded-lg border p-3"
                 style={{ borderColor: 'var(--border)', backgroundColor: 'var(--bg-secondary)' }}
               >
-                <div className="space-y-1">
-                  <Label htmlFor="report-bonus" className="text-xs">Discretionary Bonus ($)</Label>
-                  <Input
-                    id="report-bonus"
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    className="h-8 w-32"
-                    value={bonusInput}
-                    onChange={(e) => setBonusInput(e.target.value)}
-                    placeholder="0.00"
-                    disabled={bonusLoading}
-                  />
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <Label className="text-xs">Bonuses &amp; Incentives (optional, per pay period)</Label>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={handleSaveBonus}
+                    disabled={!bonusIsDirty || saveBonus.isPending || bonusLoading}
+                  >
+                    {saveBonus.isPending ? (
+                      <Loading size="sm" />
+                    ) : bonusIsDirty ? (
+                      'Save Bonuses'
+                    ) : (
+                      'Saved'
+                    )}
+                  </Button>
                 </div>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={handleSaveBonus}
-                  disabled={!bonusIsDirty || saveBonus.isPending || bonusLoading}
-                >
-                  {saveBonus.isPending ? (
-                    <Loading size="sm" />
-                  ) : bonusIsDirty ? (
-                    'Save Bonus'
-                  ) : (
-                    'Saved'
-                  )}
-                </Button>
-                <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
-                  Manual amount for this pay period only — not calculated automatically.
-                </p>
+                <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                  {BONUS_FIELDS.map((key) => (
+                    <div key={key} className="space-y-1">
+                      <Label htmlFor={`report-bonus-${key}`} className="text-xs" style={{ color: 'var(--text-secondary)' }}>
+                        {BONUS_FIELD_LABELS[key]}
+                      </Label>
+                      <Input
+                        id={`report-bonus-${key}`}
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        className="h-8"
+                        value={bonusInputs[key]}
+                        onChange={(e) => setBonusInputs((prev) => ({ ...prev, [key]: e.target.value }))}
+                        placeholder="0.00"
+                        disabled={bonusLoading}
+                      />
+                    </div>
+                  ))}
+                </div>
               </div>
 
               {/* Timesheet table */}
@@ -2134,12 +2165,12 @@ function PaymentReportTab() {
                       <span>{formatCurrency(otPay!)}</span>
                     </div>
                   )}
-                  {bonusAmount > 0 && (
-                    <div className="flex justify-between text-sm print:text-[9.5px]" style={{ color: 'var(--text-secondary)' }}>
-                      <span>Discretionary Bonus</span>
-                      <span>{formatCurrency(bonusAmount)}</span>
+                  {BONUS_FIELDS.filter((key) => bonusAmounts[key] > 0).map((key) => (
+                    <div key={key} className="flex justify-between text-sm print:text-[9.5px]" style={{ color: 'var(--text-secondary)' }}>
+                      <span>{BONUS_FIELD_LABELS[key]}</span>
+                      <span>{formatCurrency(bonusAmounts[key])}</span>
                     </div>
-                  )}
+                  ))}
                   <div className="flex justify-between pt-2 text-base font-bold print:pt-[3px] print:text-[11px]" style={{ color: 'var(--text-primary)' }}>
                     <span>Total Payment</span>
                     <span>{formatCurrency(totalPay)}</span>

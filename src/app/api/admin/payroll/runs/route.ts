@@ -196,50 +196,52 @@ export async function POST(request: Request) {
     });
 
     const employees = await activeEmployees();
-    const existingStatements = await prisma.payStatement.findMany({
-      where: { idPayRun: run.idPayRun },
-      select: { idStatement: true, idUser: true, status: true },
-    });
-    const existingByUser = new Map(existingStatements.map((s) => [s.idUser, s]));
 
     for (const emp of employees) {
-      const already = existingByUser.get(emp.idUser);
-      // Never overwrite a statement someone has already been paid for — only
-      // pending/void statements get recomputed on (re-)approval.
-      if (already?.status === 'paid') continue;
-
       const amounts = await computePayStatement(emp.idUser, periodStart);
       const employeeName = `${emp.name ?? ''} ${emp.lastname ?? ''}`.trim();
+      const statementData = {
+        employeeName,
+        regularHours: amounts.regularHours,
+        overtimeHours: amounts.overtimeHours,
+        payRate: amounts.payRate,
+        otPayRate: amounts.otPayRate,
+        regularPay: amounts.regularPay,
+        overtimePay: amounts.overtimePay,
+        bonusTotal: amounts.bonusTotal,
+        grossPay: amounts.grossPay,
+      };
 
-      const statement = await prisma.payStatement.upsert({
-        where: { idPayRun_idUser: { idPayRun: run.idPayRun, idUser: emp.idUser } },
-        create: {
-          idPayRun: run.idPayRun,
-          idUser: emp.idUser,
-          employeeName,
-          regularHours: amounts.regularHours,
-          overtimeHours: amounts.overtimeHours,
-          payRate: amounts.payRate,
-          otPayRate: amounts.otPayRate,
-          regularPay: amounts.regularPay,
-          overtimePay: amounts.overtimePay,
-          bonusTotal: amounts.bonusTotal,
-          grossPay: amounts.grossPay,
-          status: 'pending',
-        },
-        update: {
-          employeeName,
-          regularHours: amounts.regularHours,
-          overtimeHours: amounts.overtimeHours,
-          payRate: amounts.payRate,
-          otPayRate: amounts.otPayRate,
-          regularPay: amounts.regularPay,
-          overtimePay: amounts.overtimePay,
-          bonusTotal: amounts.bonusTotal,
-          grossPay: amounts.grossPay,
-          status: 'pending',
-        },
+      // Atomic guard against a concurrent "mark paid": a plain upsert would
+      // unconditionally overwrite a statement another request just marked
+      // paid between a pre-loop read and this write. Scoping the update's
+      // WHERE to status != 'paid' makes the database itself enforce "never
+      // overwrite a paid statement", not a snapshot taken before the loop.
+      const updated = await prisma.payStatement.updateMany({
+        where: { idPayRun: run.idPayRun, idUser: emp.idUser, status: { not: 'paid' } },
+        data: { ...statementData, status: 'pending' },
       });
+
+      let statementId: number;
+      if (updated.count > 0) {
+        const row = await prisma.payStatement.findUniqueOrThrow({
+          where: { idPayRun_idUser: { idPayRun: run.idPayRun, idUser: emp.idUser } },
+          select: { idStatement: true },
+        });
+        statementId = row.idStatement;
+      } else {
+        // Nothing updated: either no statement exists yet, or it exists and
+        // is already paid (in which case we leave it untouched).
+        const existing = await prisma.payStatement.findUnique({
+          where: { idPayRun_idUser: { idPayRun: run.idPayRun, idUser: emp.idUser } },
+          select: { idStatement: true },
+        });
+        if (existing) continue;
+        const created = await prisma.payStatement.create({
+          data: { idPayRun: run.idPayRun, idUser: emp.idUser, ...statementData, status: 'pending' },
+        });
+        statementId = created.idStatement;
+      }
 
       const lines: { kind: string; category: string | null; label: string; quantity: number | null; rate: number | null; amount: number }[] = [
         { kind: 'regular', category: null, label: 'Regular', quantity: amounts.regularHours, rate: amounts.payRate, amount: amounts.regularPay },
@@ -255,9 +257,9 @@ export async function POST(request: Request) {
       }
 
       await prisma.$transaction([
-        prisma.payStatementLine.deleteMany({ where: { idStatement: statement.idStatement } }),
+        prisma.payStatementLine.deleteMany({ where: { idStatement: statementId } }),
         prisma.payStatementLine.createMany({
-          data: lines.map((l) => ({ ...l, idStatement: statement.idStatement })),
+          data: lines.map((l) => ({ ...l, idStatement: statementId })),
         }),
       ]);
     }

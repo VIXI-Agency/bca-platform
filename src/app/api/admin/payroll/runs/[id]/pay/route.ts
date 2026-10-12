@@ -50,23 +50,42 @@ export async function POST(
     if (statements.length !== statementIds.length) {
       return NextResponse.json({ error: 'One or more statements were not found in this run' }, { status: 404 });
     }
-    const alreadyPaid = statements.find((s) => s.status === 'paid');
-    if (alreadyPaid) {
-      return NextResponse.json({ error: `${alreadyPaid.employeeName} is already marked paid` }, { status: 409 });
-    }
 
     const parts = paidDate.split('-').map(Number);
     const paidDateValue = new Date(Date.UTC(parts[0], parts[1] - 1, parts[2]));
 
-    await prisma.payStatement.updateMany({
-      where: { idStatement: { in: statementIds } },
-      data: {
-        status: 'paid',
-        paymentMethod,
-        paymentReference: paymentReference || null,
-        paidDate: paidDateValue,
-      },
-    });
+    // Atomic guard: the WHERE's status: 'pending' is checked by the database
+    // at write time, not by a find() a moment earlier, so a statement a
+    // concurrent request already marked paid can't be silently re-marked by
+    // this one. If fewer rows matched than requested, something changed
+    // underneath us — roll the whole update back (via the thrown error,
+    // inside the transaction) rather than leave a partial paid batch sitting
+    // next to a 409 response.
+    const STATEMENTS_CHANGED = 'STATEMENTS_CHANGED';
+    try {
+      await prisma.$transaction(async (tx) => {
+        const updateResult = await tx.payStatement.updateMany({
+          where: { idStatement: { in: statementIds }, idPayRun: runId, status: 'pending' },
+          data: {
+            status: 'paid',
+            paymentMethod,
+            paymentReference: paymentReference || null,
+            paidDate: paidDateValue,
+          },
+        });
+        if (updateResult.count !== statementIds.length) {
+          throw new Error(STATEMENTS_CHANGED);
+        }
+      });
+    } catch (err) {
+      if (err instanceof Error && err.message === STATEMENTS_CHANGED) {
+        return NextResponse.json(
+          { error: 'One or more statements were already paid or changed by another request — refresh and try again.' },
+          { status: 409 }
+        );
+      }
+      throw err;
+    }
 
     const allStatements = await prisma.payStatement.findMany({
       where: { idPayRun: runId },

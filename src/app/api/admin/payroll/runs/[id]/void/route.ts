@@ -36,38 +36,54 @@ export async function POST(
       );
     }
 
-    const run = await prisma.payRun.findUnique({
-      where: { idPayRun: runId },
-      include: { statements: { select: { idStatement: true, status: true } } },
-    });
-    if (!run) {
-      return NextResponse.json({ error: 'Pay run not found' }, { status: 404 });
-    }
-    if (run.status === 'paid') {
-      return NextResponse.json({ error: 'A paid pay run cannot be voided' }, { status: 409 });
-    }
-    if (run.statements.some((s) => s.status === 'paid')) {
-      return NextResponse.json(
-        { error: 'Some employees in this run are already marked paid — it cannot be voided as a whole.' },
-        { status: 409 }
-      );
-    }
+    // The existence/status checks and the write all happen inside one
+    // transaction, re-reading current state right before writing — a
+    // concurrent "mark paid" landing between a separate check and write
+    // (as a split findUnique + $transaction([...]) would allow) could
+    // otherwise still slip a statement to 'paid' a moment after we decided
+    // it was safe to void.
+    const NOT_FOUND = 'NOT_FOUND';
+    const ALREADY_PAID = 'ALREADY_PAID';
+    const HAS_PAID_STATEMENTS = 'HAS_PAID_STATEMENTS';
+    try {
+      await prisma.$transaction(async (tx) => {
+        const run = await tx.payRun.findUnique({
+          where: { idPayRun: runId },
+          include: { statements: { select: { status: true } } },
+        });
+        if (!run) throw new Error(NOT_FOUND);
+        if (run.status === 'paid') throw new Error(ALREADY_PAID);
+        if (run.statements.some((s) => s.status === 'paid')) throw new Error(HAS_PAID_STATEMENTS);
 
-    await prisma.$transaction([
-      prisma.payRun.update({
-        where: { idPayRun: runId },
-        data: {
-          status: 'void',
-          voidedBy: String(adminUserId),
-          voidedAt: new Date(),
-          voidReason: parsed.data.reason,
-        },
-      }),
-      prisma.payStatement.updateMany({
-        where: { idPayRun: runId },
-        data: { status: 'void' },
-      }),
-    ]);
+        await tx.payRun.update({
+          where: { idPayRun: runId },
+          data: {
+            status: 'void',
+            voidedBy: String(adminUserId),
+            voidedAt: new Date(),
+            voidReason: parsed.data.reason,
+          },
+        });
+        await tx.payStatement.updateMany({
+          where: { idPayRun: runId },
+          data: { status: 'void' },
+        });
+      });
+    } catch (err) {
+      if (err instanceof Error && err.message === NOT_FOUND) {
+        return NextResponse.json({ error: 'Pay run not found' }, { status: 404 });
+      }
+      if (err instanceof Error && err.message === ALREADY_PAID) {
+        return NextResponse.json({ error: 'A paid pay run cannot be voided' }, { status: 409 });
+      }
+      if (err instanceof Error && err.message === HAS_PAID_STATEMENTS) {
+        return NextResponse.json(
+          { error: 'Some employees in this run are already marked paid — it cannot be voided as a whole.' },
+          { status: 409 }
+        );
+      }
+      throw err;
+    }
 
     return NextResponse.json({ success: true });
   } catch (error) {

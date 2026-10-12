@@ -101,7 +101,12 @@ export default function AdminPayrollPage() {
   const { data: session } = useSession();
   const userRole = (session?.user as { role?: number })?.role;
 
-  if (userRole !== 1) {
+  // Matches the API's own gate (GET/history allow 1 or 2; approve/pay/void
+  // are role-1-only and checked server-side, with the buttons for them
+  // hidden below for anyone else) — a role-2 manager granted admin_payroll
+  // from the Permissions page should be able to view this page, not just
+  // pass middleware and then hit a wall.
+  if (userRole !== 1 && userRole !== 2) {
     return (
       <>
         <Header title="Payroll" />
@@ -129,7 +134,7 @@ export default function AdminPayrollPage() {
           </TabsList>
 
           <TabsContent value="run">
-            <PayRunTab />
+            <PayRunTab canManage={userRole === 1} />
           </TabsContent>
 
           <TabsContent value="history">
@@ -145,7 +150,7 @@ export default function AdminPayrollPage() {
 /*  TAB 1: Pay Run                                     */
 /* -------------------------------------------------- */
 
-function PayRunTab() {
+function PayRunTab({ canManage }: { canManage: boolean }) {
   const [selectedWeek, setSelectedWeek] = useState('');
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [payDialogOpen, setPayDialogOpen] = useState(false);
@@ -226,8 +231,9 @@ function PayRunTab() {
     setVoidReason('');
   }
 
-  const canApprove = data && data.run.status !== 'paid';
-  const canVoid = data?.run.status === 'approved';
+  const canApprove = canManage && data && data.run.status !== 'paid';
+  const canVoid = canManage && data?.run.status === 'approved';
+  const showPaySelection = canManage && payableStatements.length > 0;
 
   return (
     <div className="space-y-6 pt-4">
@@ -281,7 +287,7 @@ function PayRunTab() {
                   {data?.run.status === 'approved' ? 'Re-approve (recompute unpaid)' : 'Approve This Period'}
                 </Button>
               )}
-              {payableStatements.length > 0 && (
+              {showPaySelection && (
                 <Button
                   variant="outline"
                   onClick={() => setPayDialogOpen(true)}
@@ -319,7 +325,7 @@ function PayRunTab() {
                     className="border-b text-left text-xs font-medium uppercase tracking-wider"
                     style={{ borderColor: 'var(--border)', color: 'var(--text-muted)' }}
                   >
-                    {payableStatements.length > 0 && (
+                    {showPaySelection && (
                       <th className="pb-2 pr-2">
                         <Checkbox
                           checked={allSelected}
@@ -342,7 +348,7 @@ function PayRunTab() {
                 <tbody>
                   {data.statements.map((s) => (
                     <tr key={s.userId} className="border-b" style={{ borderColor: 'var(--border)' }}>
-                      {payableStatements.length > 0 && (
+                      {showPaySelection && (
                         <td className="py-2 pr-2">
                           {s.id != null && s.status === 'pending' && (
                             <Checkbox
@@ -382,7 +388,7 @@ function PayRunTab() {
                 </tbody>
                 <tfoot>
                   <tr className="border-t-2" style={{ borderColor: 'var(--border)' }}>
-                    <td colSpan={payableStatements.length > 0 ? 2 : 1} className="py-2 pr-3 text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>
+                    <td colSpan={showPaySelection ? 2 : 1} className="py-2 pr-3 text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>
                       Totals
                     </td>
                     <td className="px-3 py-2 text-right text-sm font-bold">{formatHours(totals.regularHours)}</td>

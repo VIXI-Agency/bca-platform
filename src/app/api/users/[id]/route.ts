@@ -110,6 +110,14 @@ export async function PUT(
       return NextResponse.json({ error: 'Closers can only manage remote agent accounts' }, { status: 403 });
     }
 
+    // Pay rates now feed real payroll math (Payment Report + PayStatement
+    // snapshots on approval) and every change is permanently recorded in
+    // PayRateHistory — restrict who can set them beyond the role-1-or-2 gate
+    // the rest of this endpoint uses for everything else.
+    if (role !== 1 && (body.payRate !== undefined || body.otPayRate !== undefined)) {
+      return NextResponse.json({ error: 'Only an administrator can change pay rates' }, { status: 403 });
+    }
+
     const { password, roleId, timezone, sendEmail, smsAccess, ...rest } = parsed.data;
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any

@@ -13,6 +13,7 @@ export const PERMISSION_LABELS: Record<string, string> = {
   maintenance: 'IT Maintenance',
   admin_users: 'User Management',
   admin_time: 'Time Management',
+  admin_payroll: 'Payroll & Finance',
   admin_quotes: 'Quotes Management',
   admin_rebuttals: 'Rebuttals',
   admin_import: 'Import Leads',
@@ -38,6 +39,7 @@ export function getPermissionKeyForRoute(pathname: string): string | null {
   if (pathname.startsWith('/reports')) return 'reports';
   if (pathname.startsWith('/admin/users')) return 'admin_users';
   if (pathname.startsWith('/admin/time')) return 'admin_time';
+  if (pathname.startsWith('/admin/payroll')) return 'admin_payroll';
   if (pathname.startsWith('/admin/quotes')) return 'admin_quotes';
   if (pathname.startsWith('/admin/rebuttals')) return 'admin_rebuttals';
   if (pathname.startsWith('/admin/import')) return 'admin_import';
@@ -60,6 +62,7 @@ export function getPermissionKeyForApiRoute(pathname: string): string | null {
   // Only /api/scrape/worker/* is exempt from auth, by exact path in middleware.
   if (pathname.startsWith('/api/scrape')) return 'admin_import';
   if (pathname.startsWith('/api/settings')) return 'admin_users';
+  if (pathname.startsWith('/api/admin/payroll')) return 'admin_payroll';
   if (pathname.startsWith('/api/admin/time')) return 'admin_time';
   if (pathname.startsWith('/api/admin/permissions')) return 'admin_permissions';
   if (pathname.startsWith('/api/reports')) return 'reports';

@@ -136,6 +136,35 @@ export const payrollBonusSchema = z.object({
   verifiedLeads: bonusAmountField,
 });
 
+// Payroll — pay run workflow (approve a period's statements, mark paid, void)
+const periodDateString = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Date must be YYYY-MM-DD format');
+
+export const payRunApproveSchema = z.object({
+  period: periodDateString,
+  scheduledPayDate: periodDateString.optional(),
+  notes: z.string().max(1000).optional(),
+});
+
+export const payStatementPaySchema = z.object({
+  statementIds: z.array(z.number().int().positive()).min(1),
+  paymentMethod: z.enum(['direct_deposit', 'wire', 'zelle', 'cash', 'other']),
+  paymentReference: z.string().max(200).optional(),
+  paidDate: periodDateString,
+});
+
+export const payRunVoidSchema = z.object({
+  reason: z.string().trim().min(8, 'Explain why this pay run is being voided (at least 8 characters)').max(500),
+});
+
+export const payrollHistoryFilterSchema = z.object({
+  userId: z.coerce.number().int().positive().optional(),
+  from: periodDateString.optional(),
+  to: periodDateString.optional(),
+  status: z.enum(['pending', 'paid', 'void']).optional(),
+  page: z.coerce.number().int().min(1).default(1),
+  pageSize: z.coerce.number().int().min(1).max(200).default(50),
+});
+
 // Quotes
 export const quoteSchema = z.object({
   quote: z.string().min(1).max(1000),
@@ -306,6 +335,9 @@ export type CreateUserInput = z.infer<typeof createUserSchema>;
 export type UpdateUserInput = z.infer<typeof updateUserSchema>;
 export type TimeEditInput = z.infer<typeof timeEditSchema>;
 export type PayrollBonusInput = z.infer<typeof payrollBonusSchema>;
+export type PayRunApproveInput = z.infer<typeof payRunApproveSchema>;
+export type PayStatementPayInput = z.infer<typeof payStatementPaySchema>;
+export type PayRunVoidInput = z.infer<typeof payRunVoidSchema>;
 export type QuoteInput = z.infer<typeof quoteSchema>;
 export type RebuttalInput = z.infer<typeof rebuttalSchema>;
 export type SendSmsInput = z.infer<typeof sendSmsSchema>;

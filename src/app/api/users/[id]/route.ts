@@ -4,6 +4,12 @@ import { prisma } from '@/lib/prisma';
 import { updateUserSchema } from '@/lib/validators';
 import bcrypt from 'bcryptjs';
 
+function decimalEq(a: unknown, b: number | undefined): boolean {
+  const aNum = a != null ? Number(a) : null;
+  const bNum = b ?? null;
+  return aNum === bNum;
+}
+
 export async function GET(
   _request: NextRequest,
   { params }: { params: Promise<{ id: string }> },
@@ -104,6 +110,14 @@ export async function PUT(
       return NextResponse.json({ error: 'Closers can only manage remote agent accounts' }, { status: 403 });
     }
 
+    // Pay rates now feed real payroll math (Payment Report + PayStatement
+    // snapshots on approval) and every change is permanently recorded in
+    // PayRateHistory — restrict who can set them beyond the role-1-or-2 gate
+    // the rest of this endpoint uses for everything else.
+    if (role !== 1 && (body.payRate !== undefined || body.otPayRate !== undefined)) {
+      return NextResponse.json({ error: 'Only an administrator can change pay rates' }, { status: 403 });
+    }
+
     const { password, roleId, timezone, sendEmail, smsAccess, ...rest } = parsed.data;
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -155,6 +169,24 @@ export async function PUT(
         role: { select: { role: true } },
       },
     });
+
+    // A rate change is kept as a permanent record — this is what lets a
+    // future payroll forecast use the rate that was actually in effect at
+    // the time, and gives the owner a raise history per employee.
+    const rateChanged =
+      ('payRate' in rest && !decimalEq(existing.payRate, rest.payRate)) ||
+      ('otPayRate' in rest && !decimalEq(existing.otPayRate, rest.otPayRate));
+    if (rateChanged) {
+      const adminUserId = (session.user as { userId: number }).userId;
+      await prisma.payRateHistory.create({
+        data: {
+          idUser,
+          payRate: user.payRate,
+          otPayRate: user.otPayRate,
+          changedBy: String(adminUserId),
+        },
+      });
+    }
 
     const { password: _pw, ...safeUser } = user;
 

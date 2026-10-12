@@ -277,8 +277,9 @@ export default function AdminTimePage() {
   const { data: session } = useSession();
   const userRole = (session?.user as { role?: number })?.role;
 
-  // Guard: Admin (1) or Manager (2) only
-  if (userRole !== 1 && userRole !== 2) {
+  // Guard: Administrator only — Time Management (hours, pay rates, the
+  // Payment Report) is no longer open to Closers.
+  if (userRole !== 1) {
     return (
       <>
         <Header title="Time Management" />

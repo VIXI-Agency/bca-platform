@@ -29,7 +29,7 @@ export async function GET(
     }
 
     const role = (session.user as { role: number }).role;
-    if (role !== 1 && role !== 2) {
+    if (role !== 1) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
@@ -77,7 +77,7 @@ export async function PUT(
 
     const role = (session.user as { role: number }).role;
     const adminUserId = (session.user as { userId: number }).userId;
-    if (role !== 1 && role !== 2) {
+    if (role !== 1) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 

@@ -228,15 +228,21 @@ model EmployeeDisconnection {
 }
 
 model PayrollBonus {
-  idBonus     Int      @id @default(autoincrement()) @map("IdBonus")
-  idUser      Int      @map("IdUser")
-  periodStart DateTime @map("PeriodStart") @db.Date
-  amount      Decimal  @map("Amount") @db.Decimal(10, 2)
-  note        String?  @map("Note") @db.NVarChar(500)
-  modifiedBy  String?  @map("ModifiedBy")
-  modifiedAt  DateTime @default(now()) @map("ModifiedAt")
+  idBonus            Int      @id @default(autoincrement()) @map("IdBonus")
+  idUser             Int      @map("IdUser")
+  periodStart        DateTime @map("PeriodStart") @db.Date
+  discretionaryBonus Decimal? @map("DiscretionaryBonus") @db.Decimal(10, 2)
+  collectionsBonus   Decimal? @map("CollectionsBonus") @db.Decimal(10, 2)
+  trainingBonus      Decimal? @map("TrainingBonus") @db.Decimal(10, 2)
+  managerBonus       Decimal? @map("ManagerBonus") @db.Decimal(10, 2)
+  wheelSpins         Decimal? @map("WheelSpins") @db.Decimal(10, 2)
+  accounts           Decimal? @map("Accounts") @db.Decimal(10, 2)
+  reloads            Decimal? @map("Reloads") @db.Decimal(10, 2)
+  verifiedLeads      Decimal? @map("VerifiedLeads") @db.Decimal(10, 2)
+  modifiedBy         String?  @map("ModifiedBy")
+  modifiedAt         DateTime @default(now()) @map("ModifiedAt")
 
-  user        User     @relation("BonusUser", fields: [idUser], references: [idUser], onDelete: NoAction, onUpdate: NoAction)
+  user               User     @relation("BonusUser", fields: [idUser], references: [idUser], onDelete: NoAction, onUpdate: NoAction)
 
   @@unique([idUser, periodStart], map: "UQ_PayrollBonus_User_Period")
   @@map("PayrollBonuses")

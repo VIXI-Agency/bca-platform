@@ -92,10 +92,20 @@ export interface DisconnectionsResponse {
   counts: Record<DisconnectionType, number>;
 }
 
-export interface BonusResponse {
-  amount: number | null;
-  note: string | null;
-}
+export const BONUS_FIELDS = [
+  'discretionaryBonus',
+  'collectionsBonus',
+  'trainingBonus',
+  'managerBonus',
+  'wheelSpins',
+  'accounts',
+  'reloads',
+  'verifiedLeads',
+] as const;
+
+export type BonusFieldKey = (typeof BONUS_FIELDS)[number];
+
+export type BonusResponse = Record<BonusFieldKey, number | null>;
 
 export interface Audit {
   id: number;
@@ -282,21 +292,22 @@ export function useUpdatePayRate() {
   });
 }
 
-/** Upserts the discretionary bonus for one employee's pay period — a manual
- *  dollar amount the admin types in, not computed from any formula, that
- *  gets added into the Payment Report's total and shown on the printed PDF. */
+/** Upserts an employee's bonus/incentive categories for one pay period — each
+ *  a manual dollar amount the admin types in (not computed from any formula)
+ *  that gets added into the Payment Report's total and shown on the printed
+ *  PDF, one line per category that's actually set. */
 export function useSaveBonus() {
   const qc = useQueryClient();
   return useMutation<
     BonusResponse,
     Error,
-    { userId: number; week: string; amount: number; note?: string }
+    { userId: number; week: string } & Partial<Record<BonusFieldKey, number | null>>
   >({
-    mutationFn: ({ userId, week, amount, note }) =>
+    mutationFn: ({ userId, week, ...fields }) =>
       fetchJson(`/api/admin/time/${userId}/bonus`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ period: week, amount, note }),
+        body: JSON.stringify({ period: week, ...fields }),
       }),
     onSuccess: (_data, variables) => {
       qc.invalidateQueries({ queryKey: ['admin-bonus', variables.userId, variables.week] });

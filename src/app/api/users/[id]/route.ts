@@ -4,6 +4,12 @@ import { prisma } from '@/lib/prisma';
 import { updateUserSchema } from '@/lib/validators';
 import bcrypt from 'bcryptjs';
 
+function decimalEq(a: unknown, b: number | undefined): boolean {
+  const aNum = a != null ? Number(a) : null;
+  const bNum = b ?? null;
+  return aNum === bNum;
+}
+
 export async function GET(
   _request: NextRequest,
   { params }: { params: Promise<{ id: string }> },
@@ -155,6 +161,24 @@ export async function PUT(
         role: { select: { role: true } },
       },
     });
+
+    // A rate change is kept as a permanent record — this is what lets a
+    // future payroll forecast use the rate that was actually in effect at
+    // the time, and gives the owner a raise history per employee.
+    const rateChanged =
+      ('payRate' in rest && !decimalEq(existing.payRate, rest.payRate)) ||
+      ('otPayRate' in rest && !decimalEq(existing.otPayRate, rest.otPayRate));
+    if (rateChanged) {
+      const adminUserId = (session.user as { userId: number }).userId;
+      await prisma.payRateHistory.create({
+        data: {
+          idUser,
+          payRate: user.payRate,
+          otPayRate: user.otPayRate,
+          changedBy: String(adminUserId),
+        },
+      });
+    }
 
     const { password: _pw, ...safeUser } = user;
 

@@ -3,19 +3,9 @@ import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { clockWeekSchema, payrollBonusSchema } from '@/lib/validators';
 import { getTodayRangePST, getPayPeriodStart } from '@/lib/time';
+import { isPeriodLocked } from '@/lib/payroll/compute';
+import { BONUS_FIELDS, type BonusFieldKey } from '@/lib/payroll/constants';
 
-const BONUS_FIELDS = [
-  'discretionaryBonus',
-  'collectionsBonus',
-  'trainingBonus',
-  'managerBonus',
-  'wheelSpins',
-  'accounts',
-  'reloads',
-  'verifiedLeads',
-] as const;
-
-type BonusFieldKey = (typeof BONUS_FIELDS)[number];
 type BonusAmounts = Record<BonusFieldKey, number | null>;
 
 function resolvePeriodStart(week: string | null): Date {
@@ -109,6 +99,13 @@ export async function PUT(
     const { period, ...fields } = parsed.data;
     const parts = period.split('-').map(Number);
     const periodStart = getPayPeriodStart(new Date(parts[0], parts[1] - 1, parts[2]));
+
+    if (await isPeriodLocked(periodStart)) {
+      return NextResponse.json(
+        { error: 'This pay period has been approved or paid and can no longer be edited.' },
+        { status: 409 }
+      );
+    }
 
     const fieldData = Object.fromEntries(
       BONUS_FIELDS.map((key) => [key, fields[key] ?? null]),

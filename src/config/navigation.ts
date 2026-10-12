@@ -24,6 +24,7 @@ import {
   Ticket,
   Printer,
   Ban,
+  Wallet,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -119,6 +120,12 @@ export const adminNavigation: NavItem[] = [
     href: '/admin/time',
     icon: Timer,
     permissionKey: 'admin_time',
+  },
+  {
+    label: 'Payroll',
+    href: '/admin/payroll',
+    icon: Wallet,
+    permissionKey: 'admin_payroll',
   },
   {
     label: 'Quotes',

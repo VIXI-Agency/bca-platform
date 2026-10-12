@@ -2,7 +2,8 @@ import { NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { timeEditSchema } from '@/lib/validators';
-import { timeStringToUtcDate } from '@/lib/time';
+import { timeStringToUtcDate, getPayPeriodStart } from '@/lib/time';
+import { isPeriodLocked } from '@/lib/payroll/compute';
 
 const VALID_FIELDS = [
   'clockIn',
@@ -65,6 +66,13 @@ export async function POST(request: Request) {
     const targetDate = new Date(Date.UTC(dateParts[0], dateParts[1] - 1, dateParts[2]));
     const targetDateEnd = new Date(targetDate);
     targetDateEnd.setDate(targetDateEnd.getDate() + 1);
+
+    if (await isPeriodLocked(getPayPeriodStart(targetDate))) {
+      return NextResponse.json(
+        { error: 'This pay period has been approved or paid and can no longer be edited.' },
+        { status: 409 }
+      );
+    }
 
     // Find the time log for this user and date
     const log = await prisma.employeeTimeLog.findFirst({

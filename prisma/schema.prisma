@@ -39,6 +39,8 @@ model User {
   schedules            EmployeeSchedule[]
   disconnections       EmployeeDisconnection[] @relation("DisconnectedUser")
   bonuses              PayrollBonus[]          @relation("BonusUser")
+  payStatements        PayStatement[]          @relation("PayStatementUser")
+  payRateHistory       PayRateHistory[]        @relation("PayRateHistoryUser")
   videoViews           VideoView[]
   activityLogs         UserActivityLog[]
 
@@ -246,6 +248,91 @@ model PayrollBonus {
 
   @@unique([idUser, periodStart], map: "UQ_PayrollBonus_User_Period")
   @@map("PayrollBonuses")
+  @@schema("benjaise_sqluser2")
+}
+
+// Phase 1 payroll module: an approved/paid PayRun snapshots live numbers
+// (hours × rate, OT, each bonus category) into PayStatements that never
+// change again, so printing last month's report always matches what was
+// actually paid even if rates or punches are edited afterward.
+model PayRun {
+  idPayRun         Int       @id @default(autoincrement()) @map("IdPayRun")
+  periodStart      DateTime  @map("PeriodStart") @db.Date
+  periodEnd        DateTime  @map("PeriodEnd") @db.Date
+  status           String    @map("Status") // 'approved' | 'paid' | 'void'
+  scheduledPayDate DateTime? @map("ScheduledPayDate") @db.Date
+  approvedBy       String?   @map("ApprovedBy")
+  approvedAt       DateTime? @map("ApprovedAt")
+  paidAt           DateTime? @map("PaidAt")
+  voidedBy         String?   @map("VoidedBy")
+  voidedAt         DateTime? @map("VoidedAt")
+  voidReason       String?   @map("VoidReason") @db.NVarChar(500)
+  notes            String?   @map("Notes") @db.NVarChar(1000)
+  createdAt        DateTime  @default(now()) @map("CreatedAt")
+
+  statements       PayStatement[]
+
+  @@unique([periodStart], map: "UQ_PayRun_Period")
+  @@map("PayRuns")
+  @@schema("benjaise_sqluser2")
+}
+
+model PayStatement {
+  idStatement      Int       @id @default(autoincrement()) @map("IdStatement")
+  idPayRun         Int       @map("IdPayRun")
+  idUser           Int       @map("IdUser")
+  employeeName     String    @map("EmployeeName")
+  regularHours     Decimal   @map("RegularHours") @db.Decimal(6, 2)
+  overtimeHours    Decimal   @map("OvertimeHours") @db.Decimal(6, 2)
+  payRate          Decimal?  @map("PayRate") @db.Decimal(10, 2)
+  otPayRate        Decimal?  @map("OtPayRate") @db.Decimal(10, 2)
+  regularPay       Decimal   @map("RegularPay") @db.Decimal(10, 2)
+  overtimePay      Decimal   @map("OvertimePay") @db.Decimal(10, 2)
+  bonusTotal       Decimal   @map("BonusTotal") @db.Decimal(10, 2)
+  grossPay         Decimal   @map("GrossPay") @db.Decimal(10, 2)
+  status           String    @map("Status") // 'pending' | 'paid' | 'void'
+  paymentMethod    String?   @map("PaymentMethod")
+  paymentReference String?   @map("PaymentReference") @db.NVarChar(200)
+  paidDate         DateTime? @map("PaidDate") @db.Date
+  snapshotJson     String?   @map("SnapshotJson") @db.NVarChar(Max)
+  createdAt        DateTime  @default(now()) @map("CreatedAt")
+
+  payRun           PayRun             @relation(fields: [idPayRun], references: [idPayRun], onDelete: NoAction, onUpdate: NoAction)
+  user             User               @relation("PayStatementUser", fields: [idUser], references: [idUser], onDelete: NoAction, onUpdate: NoAction)
+  lines            PayStatementLine[]
+
+  @@unique([idPayRun, idUser], map: "UQ_PayStatement_Run_User")
+  @@map("PayStatements")
+  @@schema("benjaise_sqluser2")
+}
+
+model PayStatementLine {
+  idLine      Int      @id @default(autoincrement()) @map("IdLine")
+  idStatement Int      @map("IdStatement")
+  kind        String   @map("Kind") // 'regular' | 'overtime' | 'bonus'
+  category    String?  @map("Category")
+  label       String   @map("Label")
+  quantity    Decimal? @map("Quantity") @db.Decimal(10, 2)
+  rate        Decimal? @map("Rate") @db.Decimal(10, 2)
+  amount      Decimal  @map("Amount") @db.Decimal(10, 2)
+
+  statement   PayStatement @relation(fields: [idStatement], references: [idStatement], onDelete: NoAction, onUpdate: NoAction)
+
+  @@map("PayStatementLines")
+  @@schema("benjaise_sqluser2")
+}
+
+model PayRateHistory {
+  idHistory     Int      @id @default(autoincrement()) @map("IdHistory")
+  idUser        Int      @map("IdUser")
+  payRate       Decimal? @map("PayRate") @db.Decimal(10, 2)
+  otPayRate     Decimal? @map("OtPayRate") @db.Decimal(10, 2)
+  effectiveFrom DateTime @default(now()) @map("EffectiveFrom")
+  changedBy     String?  @map("ChangedBy")
+
+  user          User     @relation("PayRateHistoryUser", fields: [idUser], references: [idUser], onDelete: NoAction, onUpdate: NoAction)
+
+  @@map("PayRateHistory")
   @@schema("benjaise_sqluser2")
 }
 

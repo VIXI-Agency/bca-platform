@@ -57,6 +57,10 @@ export function computeDayMetrics(log: TimeLogRow): DayMetrics {
       lunchDurationMinutes = lunchMs / (1000 * 60);
     }
 
+    // firstBreakExcess/secondBreakExcess are still tracked (e.g. for a future
+    // "who's taking long breaks" report) but are no longer subtracted from
+    // paid hours below — breaks are paid time regardless of length. Only
+    // lunch (lunchMs) is unpaid and comes out of the total.
     if (log.firstBreakOut && log.firstBreakIn) {
       const bOutMs = new Date(log.firstBreakOut).getTime();
       let bInMs = new Date(log.firstBreakIn).getTime();
@@ -77,8 +81,7 @@ export function computeDayMetrics(log: TimeLogRow): DayMetrics {
       }
     }
 
-    const breakExcessMs = (firstBreakExcess + secondBreakExcess) * 60 * 1000;
-    const rawMs = clockOutMs - clockInMs - lunchMs - breakExcessMs;
+    const rawMs = clockOutMs - clockInMs - lunchMs;
     totalHours = Math.max(0, round2(rawMs / (1000 * 3600)));
 
     if (totalHours > 8) {

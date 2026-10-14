@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { clockActionSchema } from '@/lib/validators';
-import { nowPstAsUtc, getPstHour, getTodayRangePST, minutesSinceStored } from '@/lib/time';
+import { nowPstAsUtc, getTodayRangePST, minutesSinceStored } from '@/lib/time';
 
 // Sequential order of clock actions
 const ACTION_ORDER = [
@@ -16,12 +16,28 @@ const ACTION_ORDER = [
   'clockOut',
 ] as const;
 
-function applyEarlyClockInRule(time: Date): Date {
-  if (getPstHour() < 6) {
-    // Set to 6:00 AM PST (stored as UTC epoch)
-    return new Date(Date.UTC(1970, 0, 1, 6, 0, 0));
+// Administrator (1) and Closer (2) may clock in up to 15 minutes before their
+// 6:00 AM shift and have that real time count toward pay. Everyone else
+// (Remote Agent, etc.) keeps the original rule: any clock-in before 6:00 AM
+// is snapped to exactly 6:00, no matter how early they actually punched in.
+const EARLY_CLOCK_IN_ROLES = [1, 2];
+
+function applyEarlyClockInRule(time: Date, role: number | undefined): Date {
+  const minutesOfDay = time.getUTCHours() * 60 + time.getUTCMinutes();
+  const sixAm = 6 * 60;
+  if (minutesOfDay >= sixAm) {
+    return time;
   }
-  return time;
+
+  if (role != null && EARLY_CLOCK_IN_ROLES.includes(role)) {
+    const fiveFortyFive = sixAm - 15;
+    if (minutesOfDay >= fiveFortyFive) {
+      return time;
+    }
+    return new Date(Date.UTC(1970, 0, 1, 5, 45, 0));
+  }
+
+  return new Date(Date.UTC(1970, 0, 1, 6, 0, 0));
 }
 
 export async function POST(request: Request) {
@@ -32,6 +48,7 @@ export async function POST(request: Request) {
     }
 
     const userId = (session.user as { userId: number }).userId;
+    const role = (session.user as { role: number }).role;
     const body = await request.json();
 
     const parsed = clockActionSchema.safeParse(body);
@@ -113,7 +130,7 @@ export async function POST(request: Request) {
     // Determine the time to record (PST as UTC-epoch)
     let recordTime = now;
     if (action === 'clockIn') {
-      recordTime = applyEarlyClockInRule(now);
+      recordTime = applyEarlyClockInRule(now, role);
     }
 
     // Perform the action

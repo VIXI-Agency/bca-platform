@@ -110,6 +110,19 @@ export async function PUT(
       return NextResponse.json({ error: 'Closers can only manage remote agent accounts' }, { status: 403 });
     }
 
+    // ...and only that. Any other field — a higher role, a new password or
+    // email — would let a Closer promote an agent to Administrator and sign
+    // in as them. Activation sends { isActive, roleId: 3 }.
+    if (role === 2) {
+      const touchesOtherFields = Object.keys(body).some((key) => key !== 'isActive' && key !== 'roleId');
+      if (touchesOtherFields || (body.roleId !== undefined && body.roleId !== 3)) {
+        return NextResponse.json(
+          { error: 'Closers can only activate or deactivate remote agent accounts' },
+          { status: 403 },
+        );
+      }
+    }
+
     // Pay rates now feed real payroll math (Payment Report + PayStatement
     // snapshots on approval) and every change is permanently recorded in
     // PayRateHistory — restrict who can set them beyond the role-1-or-2 gate
@@ -188,9 +201,16 @@ export async function PUT(
       });
     }
 
-    const { password: _pw, ...safeUser } = user;
-
-    return NextResponse.json(safeUser);
+    // Explicit allowlist: spreading the row would also return ResetToken,
+    // ResetExpires and the pay rates to whoever made the edit.
+    return NextResponse.json({
+      userId: user.idUser,
+      name: user.name ?? '',
+      lastname: user.lastname ?? '',
+      email: user.email ?? '',
+      role: user.idRole ?? 3,
+      isActive: user.status !== true,
+    });
   } catch (error) {
     console.error('PUT /api/users/[id] error:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });

@@ -45,8 +45,10 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
 
         if (!user) return null;
 
-        // Status convention: status=true means blocked/inactive, null/false means active
-        if (user.status === true) throw new AccountPendingSignin();
+        // Status convention: status=true means blocked/inactive, null/false means active.
+        // Role 4 is "Disabled" — such an account must not sign in even if its
+        // status flag was left active.
+        if (user.status === true || user.idRole === 4) throw new AccountPendingSignin();
 
         if (!user.password) return null;
 

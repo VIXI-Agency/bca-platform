@@ -2,21 +2,11 @@ import { NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { clockWeekSchema, payrollBonusSchema } from '@/lib/validators';
-import { getTodayRangePST, getPayPeriodStart } from '@/lib/time';
+import { getPayPeriodStart, parseDateParam, resolvePayPeriodStart } from '@/lib/time';
 import { isPeriodLocked } from '@/lib/payroll/compute';
 import { BONUS_FIELDS, type BonusFieldKey } from '@/lib/payroll/constants';
 
 type BonusAmounts = Record<BonusFieldKey, number | null>;
-
-function resolvePeriodStart(week: string | null): Date {
-  if (week) {
-    const parts = week.split('-').map(Number);
-    const inputDate = new Date(parts[0], parts[1] - 1, parts[2]);
-    return getPayPeriodStart(inputDate);
-  }
-  const { todayStart } = getTodayRangePST();
-  return getPayPeriodStart(todayStart);
-}
 
 export async function GET(
   request: Request,
@@ -48,7 +38,7 @@ export async function GET(
       );
     }
 
-    const periodStart = resolvePeriodStart(parsed.data.week ?? null);
+    const periodStart = resolvePayPeriodStart(parsed.data.week);
 
     const bonus = await prisma.payrollBonus.findUnique({
       where: { idUser_periodStart: { idUser: targetUserId, periodStart } },
@@ -97,8 +87,7 @@ export async function PUT(
     }
 
     const { period, ...fields } = parsed.data;
-    const parts = period.split('-').map(Number);
-    const periodStart = getPayPeriodStart(new Date(parts[0], parts[1] - 1, parts[2]));
+    const periodStart = getPayPeriodStart(parseDateParam(period));
 
     if (await isPeriodLocked(periodStart)) {
       return NextResponse.json(

@@ -2,19 +2,9 @@ import { NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { clockWeekSchema, payRunApproveSchema } from '@/lib/validators';
-import { getTodayRangePST, getPayPeriodStart } from '@/lib/time';
+import { getPayPeriodStart, getPayPeriodEnd, parseDateParam, resolvePayPeriodStart } from '@/lib/time';
 import { computePayStatement } from '@/lib/payroll/compute';
 import { BONUS_FIELDS, BONUS_FIELD_LABELS } from '@/lib/payroll/constants';
-
-function resolvePeriodStart(week: string | null): Date {
-  if (week) {
-    const parts = week.split('-').map(Number);
-    const inputDate = new Date(parts[0], parts[1] - 1, parts[2]);
-    return getPayPeriodStart(inputDate);
-  }
-  const { todayStart } = getTodayRangePST();
-  return getPayPeriodStart(todayStart);
-}
 
 async function activeEmployees() {
   return prisma.user.findMany({
@@ -43,9 +33,8 @@ export async function GET(request: Request) {
         { status: 400 }
       );
     }
-    const periodStart = resolvePeriodStart(parsed.data.week ?? null);
-    const periodEnd = new Date(periodStart);
-    periodEnd.setDate(periodEnd.getDate() + 7);
+    const periodStart = resolvePayPeriodStart(parsed.data.week);
+    const periodEnd = getPayPeriodEnd(periodStart);
 
     const run = await prisma.payRun.findUnique({
       where: { periodStart },
@@ -58,7 +47,9 @@ export async function GET(request: Request) {
         run: {
           id: run.idPayRun,
           periodStart: run.periodStart.toISOString().split('T')[0],
-          periodEnd: run.periodEnd.toISOString().split('T')[0],
+          // Stored end is exclusive (next Friday); show the last day, Thursday,
+          // same as the live preview below.
+          periodEnd: new Date(run.periodEnd.getTime() - 1).toISOString().split('T')[0],
           status: run.status,
           scheduledPayDate: run.scheduledPayDate?.toISOString().split('T')[0] ?? null,
           notes: run.notes ?? '',
@@ -152,10 +143,8 @@ export async function POST(request: Request) {
     }
 
     const { period, scheduledPayDate, notes } = parsed.data;
-    const parts = period.split('-').map(Number);
-    const periodStart = getPayPeriodStart(new Date(parts[0], parts[1] - 1, parts[2]));
-    const periodEnd = new Date(periodStart);
-    periodEnd.setDate(periodEnd.getDate() + 7);
+    const periodStart = getPayPeriodStart(parseDateParam(period));
+    const periodEnd = getPayPeriodEnd(periodStart);
 
     const existing = await prisma.payRun.findUnique({ where: { periodStart } });
     if (existing?.status === 'paid') {
@@ -165,12 +154,7 @@ export async function POST(request: Request) {
       );
     }
 
-    const scheduledDate = scheduledPayDate
-      ? (() => {
-          const p = scheduledPayDate.split('-').map(Number);
-          return new Date(Date.UTC(p[0], p[1] - 1, p[2]));
-        })()
-      : null;
+    const scheduledDate = scheduledPayDate ? parseDateParam(scheduledPayDate) : null;
 
     const run = await prisma.payRun.upsert({
       where: { periodStart },

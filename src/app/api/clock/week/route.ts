@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { clockWeekSchema } from '@/lib/validators';
-import { getTodayRangePST, getPayPeriodStart } from '@/lib/time';
+import { getPayPeriodEnd, resolvePayPeriodStart } from '@/lib/time';
 import { computeDayMetrics, disconnectionKey, fetchDisconnectionWindows } from '@/lib/payroll/compute';
 
 export async function GET(request: Request) {
@@ -23,20 +23,9 @@ export async function GET(request: Request) {
       );
     }
 
-    // Determine the pay period start (Friday)
-    let periodStart: Date;
-    if (parsed.data.week) {
-      const parts = parsed.data.week.split('-').map(Number);
-      const inputDate = new Date(parts[0], parts[1] - 1, parts[2]);
-      periodStart = getPayPeriodStart(inputDate);
-    } else {
-      const { todayStart } = getTodayRangePST();
-      periodStart = getPayPeriodStart(todayStart);
-    }
-
-    // Pay period end = Friday + 7 days (next Friday, exclusive) → covers Fri–Thu
-    const weekEnd = new Date(periodStart);
-    weekEnd.setDate(weekEnd.getDate() + 7);
+    // Pay period Friday, and the next Friday (exclusive) → covers Fri–Thu
+    const periodStart = resolvePayPeriodStart(parsed.data.week);
+    const weekEnd = getPayPeriodEnd(periodStart);
 
     // Fetch all logs and disconnections for this pay period
     const [logs, disconnections] = await Promise.all([
@@ -83,7 +72,11 @@ export async function GET(request: Request) {
         secondBreakOut: fixTime(log.secondBreakOut),
         secondBreakIn: fixTime(log.secondBreakIn),
         clockOut: fixTime(log.clockOut),
-        totalHours: metrics.totalHours,
+        // Everything paid that day (regular + overtime). metrics.totalHours
+        // alone is capped at 8, so a 10h day read 8:00 to the employee.
+        totalHours: Math.round((metrics.totalHours + metrics.overtime) * 100) / 100,
+        overtime: metrics.overtime,
+        disconnectedMinutes: metrics.disconnectedMinutes,
         isModifiedByAdmin: log.isModifiedByAdmin ?? false,
       };
     });

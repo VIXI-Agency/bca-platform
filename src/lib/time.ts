@@ -122,14 +122,62 @@ export function minutesSinceStored(stored: Date): number {
 /** Day offsets (from the Friday start) of the actual working days in one pay period: Fri, Mon, Tue, Wed, Thu. */
 export const PAY_PERIOD_DAY_OFFSETS = [0, 3, 4, 5, 6] as const;
 
-/** Get the Friday (UTC midnight) that starts the pay period containing `date`. */
+/*
+ * Every calendar date in this module is a UTC-midnight Date (the same shape
+ * Prisma returns for DATE columns), and all arithmetic uses the UTC getters.
+ * Local getters made results depend on the process timezone: the production
+ * host runs at UTC-5, where a UTC-midnight Friday reads as Thursday and fell
+ * into the previous pay period, and a local setDate(+7) crossed DST by an
+ * hour and pulled the next period's Friday into this one.
+ */
+
+/** `date` moved by `days` calendar days (UTC). */
+export function addDaysUTC(date: Date, days: number): Date {
+  const d = new Date(date);
+  d.setUTCDate(d.getUTCDate() + days);
+  return d;
+}
+
+/** A `YYYY-MM-DD` string as a UTC-midnight Date. */
+export function parseDateParam(value: string): Date {
+  const [y, m, d] = value.split('-').map(Number);
+  return new Date(Date.UTC(y, m - 1, d));
+}
+
+/** Get the Friday (UTC midnight) that starts the pay period containing the UTC calendar date of `date`. */
 export function getPayPeriodStart(date: Date): Date {
-  const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+  const d = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
   const dayOfWeek = d.getUTCDay(); // 0=Sun, 1=Mon, ..., 5=Fri, 6=Sat
   // Days since last Friday: Fri(5)->0, Sat(6)->1, Sun(0)->2, Mon(1)->3, Tue(2)->4, Wed(3)->5, Thu(4)->6
   const daysSinceFriday = (dayOfWeek + 2) % 7;
-  d.setUTCDate(d.getUTCDate() - daysSinceFriday);
-  return d;
+  return addDaysUTC(d, -daysSinceFriday);
+}
+
+/** Exclusive end of a pay period: the next period's Friday. */
+export function getPayPeriodEnd(periodStart: Date): Date {
+  return addDaysUTC(periodStart, 7);
+}
+
+/** Pay period for a `week` query param, or the current Pacific pay period when absent. */
+export function resolvePayPeriodStart(week: string | null | undefined): Date {
+  return getPayPeriodStart(week ? parseDateParam(week) : getTodayRangePST().todayStart);
+}
+
+/**
+ * Pay periods for a picker, newest first. `today` is read with local getters
+ * on purpose: in the browser that is the viewer's own calendar date.
+ */
+export function payPeriodOptions(count: number, today: Date = new Date()): { value: string; label: string }[] {
+  const current = getPayPeriodStart(new Date(Date.UTC(today.getFullYear(), today.getMonth(), today.getDate())));
+  const fmt = (d: Date) => d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' });
+  return Array.from({ length: count }, (_, i) => {
+    const friday = addDaysUTC(current, -7 * i);
+    const thursday = addDaysUTC(friday, 6);
+    return {
+      value: friday.toISOString().slice(0, 10),
+      label: `${fmt(friday)} - ${fmt(thursday)}, ${thursday.getUTCFullYear()}`,
+    };
+  });
 }
 
 /** ISO date strings (YYYY-MM-DD) for the working days of a pay period, given its Friday start. */

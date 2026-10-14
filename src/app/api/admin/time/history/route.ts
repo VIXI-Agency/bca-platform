@@ -3,6 +3,7 @@ import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { Prisma } from '@prisma/client';
 import { computeDayMetrics, disconnectionKey, fetchDisconnectionWindows } from '@/lib/payroll/compute';
+import { getPayPeriodStart, getPayPeriodEnd, parseDateParam } from '@/lib/time';
 
 /**
  * Get time logs for all (or one) employee for a given pay period.
@@ -29,11 +30,9 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'week parameter required (YYYY-MM-DD)' }, { status: 400 });
     }
 
-    // Parse the Friday start date; period end = Friday + 7 days (Fri–Thu)
-    const parts = weekParam.split('-').map(Number);
-    const weekStart = new Date(Date.UTC(parts[0], parts[1] - 1, parts[2]));
-    const weekEnd = new Date(weekStart);
-    weekEnd.setDate(weekEnd.getDate() + 7);
+    // Pay period Friday, and the next Friday (exclusive) → covers Fri–Thu
+    const weekStart = getPayPeriodStart(parseDateParam(weekParam));
+    const weekEnd = getPayPeriodEnd(weekStart);
 
     // Build conditions
     const conditions: Prisma.Sql[] = [
@@ -85,7 +84,14 @@ export async function GET(request: NextRequest) {
       !isNaN(uid) && uid > 0 ? uid : undefined,
     );
 
-    const data = rows.map((r) => {
+    // Weekend logs are never paid (computePeriodHours drops them too), so they
+    // don't belong in a history of paid hours.
+    const weekdayRows = rows.filter((r) => {
+      const day = r.LogDate.getUTCDay();
+      return day !== 0 && day !== 6;
+    });
+
+    const data = weekdayRows.map((r) => {
       const metrics = computeDayMetrics(
         {
           clockIn: r.ClockIn,

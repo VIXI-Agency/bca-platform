@@ -95,4 +95,155 @@ describe('computeDayMetrics — disconnections', () => {
     expect(m.firstBreakExcess).toBe(30);
     expect(m.totalHours).toBe(8);
   });
+
+  it('counts a window fully inside another once, at the outer length', () => {
+    const m = computeDayMetrics(shift(), [win('09:00:00', '10:00:00'), win('09:15:00', '09:30:00')]);
+    expect(m.disconnectedMinutes).toBe(60);
+    expect(m.totalHours).toBe(7);
+  });
+
+  it('merges windows given out of order', () => {
+    const m = computeDayMetrics(shift(), [win('11:15:00', '11:45:00'), win('11:00:00', '11:30:00')]);
+    expect(m.disconnectedMinutes).toBe(45);
+  });
+
+  it('sums separate windows that do not overlap', () => {
+    const m = computeDayMetrics(shift(), [win('07:00:00', '07:10:00'), win('11:00:00', '11:20:00')]);
+    expect(m.disconnectedMinutes).toBe(30);
+    expect(m.totalHours).toBe(7.5);
+  });
+
+  it('deducts nothing for a disconnection that lies entirely inside lunch', () => {
+    const m = computeDayMetrics(shift(), [win('10:05:00', '10:25:00')]);
+    expect(m.disconnectedMinutes).toBe(0);
+    expect(m.totalHours).toBe(8);
+  });
+
+  it('deducts a disconnection outside the shift as zero', () => {
+    const m = computeDayMetrics(shift(), [win('15:00:00', '16:00:00')]);
+    expect(m.disconnectedMinutes).toBe(0);
+    expect(m.totalHours).toBe(8);
+  });
+
+  it('treats a reconnect earlier than the disconnect as past midnight, so it runs to clock-out', () => {
+    // Disconnected 13:00, "reconnected" 12:00 = 12:00 the next day; the shift
+    // ends at 14:30, so 90 minutes are lost.
+    const m = computeDayMetrics(shift(), [win('13:00:00', '12:00:00')]);
+    expect(m.disconnectedMinutes).toBe(90);
+    expect(m.totalHours).toBe(6.5);
+  });
+
+  it('runs a never-reconnected disconnection that began before clock-in for the whole shift', () => {
+    // 06:00-14:30 is 510 minutes; the 30-minute lunch is already unpaid.
+    const m = computeDayMetrics(shift(), [win('05:30:00', null)]);
+    expect(m.disconnectedMinutes).toBe(480);
+    expect(m.totalHours).toBe(0);
+    expect(m.overtime).toBe(0);
+  });
+
+  it('never reports negative hours when bad punches make lunch longer than the shift', () => {
+    const m = computeDayMetrics(shift({ lunchOut: '05:00:00', lunchIn: '14:45:00' }));
+    expect(m.totalHours).toBe(0);
+    expect(m.overtime).toBe(0);
+  });
+});
+
+describe('computeDayMetrics — paid hours and daily overtime', () => {
+  it('deducts lunch but not breaks', () => {
+    // 06:00-15:00 = 9h, minus a 60-minute lunch.
+    const m = computeDayMetrics(shift({ lunchOut: '10:00:00', lunchIn: '11:00:00', clockOut: '15:00:00' }));
+    expect(m.lunchDurationMinutes).toBe(60);
+    expect(m.totalHours).toBe(8);
+    expect(m.overtime).toBe(0);
+  });
+
+  it('pays the full span when no lunch was taken', () => {
+    const m = computeDayMetrics(shift({ lunchOut: null, lunchIn: null, clockOut: '13:00:00' }));
+    expect(m.lunchDurationMinutes).toBe(0);
+    expect(m.totalHours).toBe(7);
+  });
+
+  it('ignores a lunch that was started but never ended', () => {
+    const m = computeDayMetrics(shift({ lunchIn: null, clockOut: '13:00:00' }));
+    expect(m.totalHours).toBe(7);
+  });
+
+  it('caps regular hours at 8 and moves the rest to overtime', () => {
+    // 06:00-15:30 minus 30-minute lunch = 9h.
+    const m = computeDayMetrics(shift({ clockOut: '15:30:00' }));
+    expect(m.totalHours).toBe(8);
+    expect(m.overtime).toBe(1);
+  });
+
+  it('puts a long day into overtime minute for minute', () => {
+    // 06:00-18:45 minus 30-minute lunch = 12.25h.
+    const m = computeDayMetrics(shift({ clockOut: '18:45:00' }));
+    expect(m.totalHours).toBe(8);
+    expect(m.overtime).toBe(4.25);
+  });
+
+  it('gives no overtime at exactly 8 hours', () => {
+    const m = computeDayMetrics(shift());
+    expect(m.totalHours).toBe(8);
+    expect(m.overtime).toBe(0);
+  });
+
+  it('starts overtime one minute past 8 hours', () => {
+    const m = computeDayMetrics(shift({ clockOut: '14:31:00' }));
+    expect(m.totalHours).toBe(8);
+    expect(m.overtime).toBe(0.02);
+  });
+
+  it('can bring an overtime day back under 8 hours through a disconnection', () => {
+    const m = computeDayMetrics(shift({ clockOut: '15:30:00' }), [win('09:00:00', '10:00:00')]);
+    expect(m.totalHours).toBe(8);
+    expect(m.overtime).toBe(0);
+  });
+
+  it('pays nothing without a clock-in', () => {
+    const m = computeDayMetrics(shift({ clockIn: null }));
+    expect(m.totalHours).toBe(0);
+    expect(m.overtime).toBe(0);
+    expect(m.lunchDurationMinutes).toBe(0);
+  });
+
+  it('pays nothing without a clock-out even on a long open day', () => {
+    const m = computeDayMetrics(shift({ clockOut: null, lunchOut: null, lunchIn: null }));
+    expect(m.totalHours).toBe(0);
+    expect(m.overtime).toBe(0);
+  });
+
+  // There are no overnight shifts: a clock-out at or before clock-in is a bad
+  // punch, and it used to be paid as a ~24h day (8 regular + 15.5 OT).
+  it('pays nothing when clock-out equals clock-in', () => {
+    const m = computeDayMetrics(shift({ clockOut: '06:00:00' }));
+    expect(m.totalHours + m.overtime).toBe(0);
+  });
+});
+
+describe('computeDayMetrics — clock-out before clock-in (no overnight shifts)', () => {
+  it('pays nothing for a 2:00 typo meant as 2:00 PM (real 2024-12-16 row)', () => {
+    const m = computeDayMetrics(shift({ clockIn: '06:02:20', lunchOut: '09:59:56', lunchIn: '10:30:00', clockOut: '02:00:00' }));
+    expect(m.totalHours).toBe(0);
+    expect(m.overtime).toBe(0);
+  });
+
+  it('pays nothing for the clock-out-before-snapped-clock-in exploit', () => {
+    // Punched in at 05:00 (stored 06:00), every action in the next minute,
+    // clocked out at 05:01: previously 8 regular + ~15 overtime.
+    const m = computeDayMetrics(shift({
+      clockIn: '06:00:00',
+      firstBreakOut: '05:00:10', firstBreakIn: '05:00:20',
+      lunchOut: null, lunchIn: null,
+      secondBreakOut: '05:00:30', secondBreakIn: '05:00:40',
+      clockOut: '05:01:00',
+    }));
+    expect(m.totalHours + m.overtime).toBe(0);
+  });
+
+  it('deducts no disconnection time on such a day (there are no paid hours to deduct from)', () => {
+    const m = computeDayMetrics(shift({ clockOut: '05:00:00' }), [win('09:00:00', '09:30:00')]);
+    expect(m.disconnectedMinutes).toBe(0);
+    expect(m.totalHours).toBe(0);
+  });
 });

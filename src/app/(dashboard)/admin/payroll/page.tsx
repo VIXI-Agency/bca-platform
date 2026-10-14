@@ -44,32 +44,16 @@ import {
   type PayStatementRow,
 } from '@/hooks/use-payroll';
 import { PAYMENT_METHODS, PAYMENT_METHOD_LABELS, type PaymentMethod } from '@/lib/payroll/constants';
-import { getPayPeriodStart } from '@/lib/time';
+import { payPeriodOptions } from '@/lib/time';
 
 /* -------------------------------------------------- */
 /*  Helpers                                            */
 /* -------------------------------------------------- */
 
-function formatDateISO(d: Date): string {
-  return d.toISOString().split('T')[0];
-}
-
-function formatWeekLabel(friday: Date): string {
-  const thursday = new Date(friday);
-  thursday.setDate(thursday.getDate() + 6);
-  const opts: Intl.DateTimeFormatOptions = { month: 'short', day: 'numeric' };
-  return `${friday.toLocaleDateString('en-US', opts)} - ${thursday.toLocaleDateString('en-US', opts)}, ${thursday.getFullYear()}`;
-}
-
-function generateWeekOptions(count: number): { value: string; label: string }[] {
-  const weeks: { value: string; label: string }[] = [];
-  const current = getPayPeriodStart(new Date());
-  for (let i = 0; i < count; i++) {
-    const friday = new Date(current);
-    friday.setDate(friday.getDate() - i * 7);
-    weeks.push({ value: formatDateISO(friday), label: formatWeekLabel(friday) });
-  }
-  return weeks;
+/** Today's date in the viewer's own calendar, as YYYY-MM-DD (toISOString
+ *  would roll over to tomorrow after ~5pm Pacific). */
+function localDateISO(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
 function formatCurrency(amount: number): string {
@@ -157,10 +141,10 @@ function PayRunTab({ canManage }: { canManage: boolean }) {
   const [voidDialogOpen, setVoidDialogOpen] = useState(false);
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('direct_deposit');
   const [paymentReference, setPaymentReference] = useState('');
-  const [paidDate, setPaidDate] = useState(() => formatDateISO(new Date()));
+  const [paidDate, setPaidDate] = useState(() => localDateISO(new Date()));
   const [voidReason, setVoidReason] = useState('');
 
-  const weekOptions = useMemo(() => generateWeekOptions(24), []);
+  const weekOptions = useMemo(() => payPeriodOptions(24), []);
   useEffect(() => {
     if (!selectedWeek && weekOptions.length > 0) setSelectedWeek(weekOptions[0].value);
   }, [weekOptions, selectedWeek]);

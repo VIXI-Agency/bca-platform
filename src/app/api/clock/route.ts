@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { getTodayRangePST } from '@/lib/time';
+import { computeDayMetrics, disconnectionKey, fetchDisconnectionWindows } from '@/lib/payroll/compute';
 import type { ClockStatus } from '@/types';
 
 function getStatus(log: {
@@ -80,6 +81,15 @@ export async function GET() {
       });
     }
 
+    // The TotalHours column is legacy and nothing writes it; compute today's
+    // paid hours (lunch and disconnections deducted, OT included) instead.
+    let totalHours: number | null = null;
+    if (log.clockIn && log.clockOut) {
+      const disconnections = await fetchDisconnectionWindows(todayStart, todayEnd, userId);
+      const metrics = computeDayMetrics(log, disconnections.get(disconnectionKey(userId, log.logDate)));
+      totalHours = Math.round((metrics.totalHours + metrics.overtime) * 100) / 100;
+    }
+
     return NextResponse.json({
       isPartTime,
       data: {
@@ -91,7 +101,7 @@ export async function GET() {
         secondBreakOut: log.secondBreakOut?.toISOString() ?? null,
         secondBreakIn: log.secondBreakIn?.toISOString() ?? null,
         clockOut: log.clockOut?.toISOString() ?? null,
-        totalHours: log.totalHours,
+        totalHours,
       },
       status: getStatus(log),
       nextAction: getNextAction(log),

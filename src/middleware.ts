@@ -36,25 +36,23 @@ export default auth((req) => {
     return NextResponse.redirect(loginUrl);
   }
 
-  const permissions = (req.auth.user as { permissions?: string[] })?.permissions;
+  // A session without permissions gets none. Treating an empty list as
+  // "allow everything" let any role with no enabled permissions (e.g. a
+  // Disabled or Importer account) skip every route check.
+  const permissions = (req.auth.user as { permissions?: string[] })?.permissions ?? [];
 
-  // If permissions exist in the JWT, enforce them
-  // If not (old session before permissions feature), allow through
-  if (permissions && permissions.length > 0) {
-    // Check page route permissions
-    if (!pathname.startsWith('/api/')) {
-      const permKey = getPermissionKeyForRoute(pathname);
-      if (permKey && !permissions.includes(permKey)) {
-        return NextResponse.redirect(new URL('/', req.url));
-      }
+  if (!pathname.startsWith('/api/')) {
+    const permKey = getPermissionKeyForRoute(pathname);
+    if (permKey && !permissions.includes(permKey)) {
+      // Denied pages fall back to '/'. If '/' itself is denied the account has
+      // no usable access, and redirecting to '/' again would loop forever.
+      const fallback = pathname === '/' ? '/login' : '/';
+      return NextResponse.redirect(new URL(fallback, req.url));
     }
-
-    // Check API route permissions
-    if (pathname.startsWith('/api/')) {
-      const permKey = getPermissionKeyForApiRoute(pathname);
-      if (permKey && !permissions.includes(permKey)) {
-        return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-      }
+  } else {
+    const permKey = getPermissionKeyForApiRoute(pathname);
+    if (permKey && !permissions.includes(permKey)) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
   }
 

@@ -61,6 +61,10 @@ export async function GET(request: NextRequest) {
       orderBy: { name: 'asc' },
     });
 
+    // Pay rates are Administrator-only data (Closers can open this list to
+    // activate agents, but have no business seeing anyone's pay).
+    const canSeePay = role === 1;
+
     // Transform to match frontend User interface
     const safeUsers = users.map((user) => ({
       userId: user.idUser,
@@ -76,8 +80,8 @@ export async function GET(request: NextRequest) {
       city: user.city ?? '',
       state: user.state ?? '',
       country: user.country ?? '',
-      payRate: user.payRate ? Number(user.payRate) : null,
-      otPayRate: user.otPayRate ? Number(user.otPayRate) : null,
+      payRate: canSeePay && user.payRate != null ? Number(user.payRate) : null,
+      otPayRate: canSeePay && user.otPayRate != null ? Number(user.otPayRate) : null,
     }));
 
     return NextResponse.json(safeUsers);

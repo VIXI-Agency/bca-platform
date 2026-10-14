@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { payStatementPaySchema } from '@/lib/validators';
+import { parseDateParam } from '@/lib/time';
 
 /** Marks one or more statements in a run as paid. The run itself flips to
  *  'paid' only once every non-void statement in it is paid — partial
@@ -51,19 +52,20 @@ export async function POST(
       return NextResponse.json({ error: 'One or more statements were not found in this run' }, { status: 404 });
     }
 
-    const parts = paidDate.split('-').map(Number);
-    const paidDateValue = new Date(Date.UTC(parts[0], parts[1] - 1, parts[2]));
+    const paidDateValue = parseDateParam(paidDate);
 
-    // Atomic guard: the WHERE's status: 'pending' is checked by the database
-    // at write time, not by a find() a moment earlier, so a statement a
-    // concurrent request already marked paid can't be silently re-marked by
-    // this one. If fewer rows matched than requested, something changed
-    // underneath us — roll the whole update back (via the thrown error,
-    // inside the transaction) rather than leave a partial paid batch sitting
-    // next to a 409 response.
+    // Everything below runs in one transaction and every write is scoped to
+    // the status it expects, so a concurrent void, re-approval or second
+    // "mark paid" can't be overwritten:
+    // - statements flip only from 'pending'; if fewer rows match than were
+    //   requested, something changed underneath us and the whole batch rolls
+    //   back rather than leaving a partial payment next to a 409;
+    // - the run flips to 'paid' only from 'approved', and only once no
+    //   pending statement is left.
     const STATEMENTS_CHANGED = 'STATEMENTS_CHANGED';
+    let runFullyPaid: boolean;
     try {
-      await prisma.$transaction(async (tx) => {
+      runFullyPaid = await prisma.$transaction(async (tx) => {
         const updateResult = await tx.payStatement.updateMany({
           where: { idStatement: { in: statementIds }, idPayRun: runId, status: 'pending' },
           data: {
@@ -76,6 +78,15 @@ export async function POST(
         if (updateResult.count !== statementIds.length) {
           throw new Error(STATEMENTS_CHANGED);
         }
+
+        const stillPending = await tx.payStatement.count({ where: { idPayRun: runId, status: 'pending' } });
+        if (stillPending > 0) return false;
+
+        const flipped = await tx.payRun.updateMany({
+          where: { idPayRun: runId, status: 'approved' },
+          data: { status: 'paid', paidAt: new Date() },
+        });
+        return flipped.count > 0;
       });
     } catch (err) {
       if (err instanceof Error && err.message === STATEMENTS_CHANGED) {
@@ -87,19 +98,7 @@ export async function POST(
       throw err;
     }
 
-    const allStatements = await prisma.payStatement.findMany({
-      where: { idPayRun: runId },
-      select: { status: true },
-    });
-    const allSettled = allStatements.every((s) => s.status === 'paid' || s.status === 'void');
-    if (allSettled) {
-      await prisma.payRun.update({
-        where: { idPayRun: runId },
-        data: { status: 'paid', paidAt: new Date() },
-      });
-    }
-
-    return NextResponse.json({ success: true, runFullyPaid: allSettled });
+    return NextResponse.json({ success: true, runFullyPaid });
   } catch (error) {
     console.error('Payroll pay POST error:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });

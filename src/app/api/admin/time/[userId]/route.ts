@@ -40,7 +40,7 @@ export async function GET(
     const weekEnd = getPayPeriodEnd(periodStart);
 
     // Fetch time logs, audit trail and disconnections in parallel
-    const [logs, audits, user, disconnections] = await Promise.all([
+    const [logs, audits, user, disconnections, payRun] = await Promise.all([
       prisma.employeeTimeLog.findMany({
         where: {
           idUser: targetUserId,
@@ -66,6 +66,9 @@ export async function GET(
         select: { idUser: true, name: true, lastname: true, isPartTime: true },
       }),
       fetchDisconnectionWindows(periodStart, weekEnd, targetUserId),
+      // Lets the UI say up front that an approved/paid period is locked,
+      // instead of the admin finding out from a 409 on save.
+      prisma.payRun.findUnique({ where: { periodStart }, select: { status: true } }),
     ]);
 
     if (!user) {
@@ -204,6 +207,7 @@ export async function GET(
       weekStart: periodStart.toISOString().split('T')[0],
       weekEnd: new Date(weekEnd.getTime() - 1).toISOString().split('T')[0],
       weekTotals,
+      payRunStatus: payRun?.status ?? null,
     });
   } catch (error) {
     console.error('Admin time userId GET error:', error);

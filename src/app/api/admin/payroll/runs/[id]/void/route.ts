@@ -55,8 +55,12 @@ export async function POST(
         if (run.status === 'paid') throw new Error(ALREADY_PAID);
         if (run.statements.some((s) => s.status === 'paid')) throw new Error(HAS_PAID_STATEMENTS);
 
-        await tx.payRun.update({
-          where: { idPayRun: runId },
+        // Writes are scoped to the expected status, and the paid-count is
+        // re-checked after them: the read above runs at READ COMMITTED, so a
+        // "mark paid" can still commit in between. Never void a paid
+        // statement; if one appeared, roll the whole void back.
+        await tx.payRun.updateMany({
+          where: { idPayRun: runId, status: { not: 'paid' } },
           data: {
             status: 'void',
             voidedBy: String(adminUserId),
@@ -65,9 +69,11 @@ export async function POST(
           },
         });
         await tx.payStatement.updateMany({
-          where: { idPayRun: runId },
+          where: { idPayRun: runId, status: { not: 'paid' } },
           data: { status: 'void' },
         });
+        const paidNow = await tx.payStatement.count({ where: { idPayRun: runId, status: 'paid' } });
+        if (paidNow > 0) throw new Error(HAS_PAID_STATEMENTS);
       });
     } catch (err) {
       if (err instanceof Error && err.message === NOT_FOUND) {

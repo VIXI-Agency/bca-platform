@@ -71,6 +71,19 @@ import { payPeriodOptions } from '@/lib/time';
 // Payroll page and the API use, so every screen agrees on which week is which.
 const generateWeekOptions = payPeriodOptions;
 
+/** Shown when the period's pay run is approved or paid: the server refuses
+ *  edits to its hours, bonuses and disconnections until the run is voided. */
+function LockedPeriodNotice({ status }: { status: 'approved' | 'paid' | 'void' | null }) {
+  if (status !== 'approved' && status !== 'paid') return null;
+  return (
+    <div className="no-print mb-3 flex items-center gap-2 rounded-lg border border-[var(--warning)] bg-[var(--warning-subtle)] px-3 py-2 text-sm text-[var(--warning)]">
+      <AlertTriangle className="h-4 w-4 shrink-0" />
+      This pay period is {status === 'paid' ? 'paid' : 'approved'} in Payroll and locked. Hours, bonuses and
+      disconnections can&apos;t be changed unless the pay run is voided.
+    </div>
+  );
+}
+
 function formatTime(time?: string | null): string {
   if (!time) return '--:--';
   let h: number, m: number;
@@ -354,6 +367,7 @@ function EmployeeStatusTab() {
     emp: EmployeeStatus,
     action: 'disconnect' | 'reconnect'
   ) {
+    disconnectMutation.reset();
     setDisconnectTarget(emp);
     setDisconnectAction(action);
     setDisconnectReason('');
@@ -362,15 +376,19 @@ function EmployeeStatusTab() {
 
   async function handleDisconnect() {
     if (!disconnectTarget) return;
-    await disconnectMutation.mutateAsync({
-      userId: disconnectTarget.userId,
-      action: disconnectAction,
-      type: disconnectAction === 'disconnect' && disconnectType ? disconnectType : undefined,
-      reason: disconnectReason || undefined,
-    });
-    setDisconnectTarget(null);
-    setDisconnectReason('');
-    setDisconnectType('');
+    try {
+      await disconnectMutation.mutateAsync({
+        userId: disconnectTarget.userId,
+        action: disconnectAction,
+        type: disconnectAction === 'disconnect' && disconnectType ? disconnectType : undefined,
+        reason: disconnectReason || undefined,
+      });
+      setDisconnectTarget(null);
+      setDisconnectReason('');
+      setDisconnectType('');
+    } catch {
+      /* the dialog stays open and shows disconnectMutation.error */
+    }
   }
 
   const lastUpdate = dataUpdatedAt
@@ -627,6 +645,9 @@ function EmployeeStatusTab() {
                 className="flex w-full rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--bg-card)] px-3 py-2 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:border-[var(--accent)] focus:outline-none focus:ring-2 focus:ring-[var(--accent-subtle)]"
               />
             </div>
+            {disconnectMutation.error && (
+              <p className="text-sm text-red-500">{disconnectMutation.error.message}</p>
+            )}
           </div>
 
           <DialogFooter>
@@ -712,6 +733,7 @@ function EditTimeTab() {
   }, [employees, selectedUserId]);
 
   function openEditDialog(day: DayLog, field: string) {
+    editMutation.reset();
     setEditingDay(day);
     setEditingField(field);
     const currentVal = (day as unknown as Record<string, unknown>)[field];
@@ -731,14 +753,18 @@ function EditTimeTab() {
     // The reason is mandatory and has to be an actual explanation (min 8
     // chars) — a bare "0" used to pass and made the audit trail useless.
     if (!editingDay || editReason.trim().length < 8) return;
-    await editMutation.mutateAsync({
-      userId: parseInt(selectedUserId, 10),
-      date: editingDay.date,
-      field: editingField,
-      value: editNewValue.trim(),
-      reason: editReason.trim(),
-    });
-    setEditDialogOpen(false);
+    try {
+      await editMutation.mutateAsync({
+        userId: parseInt(selectedUserId, 10),
+        date: editingDay.date,
+        field: editingField,
+        value: editNewValue.trim(),
+        reason: editReason.trim(),
+      });
+      setEditDialogOpen(false);
+    } catch {
+      /* the dialog stays open and shows editMutation.error (e.g. a locked period) */
+    }
   }
 
   /** Compute break duration and whether it exceeds 10 minutes. */
@@ -883,6 +909,7 @@ function EditTimeTab() {
             </CardTitle>
           </CardHeader>
           <CardContent className="pb-4">
+            <LockedPeriodNotice status={timesheetData?.payRunStatus ?? null} />
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
@@ -1177,6 +1204,9 @@ function EditTimeTab() {
                 At least 8 characters — this shows up on the employee&apos;s Payment Report.
               </p>
             </div>
+            {editMutation.error && (
+              <p className="text-sm text-red-500">{editMutation.error.message}</p>
+            )}
           </div>
 
           <DialogFooter>
@@ -1736,11 +1766,15 @@ function PaymentReportTab() {
   const parsedOtPayRate = otPayRateInput.trim() ? Number(otPayRateInput) : null;
   const payRate = parsedPayRate != null && !isNaN(parsedPayRate) && parsedPayRate >= 0 ? parsedPayRate : null;
   const otPayRate = parsedOtPayRate != null && !isNaN(parsedOtPayRate) && parsedOtPayRate >= 0 ? parsedOtPayRate : null;
-  const regularPay = payRate != null && totals ? totals.totalHours * payRate : null;
-  // No OT this period? Don't make an OT rate a precondition for showing the
-  // total — only block on it when there's actual overtime to price.
+  // Same math and rounding as computePayStatement on the server, so the PDF
+  // matches what Payroll will snapshot on approval: each component rounded
+  // to cents, and overtime with no OT rate paid as $0 (flagged below) rather
+  // than hiding the whole summary.
+  const cents = (n: number) => Math.round(n * 100) / 100;
+  const regularPay = payRate != null && totals ? cents(totals.totalHours * payRate) : null;
   const hasOvertime = (totals?.overtime ?? 0) > 0;
-  const otPay = totals ? (hasOvertime ? (otPayRate != null ? totals.overtime * otPayRate : null) : 0) : null;
+  const otRateMissing = hasOvertime && otPayRate == null;
+  const otPay = totals ? (hasOvertime && otPayRate != null ? cents(totals.overtime * otPayRate) : 0) : null;
   // Bonus/incentive categories: manually-entered dollar amounts, not computed
   // from any formula — kept separate from the hourly/OT math and summed in.
   const bonusAmounts = Object.fromEntries(
@@ -1749,8 +1783,8 @@ function PaymentReportTab() {
       return [key, raw != null && !isNaN(raw) && raw >= 0 ? raw : 0];
     }),
   ) as Record<BonusFieldKey, number>;
-  const bonusTotal = BONUS_FIELDS.reduce((sum, key) => sum + bonusAmounts[key], 0);
-  const totalPay = regularPay != null && otPay != null ? regularPay + otPay + bonusTotal : null;
+  const bonusTotal = cents(BONUS_FIELDS.reduce((sum, key) => sum + bonusAmounts[key], 0));
+  const totalPay = regularPay != null && otPay != null ? cents(regularPay + otPay + bonusTotal) : null;
   const periodLabel = weekOptions.find((w) => w.value === selectedWeek)?.label ?? '';
 
   const rateIsDirty =
@@ -1758,18 +1792,26 @@ function PaymentReportTab() {
     (payRate !== (employee.payRate ?? null) || otPayRate !== (employee.otPayRate ?? null));
   const bonusIsDirty = BONUS_FIELDS.some((key) => bonusAmounts[key] !== (bonus?.[key] ?? 0));
 
+  // Errors (e.g. a locked period) are shown next to each Save button from the
+  // mutation's own error state.
   async function handleSaveRate() {
     if (!employee) return;
-    await updatePayRate.mutateAsync({
-      userId: employee.userId,
-      payRate: payRate ?? undefined,
-      otPayRate: otPayRate ?? undefined,
-    });
+    try {
+      // null clears a rate the admin emptied; undefined would be dropped
+      // from the request and leave the old rate in place.
+      await updatePayRate.mutateAsync({ userId: employee.userId, payRate, otPayRate });
+    } catch {
+      /* shown from updatePayRate.error */
+    }
   }
 
   async function handleSaveBonus() {
     if (!userId || !selectedWeek) return;
-    await saveBonus.mutateAsync({ userId, week: selectedWeek, ...bonusAmounts });
+    try {
+      await saveBonus.mutateAsync({ userId, week: selectedWeek, ...bonusAmounts });
+    } catch {
+      /* shown from saveBonus.error */
+    }
   }
 
   return (
@@ -1885,6 +1927,7 @@ function PaymentReportTab() {
 
           <Card>
             <CardContent className="space-y-6 py-6 print:space-y-2 print:py-2">
+              <LockedPeriodNotice status={timesheet.payRunStatus} />
               {/* Header */}
               <div className="flex flex-wrap items-start justify-between gap-4 border-b pb-4 print:gap-2 print:pb-1" style={{ borderColor: 'var(--border)' }}>
                 <div>
@@ -1905,6 +1948,13 @@ function PaymentReportTab() {
                     <p className="print-only mt-1 text-xs print:text-[8.5px]" style={{ color: 'var(--text-muted)' }}>
                       Rate: {formatCurrency(payRate)}/hr
                       {otPayRate != null && ` · OT: ${formatCurrency(otPayRate)}/hr`}
+                    </p>
+                  )}
+                  {/* Printing with a typed-but-unsaved rate produces totals that
+                      Payroll will never use — say so on the page itself. */}
+                  {rateIsDirty && (
+                    <p className="print-only mt-1 text-xs font-semibold text-red-600 print:text-[8.5px]">
+                      DRAFT — pay rate not saved
                     </p>
                   )}
                 </div>
@@ -1961,6 +2011,9 @@ function PaymentReportTab() {
                     Enter a rate to calculate payment for this period.
                   </p>
                 )}
+                {updatePayRate.error && (
+                  <p className="w-full text-xs text-red-500">{updatePayRate.error.message}</p>
+                )}
               </div>
 
               {/* Bonus/incentive categories — manual per-period amounts, separate
@@ -2007,6 +2060,7 @@ function PaymentReportTab() {
                     </div>
                   ))}
                 </div>
+                {saveBonus.error && <p className="text-xs text-red-500">{saveBonus.error.message}</p>}
               </div>
 
               {/* Timesheet table */}
@@ -2148,6 +2202,12 @@ function PaymentReportTab() {
                     <div className="flex justify-between text-sm print:text-[9.5px]" style={{ color: 'var(--text-secondary)' }}>
                       <span>Overtime ({formatDuration(Math.round((totals?.overtime ?? 0) * 60))} × {formatCurrency(otPayRate!)})</span>
                       <span>{formatCurrency(otPay!)}</span>
+                    </div>
+                  )}
+                  {otRateMissing && (
+                    <div className="flex justify-between text-sm text-red-500 print:text-[9.5px]">
+                      <span>Overtime ({formatDuration(Math.round((totals?.overtime ?? 0) * 60))}) — not paid: no OT rate set</span>
+                      <span>{formatCurrency(0)}</span>
                     </div>
                   )}
                   {BONUS_FIELDS.filter((key) => bonusAmounts[key] > 0).map((key) => (

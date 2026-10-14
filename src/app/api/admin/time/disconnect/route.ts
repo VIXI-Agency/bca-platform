@@ -2,7 +2,8 @@ import { NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { z } from 'zod';
-import { nowPstAsUtc, getTodayRangePST } from '@/lib/time';
+import { nowPstAsUtc, getTodayRangePST, getPayPeriodStart } from '@/lib/time';
+import { isPeriodLocked } from '@/lib/payroll/compute';
 
 export const DISCONNECTION_TYPES = [
   'absence',
@@ -48,6 +49,15 @@ export async function POST(request: Request) {
     // off, and the disconnection would land outside the shift it belongs to.
     const now = nowPstAsUtc();
     const { todayStart } = getTodayRangePST();
+
+    // Disconnected time reduces pay, so it can't change once the period's
+    // pay run is approved or paid — same rule as editing hours or bonuses.
+    if (await isPeriodLocked(getPayPeriodStart(todayStart))) {
+      return NextResponse.json(
+        { error: 'This pay period has been approved or paid and can no longer be edited.' },
+        { status: 409 }
+      );
+    }
 
     // Verify the target user exists and is active
     const targetUser = await prisma.user.findUnique({

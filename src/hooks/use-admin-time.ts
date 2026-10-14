@@ -52,6 +52,7 @@ export interface DayLog {
   clockOut?: string;
   totalHours?: number;
   overtime?: number;
+  disconnectedMinutes?: number;
   modifiedFields?: string[];
   isModifiedByAdmin?: boolean;
 }
@@ -61,6 +62,7 @@ export interface WeekTotals {
   overtime: number;
   firstBreakExcess: number;
   secondBreakExcess: number;
+  disconnectedMinutes: number;
 }
 
 export interface TimesheetResponse {
@@ -85,6 +87,9 @@ export interface DisconnectionEntry {
   type: DisconnectionType;
   reason: string;
   disconnectedBy: string;
+  startTime: string;
+  endTime: string | null;
+  durationMinutes: number | null;
 }
 
 export interface DisconnectionsResponse {
@@ -148,6 +153,8 @@ export interface TimeHistoryEntry {
   secondBreakOut: string | null;
   secondBreakIn: string | null;
   clockOut: string | null;
+  paidHours: number | null;
+  disconnectedMinutes: number;
 }
 
 /* -------------------------------------------------- */
@@ -266,6 +273,10 @@ export function useDisconnectEmployee() {
       }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['admin-time-statuses'] });
+      // Disconnected time now changes paid hours, so every view of hours is stale.
+      qc.invalidateQueries({ queryKey: ['admin-timesheet'] });
+      qc.invalidateQueries({ queryKey: ['admin-disconnections'] });
+      qc.invalidateQueries({ queryKey: ['admin-time-history'] });
     },
   });
 }

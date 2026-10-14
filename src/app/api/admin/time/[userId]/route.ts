@@ -3,7 +3,7 @@ import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { clockWeekSchema } from '@/lib/validators';
 import { getTodayRangePST, getPayPeriodStart, getPayPeriodWorkDates } from '@/lib/time';
-import { computeDayMetrics } from '@/lib/payroll/compute';
+import { computeDayMetrics, disconnectionKey, fetchDisconnectionWindows } from '@/lib/payroll/compute';
 
 export async function GET(
   request: Request,
@@ -50,8 +50,8 @@ export async function GET(
     const weekEnd = new Date(periodStart);
     weekEnd.setDate(weekEnd.getDate() + 7);
 
-    // Fetch time logs and audit trail in parallel
-    const [logs, audits, user] = await Promise.all([
+    // Fetch time logs, audit trail and disconnections in parallel
+    const [logs, audits, user, disconnections] = await Promise.all([
       prisma.employeeTimeLog.findMany({
         where: {
           idUser: targetUserId,
@@ -76,6 +76,7 @@ export async function GET(
         where: { idUser: targetUserId },
         select: { idUser: true, name: true, lastname: true, isPartTime: true },
       }),
+      fetchDisconnectionWindows(periodStart, weekEnd, targetUserId),
     ]);
 
     if (!user) {
@@ -91,7 +92,7 @@ export async function GET(
     // Compute metrics for each day
     const days = filteredLogs.map((log) => ({
       ...log,
-      ...computeDayMetrics(log),
+      ...computeDayMetrics(log, disconnections.get(disconnectionKey(targetUserId, log.logDate))),
       audits: audits.filter((a) => {
         // Match audit entries to the log date
         const auditDate = new Date(a.modifiedDate);
@@ -118,6 +119,7 @@ export async function GET(
       overtime: Math.round(days.reduce((sum, d) => sum + d.overtime, 0) * 100) / 100,
       firstBreakExcess: Math.round(days.reduce((sum, d) => sum + d.firstBreakExcess, 0) * 100) / 100,
       secondBreakExcess: Math.round(days.reduce((sum, d) => sum + d.secondBreakExcess, 0) * 100) / 100,
+      disconnectedMinutes: Math.round(days.reduce((sum, d) => sum + d.disconnectedMinutes, 0) * 100) / 100,
     };
 
     // Transform to match frontend { data: DayLog[], audits: Audit[] } shape
@@ -136,6 +138,7 @@ export async function GET(
       firstBreakExcess: d.firstBreakExcess,
       secondBreakExcess: d.secondBreakExcess,
       lunchDurationMinutes: d.lunchDurationMinutes,
+      disconnectedMinutes: d.disconnectedMinutes,
       modifiedFields: d.audits.map((a: { fieldModified: string | null }) => a.fieldModified).filter(Boolean),
       isModifiedByAdmin: d.isModifiedByAdmin ?? false,
     }));
@@ -163,6 +166,7 @@ export async function GET(
           firstBreakExcess: 0,
           secondBreakExcess: 0,
           lunchDurationMinutes: 0,
+          disconnectedMinutes: 0,
           modifiedFields: [] as string[],
           isModifiedByAdmin: false,
         }

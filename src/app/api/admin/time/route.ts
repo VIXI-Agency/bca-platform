@@ -89,9 +89,12 @@ export async function GET() {
           logDate: { gte: todayStart, lt: todayEnd },
         },
       }),
+      // Today's open disconnections only — one never closed on an earlier
+      // day would otherwise show the employee as disconnected forever.
       prisma.employeeDisconnection.findMany({
         where: {
           reconnectionTime: null,
+          disconnectionDate: todayStart,
         },
         select: { idUser: true },
       }),

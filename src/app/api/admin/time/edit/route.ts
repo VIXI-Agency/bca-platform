@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { timeEditSchema } from '@/lib/validators';
-import { timeStringToUtcDate, getPayPeriodStart } from '@/lib/time';
+import { timeStringToUtcDate, getPayPeriodStart, addDaysUTC } from '@/lib/time';
 import { isPeriodLocked } from '@/lib/payroll/compute';
 
 const VALID_FIELDS = [
@@ -64,8 +64,7 @@ export async function POST(request: Request) {
     // Parse the target date as UTC midnight (matches logDate storage convention)
     const dateParts = date.split('-').map(Number);
     const targetDate = new Date(Date.UTC(dateParts[0], dateParts[1] - 1, dateParts[2]));
-    const targetDateEnd = new Date(targetDate);
-    targetDateEnd.setDate(targetDateEnd.getDate() + 1);
+    const targetDateEnd = addDaysUTC(targetDate, 1);
 
     if (await isPeriodLocked(getPayPeriodStart(targetDate))) {
       return NextResponse.json(
@@ -139,7 +138,6 @@ export async function POST(request: Request) {
       'lunchOut', 'lunchIn',
       'secondBreakOut', 'secondBreakIn', 'clockOut',
     ];
-    const fieldIdx = TIME_ORDER.indexOf(field);
     const proposed = { ...log, [field]: newDateTime } as unknown as Record<string, Date | null>;
     for (let i = 0; i < TIME_ORDER.length - 1; i++) {
       const a = proposed[TIME_ORDER[i]] as Date | null;
@@ -150,6 +148,15 @@ export async function POST(request: Request) {
           { status: 400 },
         );
       }
+    }
+
+    // There are no overnight shifts, so a day whose clock-out isn't after its
+    // clock-in pays nothing (computeDayMetrics) — refuse to save one.
+    if (proposed.clockIn && proposed.clockOut && proposed.clockOut.getTime() <= proposed.clockIn.getTime()) {
+      return NextResponse.json(
+        { error: 'clockOut must be later than clockIn' },
+        { status: 400 },
+      );
     }
 
     // Update the time log and create audit record in a transaction

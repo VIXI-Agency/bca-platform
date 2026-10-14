@@ -61,52 +61,15 @@ import {
   type TimeHistoryEntry,
   type DisconnectionType,
 } from '@/hooks/use-admin-time';
+import { payPeriodOptions } from '@/lib/time';
 
 /* -------------------------------------------------- */
 /*  Helpers                                            */
 /* -------------------------------------------------- */
 
-/**
- * Get the Friday that starts the pay period containing `date`. Pay periods
- * run Friday through Thursday (not a calendar Mon–Sun week) — a Monday the
- * employee's schedule is still Mon–Fri, but payroll groups it with the
- * Friday that precedes it, not the Friday later in the same calendar week.
- */
-function getPayPeriodStart(date: Date): Date {
-  const d = new Date(date);
-  d.setHours(0, 0, 0, 0);
-  // 0=Sun,1=Mon,...,5=Fri,6=Sat
-  const day = d.getDay();
-  // Days since last Friday: Fri=0, Sat=1, Sun=2, Mon=3, Tue=4, Wed=5, Thu=6
-  const diff = (day + 2) % 7;
-  d.setDate(d.getDate() - diff);
-  return d;
-}
-
-function formatDateISO(d: Date): string {
-  return d.toISOString().split('T')[0];
-}
-
-function formatWeekLabel(friday: Date): string {
-  const thursday = new Date(friday);
-  thursday.setDate(thursday.getDate() + 6); // Friday + 6 = Thursday
-  const opts: Intl.DateTimeFormatOptions = { month: 'short', day: 'numeric' };
-  return `${friday.toLocaleDateString('en-US', opts)} - ${thursday.toLocaleDateString('en-US', opts)}, ${thursday.getFullYear()}`;
-}
-
-function generateWeekOptions(count: number): { value: string; label: string }[] {
-  const weeks: { value: string; label: string }[] = [];
-  const current = getPayPeriodStart(new Date());
-  for (let i = 0; i < count; i++) {
-    const friday = new Date(current);
-    friday.setDate(friday.getDate() - i * 7);
-    weeks.push({
-      value: formatDateISO(friday),
-      label: formatWeekLabel(friday),
-    });
-  }
-  return weeks;
-}
+// Pay periods (Friday through Thursday) come from the same helper the
+// Payroll page and the API use, so every screen agrees on which week is which.
+const generateWeekOptions = payPeriodOptions;
 
 function formatTime(time?: string | null): string {
   if (!time) return '--:--';
@@ -1063,6 +1026,11 @@ function EditTimeTab() {
                           {day.totalHours != null
                             ? formatDuration(Math.round(day.totalHours * 60))
                             : '--'}
+                          {(day.overtime ?? 0) > 0 && (
+                            <span className="block text-xs font-normal" style={{ color: 'var(--accent)' }}>
+                              +{formatDuration(Math.round((day.overtime ?? 0) * 60))} OT
+                            </span>
+                          )}
                           {(day.disconnectedMinutes ?? 0) > 0 && (
                             <span className="block text-xs font-normal text-red-500">
                               −{formatDuration(Math.round(day.disconnectedMinutes ?? 0))} disconnected

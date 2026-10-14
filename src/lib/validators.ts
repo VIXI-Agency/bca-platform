@@ -1,5 +1,15 @@
 import { z } from 'zod';
 
+// A real YYYY-MM-DD calendar date. The shape check alone let "2026-99-99"
+// through, and Date.UTC silently rolled it over to some other day.
+const calendarDate = z
+  .string()
+  .regex(/^\d{4}-\d{2}-\d{2}$/, 'Date must be YYYY-MM-DD format')
+  .refine((s) => {
+    const [y, m, d] = s.split('-').map(Number);
+    return new Date(Date.UTC(y, m - 1, d)).toISOString().startsWith(s);
+  }, 'Invalid date');
+
 // Auth
 export const loginSchema = z.object({
   email: z.string().email('Invalid email address'),
@@ -49,9 +59,7 @@ export const clockActionSchema = z.object({
 });
 
 export const clockWeekSchema = z.object({
-  week: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Date must be YYYY-MM-DD format')
-    .refine((d) => !isNaN(new Date(d).getTime()), 'Invalid date')
-    .optional(),
+  week: calendarDate.optional(),
 });
 
 // Reports
@@ -105,17 +113,15 @@ export const scheduleSchema = z.object({
 // Admin Time
 export const timeEditSchema = z.object({
   userId: z.number().int().positive(),
-  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine(
-    (d) => !isNaN(new Date(d).getTime()),
-    'Invalid date'
-  ),
+  date: calendarDate,
   field: z.enum([
     'clockIn', 'firstBreakOut', 'firstBreakIn',
     'lunchOut', 'lunchIn',
     'secondBreakOut', 'secondBreakIn', 'clockOut',
   ]),
-  // HH:mm to set a time, or empty string to clear the entry (e.g. a skipped break/lunch)
-  value: z.string().regex(/^(\d{2}:\d{2})?$/, 'Must be HH:mm format or empty to clear'),
+  // HH:mm (00:00-23:59) to set a time, or empty string to clear the entry
+  // (e.g. a skipped break/lunch). "29:99" used to pass and roll into the next day.
+  value: z.string().regex(/^(([01]\d|2[0-3]):[0-5]\d)?$/, 'Must be a valid HH:mm time or empty to clear'),
   // min(8) blocks placeholder junk like "0" or "-" — a real audit trail needs
   // an actual explanation, not just a non-empty field.
   reason: z.string().trim().min(8, 'Explain why this time is being changed (at least 8 characters)').max(500),
@@ -125,7 +131,7 @@ export const timeEditSchema = z.object({
 const bonusAmountField = z.number().nonnegative().max(999999.99).nullable().optional();
 
 export const payrollBonusSchema = z.object({
-  period: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Date must be YYYY-MM-DD format'),
+  period: calendarDate,
   discretionaryBonus: bonusAmountField,
   collectionsBonus: bonusAmountField,
   trainingBonus: bonusAmountField,
@@ -137,7 +143,7 @@ export const payrollBonusSchema = z.object({
 });
 
 // Payroll — pay run workflow (approve a period's statements, mark paid, void)
-const periodDateString = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Date must be YYYY-MM-DD format');
+const periodDateString = calendarDate;
 
 export const payRunApproveSchema = z.object({
   period: periodDateString,
@@ -146,7 +152,8 @@ export const payRunApproveSchema = z.object({
 });
 
 export const payStatementPaySchema = z.object({
-  statementIds: z.array(z.number().int().positive()).min(1),
+  // Bounded well under SQL Server's 2100-parameter limit for the IN (...) list.
+  statementIds: z.array(z.number().int().positive()).min(1).max(500),
   paymentMethod: z.enum(['direct_deposit', 'wire', 'zelle', 'cash', 'other']),
   paymentReference: z.string().max(200).optional(),
   paidDate: periodDateString,

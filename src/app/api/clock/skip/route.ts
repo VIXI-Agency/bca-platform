@@ -24,11 +24,15 @@ export async function POST(request: Request) {
 
     const userId = (session.user as { userId: number }).userId;
 
-    // Check if user is part-time
+    // Check if user is part-time; the session outlives a deactivation, so
+    // check the account is still active too.
     const user = await prisma.user.findUnique({
       where: { idUser: userId },
-      select: { isPartTime: true },
+      select: { isPartTime: true, status: true },
     });
+    if (!user || user.status === true) {
+      return NextResponse.json({ error: 'Your account is inactive.' }, { status: 403 });
+    }
 
     const body = await request.json();
     const parsed = skipBreakSchema.safeParse(body);

@@ -40,6 +40,11 @@ function applyEarlyClockInRule(time: Date, role: number | undefined): Date {
   return new Date(Date.UTC(1970, 0, 1, 6, 0, 0));
 }
 
+async function isAccountBlocked(userId: number): Promise<boolean> {
+  const account = await prisma.user.findUnique({ where: { idUser: userId }, select: { status: true } });
+  return !account || account.status === true;
+}
+
 export async function POST(request: Request) {
   try {
     const session = await auth();
@@ -57,6 +62,12 @@ export async function POST(request: Request) {
         { error: 'Invalid action', details: parsed.error.flatten().fieldErrors },
         { status: 400 }
       );
+    }
+
+    // The session outlives a deactivation, so check the account itself before
+    // recording paid time.
+    if (await isAccountBlocked(userId)) {
+      return NextResponse.json({ error: 'Your account is inactive.' }, { status: 403 });
     }
 
     const { action } = parsed.data;
@@ -105,6 +116,16 @@ export async function POST(request: Request) {
       if (currentValue) {
         return NextResponse.json(
           { error: `${action} already recorded` },
+          { status: 400 }
+        );
+      }
+
+      // An early clock-in is recorded as 5:45/6:00, so clocking out before
+      // that recorded time (or in the same instant) would describe a shift
+      // that ends before it starts. Such a day pays nothing, so refuse it.
+      if (action === 'clockOut' && log.clockIn && now.getTime() <= log.clockIn.getTime()) {
+        return NextResponse.json(
+          { error: 'Clock-out must be later than your recorded clock-in time.' },
           { status: 400 }
         );
       }

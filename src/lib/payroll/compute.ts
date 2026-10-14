@@ -1,4 +1,5 @@
 import { prisma } from '@/lib/prisma';
+import { getPayPeriodEnd } from '@/lib/time';
 import { BONUS_FIELDS, type BonusFieldKey } from './constants';
 
 export interface TimeLogRow {
@@ -45,21 +46,15 @@ function disconnectedMs(
   windows: DisconnectionWindow[],
   clockInMs: number,
   clockOutMs: number,
-  overnight: boolean,
   lunch: [number, number] | null,
 ): number {
-  // TIME values carry no date. On an overnight shift anything earlier than
-  // clock-in belongs to the following day, same as clockOut.
-  const norm = (d: Date) => {
-    const t = new Date(d).getTime();
-    return overnight && t < clockInMs ? t + DAY_MS : t;
-  };
-
   const clipped = windows
     .map((w): [number, number] => {
-      const start = norm(w.start);
-      let end = w.end ? norm(w.end) : clockOutMs;
-      if (end < start) end += DAY_MS;
+      const start = new Date(w.start).getTime();
+      // A reconnect that reads earlier than the disconnect happened on a later
+      // day (or is bad data); either way the employee was gone until clock-out.
+      const reconnect = w.end ? new Date(w.end).getTime() : null;
+      const end = reconnect !== null && reconnect >= start ? reconnect : clockOutMs;
       return [Math.max(start, clockInMs), Math.min(end, clockOutMs)];
     })
     .filter(([s, e]) => e > s)
@@ -118,6 +113,11 @@ export async function fetchDisconnectionWindows(
  *
  * Unpaid time: lunch, plus any time the employee was disconnected by an admin
  * (see disconnectedMs). Breaks are paid regardless of length.
+ *
+ * There are no overnight shifts: every shift starts and ends the same day.
+ * A clock-out at or before clock-in is a bad punch (all such rows in the
+ * database were data-entry errors), and it pays nothing rather than being
+ * read as a ~24h overnight shift.
  */
 export function computeDayMetrics(
   log: TimeLogRow,
@@ -130,31 +130,22 @@ export function computeDayMetrics(
   let lunchDurationMinutes = 0;
   let disconnectedMinutes = 0;
 
-  if (log.clockIn && log.clockOut) {
-    const clockInMs = new Date(log.clockIn).getTime();
-    let clockOutMs = new Date(log.clockOut).getTime();
-    // Handle overnight shifts: if clockOut is before clockIn, add 24 hours
-    const overnight = clockOutMs <= clockInMs;
-    if (overnight) {
-      clockOutMs += DAY_MS;
-    }
+  const clockInMs = log.clockIn ? new Date(log.clockIn).getTime() : null;
+  const clockOutMs = log.clockOut ? new Date(log.clockOut).getTime() : null;
 
+  if (clockInMs !== null && clockOutMs !== null && clockOutMs > clockInMs) {
     let lunchMs = 0;
     let lunchSpan: [number, number] | null = null;
     if (log.lunchOut && log.lunchIn) {
-      let lunchOutMs = new Date(log.lunchOut).getTime();
+      const lunchOutMs = new Date(log.lunchOut).getTime();
       let lunchInMs = new Date(log.lunchIn).getTime();
       if (lunchInMs < lunchOutMs) lunchInMs += DAY_MS;
       lunchMs = lunchInMs - lunchOutMs;
       lunchDurationMinutes = lunchMs / (1000 * 60);
-      if (overnight && lunchOutMs < clockInMs) {
-        lunchOutMs += DAY_MS;
-        lunchInMs += DAY_MS;
-      }
       lunchSpan = [lunchOutMs, lunchInMs];
     }
 
-    const discMs = disconnectedMs(disconnections, clockInMs, clockOutMs, overnight, lunchSpan);
+    const discMs = disconnectedMs(disconnections, clockInMs, clockOutMs, lunchSpan);
     disconnectedMinutes = discMs / (1000 * 60);
 
     // firstBreakExcess/secondBreakExcess are still tracked (e.g. for a future
@@ -210,8 +201,7 @@ export interface PeriodHours {
 
 /** Sums computeDayMetrics across every weekday log in [periodStart, periodStart+7). */
 export async function computePeriodHours(userId: number, periodStart: Date): Promise<PeriodHours> {
-  const periodEnd = new Date(periodStart);
-  periodEnd.setDate(periodEnd.getDate() + 7);
+  const periodEnd = getPayPeriodEnd(periodStart);
 
   const [logs, disconnections] = await Promise.all([
     prisma.employeeTimeLog.findMany({

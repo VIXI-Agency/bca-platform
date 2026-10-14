@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { clockWeekSchema } from '@/lib/validators';
-import { getTodayRangePST, getPayPeriodStart } from '@/lib/time';
+import { getPayPeriodEnd, resolvePayPeriodStart } from '@/lib/time';
 import { DISCONNECTION_TYPES } from '../../disconnect/route';
 
 export async function GET(
@@ -35,18 +35,8 @@ export async function GET(
       );
     }
 
-    let periodStart: Date;
-    if (parsed.data.week) {
-      const parts = parsed.data.week.split('-').map(Number);
-      const inputDate = new Date(parts[0], parts[1] - 1, parts[2]);
-      periodStart = getPayPeriodStart(inputDate);
-    } else {
-      const { todayStart } = getTodayRangePST();
-      periodStart = getPayPeriodStart(todayStart);
-    }
-
-    const periodEnd = new Date(periodStart);
-    periodEnd.setDate(periodEnd.getDate() + 7);
+    const periodStart = resolvePayPeriodStart(parsed.data.week);
+    const periodEnd = getPayPeriodEnd(periodStart);
 
     const disconnections = await prisma.employeeDisconnection.findMany({
       where: {

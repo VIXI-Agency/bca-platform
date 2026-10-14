@@ -66,13 +66,25 @@ export async function GET(
       counts[type] = (counts[type] ?? 0) + 1;
     }
 
-    const data = disconnections.map((d) => ({
-      id: d.idDisconnection,
-      date: d.disconnectionDate.toISOString().split('T')[0],
-      type: d.disconnectionType ?? 'other',
-      reason: d.reason ?? '',
-      disconnectedBy: d.disconnectedBy ?? '',
-    }));
+    const data = disconnections.map((d) => {
+      let durationMinutes: number | null = null;
+      if (d.reconnectionTime) {
+        let ms = d.reconnectionTime.getTime() - d.disconnectionTime.getTime();
+        if (ms < 0) ms += 24 * 60 * 60 * 1000;
+        durationMinutes = Math.round(ms / 60000);
+      }
+      return {
+        id: d.idDisconnection,
+        date: d.disconnectionDate.toISOString().split('T')[0],
+        type: d.disconnectionType ?? 'other',
+        reason: d.reason ?? '',
+        disconnectedBy: d.disconnectedBy ?? '',
+        // PST wall-clock TIME values as ISO strings, same as the clock punches.
+        startTime: d.disconnectionTime.toISOString(),
+        endTime: d.reconnectionTime?.toISOString() ?? null,
+        durationMinutes,
+      };
+    });
 
     return NextResponse.json({ data, counts });
   } catch (error) {

@@ -1063,6 +1063,11 @@ function EditTimeTab() {
                           {day.totalHours != null
                             ? formatDuration(Math.round(day.totalHours * 60))
                             : '--'}
+                          {(day.disconnectedMinutes ?? 0) > 0 && (
+                            <span className="block text-xs font-normal text-red-500">
+                              −{formatDuration(Math.round(day.disconnectedMinutes ?? 0))} disconnected
+                            </span>
+                          )}
                         </td>
                       </tr>
                     );
@@ -1368,17 +1373,10 @@ function TimeHistoryTab() {
     }
   }
 
-  // Compute total hours per entry
+  // Paid hours come from the server's shared payroll math (lunch and
+  // disconnected time already deducted), so this tab matches the Payment Report.
   function computeHours(e: TimeHistoryEntry): string {
-    if (!e.clockIn || !e.clockOut) return '--';
-    const inMs = new Date(e.clockIn).getTime();
-    const outMs = new Date(e.clockOut).getTime();
-    let lunchMs = 0;
-    if (e.lunchOut && e.lunchIn) {
-      lunchMs = new Date(e.lunchIn).getTime() - new Date(e.lunchOut).getTime();
-    }
-    const hours = (outMs - inMs - lunchMs) / (1000 * 3600);
-    return Math.max(0, hours).toFixed(2);
+    return e.paidHours == null ? '--' : e.paidHours.toFixed(2);
   }
 
   return (
@@ -1523,6 +1521,11 @@ function TimeHistoryTab() {
                       </td>
                       <td className="px-3 py-2.5 text-right font-medium" style={{ color: 'var(--text-primary)' }}>
                         {computeHours(entry)}
+                        {entry.disconnectedMinutes > 0 && (
+                          <span className="block text-xs font-normal text-red-500">
+                            −{formatDuration(Math.round(entry.disconnectedMinutes))} disconnected
+                          </span>
+                        )}
                       </td>
                     </tr>
                   ))}
@@ -2088,6 +2091,11 @@ function PaymentReportTab() {
                           <td className="px-3 py-2 print:px-[6px] print:py-[3px]" style={{ color: 'var(--text-secondary)' }}>{formatTime(day.clockOut)}</td>
                           <td className="px-3 py-2 text-right font-medium print:px-[6px] print:py-[3px]" style={{ color: 'var(--text-primary)' }}>
                             {day.totalHours != null ? formatDuration(Math.round(day.totalHours * 60)) : '--'}
+                            {(day.disconnectedMinutes ?? 0) > 0 && (
+                              <span className="block text-xs font-normal text-red-500 print:text-[7px]">
+                                −{formatDuration(Math.round(day.disconnectedMinutes ?? 0))} disc.
+                              </span>
+                            )}
                           </td>
                           <td className="pl-3 py-2 text-right print:pl-[6px] print:py-[3px]" style={{ color: day.overtime ? 'var(--accent)' : 'var(--text-muted)' }}>
                             {day.overtime ? formatDuration(Math.round(day.overtime * 60)) : '--'}
@@ -2119,6 +2127,11 @@ function PaymentReportTab() {
                 <div>
                   <p className="mb-2 text-sm font-semibold print:mb-1 print:text-[10px]" style={{ color: 'var(--text-primary)' }}>
                     Disconnections
+                    {(totals?.disconnectedMinutes ?? 0) > 0 && (
+                      <span className="ml-2 font-normal text-red-500">
+                        ({formatDuration(Math.round(totals?.disconnectedMinutes ?? 0))} deducted from paid hours)
+                      </span>
+                    )}
                   </p>
                   <div className="flex flex-wrap gap-2 print:gap-1">
                     {(Object.keys(DISCONNECTION_TYPE_LABELS) as DisconnectionType[])
@@ -2133,6 +2146,9 @@ function PaymentReportTab() {
                     {disconnections.data.map((d) => (
                       <p key={d.id} className="text-xs print:text-[8px]" style={{ color: 'var(--text-muted)' }}>
                         {new Date(d.date + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
+                        {' · '}
+                        {formatTime(d.startTime)} – {d.endTime ? formatTime(d.endTime) : 'not reconnected (until clock-out)'}
+                        {d.durationMinutes != null && ` (${formatDuration(d.durationMinutes)})`}
                         {' — '}
                         {DISCONNECTION_TYPE_LABELS[d.type]}
                         {d.reason && `: ${d.reason}`}

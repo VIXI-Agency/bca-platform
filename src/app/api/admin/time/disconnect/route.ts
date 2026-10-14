@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { z } from 'zod';
+import { nowPstAsUtc, getTodayRangePST } from '@/lib/time';
 
 export const DISCONNECTION_TYPES = [
   'absence',
@@ -42,7 +43,11 @@ export async function POST(request: Request) {
     }
 
     const { userId, action, type, reason } = parsed.data;
-    const now = new Date();
+    // Pacific wall-clock time, the same convention as every clock punch in
+    // EmployeeTimeLog. A plain new Date() would be stored as UTC, 7-8 hours
+    // off, and the disconnection would land outside the shift it belongs to.
+    const now = nowPstAsUtc();
+    const { todayStart } = getTodayRangePST();
 
     // Verify the target user exists and is active
     const targetUser = await prisma.user.findUnique({
@@ -54,13 +59,14 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'User not found or inactive' }, { status: 404 });
     }
 
+    // Only today's open disconnection counts as active. One left open on an
+    // earlier day ends at that day's clock-out for pay purposes, so it must
+    // not block a new disconnect or be the row a reconnect closes.
+    const activeWhere = { idUser: userId, reconnectionTime: null, disconnectionDate: todayStart };
+
     if (action === 'disconnect') {
-      // Check if user already has an active disconnection (no reconnection time)
       const activeDisconnection = await prisma.employeeDisconnection.findFirst({
-        where: {
-          idUser: userId,
-          reconnectionTime: null,
-        },
+        where: activeWhere,
       });
 
       if (activeDisconnection) {
@@ -75,7 +81,7 @@ export async function POST(request: Request) {
         data: {
           idUser: userId,
           disconnectionTime: now,
-          disconnectionDate: new Date(now.getFullYear(), now.getMonth(), now.getDate()),
+          disconnectionDate: todayStart,
           disconnectedBy: String(adminUserId),
           disconnectionType: type || null,
           reason: reason || null,
@@ -87,13 +93,9 @@ export async function POST(request: Request) {
         message: 'Employee disconnected successfully',
       });
     } else {
-      // Reconnect: Find the active disconnection record
       const activeDisconnection = await prisma.employeeDisconnection.findFirst({
-        where: {
-          idUser: userId,
-          reconnectionTime: null,
-        },
-        orderBy: { disconnectionTime: 'desc' },
+        where: activeWhere,
+        orderBy: { idDisconnection: 'desc' },
       });
 
       if (!activeDisconnection) {

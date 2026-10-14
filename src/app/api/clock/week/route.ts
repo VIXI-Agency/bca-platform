@@ -3,7 +3,7 @@ import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { clockWeekSchema } from '@/lib/validators';
 import { getTodayRangePST, getPayPeriodStart } from '@/lib/time';
-import { computeDayMetrics } from '@/lib/payroll/compute';
+import { computeDayMetrics, disconnectionKey, fetchDisconnectionWindows } from '@/lib/payroll/compute';
 
 export async function GET(request: Request) {
   try {
@@ -38,17 +38,20 @@ export async function GET(request: Request) {
     const weekEnd = new Date(periodStart);
     weekEnd.setDate(weekEnd.getDate() + 7);
 
-    // Fetch all logs for this pay period
-    const logs = await prisma.employeeTimeLog.findMany({
-      where: {
-        idUser: userId,
-        logDate: {
-          gte: periodStart,
-          lt: weekEnd,
+    // Fetch all logs and disconnections for this pay period
+    const [logs, disconnections] = await Promise.all([
+      prisma.employeeTimeLog.findMany({
+        where: {
+          idUser: userId,
+          logDate: {
+            gte: periodStart,
+            lt: weekEnd,
+          },
         },
-      },
-      orderBy: { logDate: 'asc' },
-    });
+        orderBy: { logDate: 'asc' },
+      }),
+      fetchDisconnectionWindows(periodStart, weekEnd, userId),
+    ]);
 
     // Defensive: exclude Saturday (6) and Sunday (0) — no work falls on weekends
     const filteredLogs = logs.filter((log) => {
@@ -68,7 +71,7 @@ export async function GET(request: Request) {
 
     // Compute metrics for each day and add dayOfWeek
     const days = filteredLogs.map((log) => {
-      const metrics = computeDayMetrics(log);
+      const metrics = computeDayMetrics(log, disconnections.get(disconnectionKey(userId, log.logDate)));
       const dayIndex = new Date(log.logDate).getUTCDay();
       return {
         dayOfWeek: dayNames[dayIndex],

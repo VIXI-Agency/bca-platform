@@ -18,10 +18,93 @@ export interface DayMetrics {
   firstBreakExcess: number;
   secondBreakExcess: number;
   lunchDurationMinutes: number;
+  disconnectedMinutes: number;
 }
+
+/** One admin "Disconnect"→"Reconnect" span, as PST-as-UTC TIME values.
+ *  `end` is null when the employee was never reconnected that day. */
+export interface DisconnectionWindow {
+  start: Date;
+  end: Date | null;
+}
+
+const DAY_MS = 24 * 60 * 60 * 1000;
 
 function round2(n: number): number {
   return Math.round(n * 100) / 100;
+}
+
+/**
+ * Milliseconds of a shift lost to disconnections. Every disconnection type is
+ * unpaid. Each window is clipped to clock-in..clock-out, overlapping windows
+ * are merged so no minute is counted twice, and any part that falls inside
+ * lunch is left out because lunch is already deducted. A window with no
+ * reconnection runs until clock-out.
+ */
+function disconnectedMs(
+  windows: DisconnectionWindow[],
+  clockInMs: number,
+  clockOutMs: number,
+  overnight: boolean,
+  lunch: [number, number] | null,
+): number {
+  // TIME values carry no date. On an overnight shift anything earlier than
+  // clock-in belongs to the following day, same as clockOut.
+  const norm = (d: Date) => {
+    const t = new Date(d).getTime();
+    return overnight && t < clockInMs ? t + DAY_MS : t;
+  };
+
+  const clipped = windows
+    .map((w): [number, number] => {
+      const start = norm(w.start);
+      let end = w.end ? norm(w.end) : clockOutMs;
+      if (end < start) end += DAY_MS;
+      return [Math.max(start, clockInMs), Math.min(end, clockOutMs)];
+    })
+    .filter(([s, e]) => e > s)
+    .sort((a, b) => a[0] - b[0]);
+
+  const merged: [number, number][] = [];
+  for (const [s, e] of clipped) {
+    const last = merged[merged.length - 1];
+    if (last && s <= last[1]) last[1] = Math.max(last[1], e);
+    else merged.push([s, e]);
+  }
+
+  return merged.reduce((sum, [s, e]) => {
+    const lunchOverlap = lunch ? Math.min(e, lunch[1]) - Math.max(s, lunch[0]) : 0;
+    return sum + (e - s) - Math.max(0, lunchOverlap);
+  }, 0);
+}
+
+/** Key used to match disconnections to the time log of the same employee/day. */
+export function disconnectionKey(userId: number, date: Date): string {
+  return `${userId}|${date.toISOString().split('T')[0]}`;
+}
+
+/** Disconnection windows whose date falls in [from, to), keyed by disconnectionKey(). */
+export async function fetchDisconnectionWindows(
+  from: Date,
+  to: Date,
+  userId?: number,
+): Promise<Map<string, DisconnectionWindow[]>> {
+  const rows = await prisma.employeeDisconnection.findMany({
+    where: {
+      disconnectionDate: { gte: from, lt: to },
+      ...(userId ? { idUser: userId } : {}),
+    },
+    select: { idUser: true, disconnectionDate: true, disconnectionTime: true, reconnectionTime: true },
+  });
+
+  const byKey = new Map<string, DisconnectionWindow[]>();
+  for (const r of rows) {
+    const key = disconnectionKey(r.idUser, r.disconnectionDate);
+    const list = byKey.get(key) ?? [];
+    list.push({ start: r.disconnectionTime, end: r.reconnectionTime });
+    byKey.set(key, list);
+  }
+  return byKey;
 }
 
 /**
@@ -32,30 +115,47 @@ function round2(n: number): number {
  * Overtime here is daily-only (anything past 8h/day, capped at 8h regular) —
  * there is no weekly 40h rule. Weekend logs are filtered out upstream by the
  * caller, not here.
+ *
+ * Unpaid time: lunch, plus any time the employee was disconnected by an admin
+ * (see disconnectedMs). Breaks are paid regardless of length.
  */
-export function computeDayMetrics(log: TimeLogRow): DayMetrics {
+export function computeDayMetrics(
+  log: TimeLogRow,
+  disconnections: DisconnectionWindow[] = [],
+): DayMetrics {
   let totalHours = 0;
   let overtime = 0;
   let firstBreakExcess = 0;
   let secondBreakExcess = 0;
   let lunchDurationMinutes = 0;
+  let disconnectedMinutes = 0;
 
   if (log.clockIn && log.clockOut) {
     const clockInMs = new Date(log.clockIn).getTime();
     let clockOutMs = new Date(log.clockOut).getTime();
     // Handle overnight shifts: if clockOut is before clockIn, add 24 hours
-    if (clockOutMs <= clockInMs) {
-      clockOutMs += 24 * 60 * 60 * 1000;
+    const overnight = clockOutMs <= clockInMs;
+    if (overnight) {
+      clockOutMs += DAY_MS;
     }
 
     let lunchMs = 0;
+    let lunchSpan: [number, number] | null = null;
     if (log.lunchOut && log.lunchIn) {
-      const lunchOutMs = new Date(log.lunchOut).getTime();
+      let lunchOutMs = new Date(log.lunchOut).getTime();
       let lunchInMs = new Date(log.lunchIn).getTime();
-      if (lunchInMs < lunchOutMs) lunchInMs += 24 * 60 * 60 * 1000;
+      if (lunchInMs < lunchOutMs) lunchInMs += DAY_MS;
       lunchMs = lunchInMs - lunchOutMs;
       lunchDurationMinutes = lunchMs / (1000 * 60);
+      if (overnight && lunchOutMs < clockInMs) {
+        lunchOutMs += DAY_MS;
+        lunchInMs += DAY_MS;
+      }
+      lunchSpan = [lunchOutMs, lunchInMs];
     }
+
+    const discMs = disconnectedMs(disconnections, clockInMs, clockOutMs, overnight, lunchSpan);
+    disconnectedMinutes = discMs / (1000 * 60);
 
     // firstBreakExcess/secondBreakExcess are still tracked (e.g. for a future
     // "who's taking long breaks" report) but are no longer subtracted from
@@ -81,7 +181,7 @@ export function computeDayMetrics(log: TimeLogRow): DayMetrics {
       }
     }
 
-    const rawMs = clockOutMs - clockInMs - lunchMs;
+    const rawMs = clockOutMs - clockInMs - lunchMs - discMs;
     totalHours = Math.max(0, round2(rawMs / (1000 * 3600)));
 
     if (totalHours > 8) {
@@ -96,6 +196,7 @@ export function computeDayMetrics(log: TimeLogRow): DayMetrics {
     firstBreakExcess,
     secondBreakExcess,
     lunchDurationMinutes: round2(lunchDurationMinutes),
+    disconnectedMinutes: round2(disconnectedMinutes),
   };
 }
 
@@ -104,6 +205,7 @@ export interface PeriodHours {
   overtime: number;
   firstBreakExcess: number;
   secondBreakExcess: number;
+  disconnectedMinutes: number;
 }
 
 /** Sums computeDayMetrics across every weekday log in [periodStart, periodStart+7). */
@@ -111,22 +213,28 @@ export async function computePeriodHours(userId: number, periodStart: Date): Pro
   const periodEnd = new Date(periodStart);
   periodEnd.setDate(periodEnd.getDate() + 7);
 
-  const logs = await prisma.employeeTimeLog.findMany({
-    where: { idUser: userId, logDate: { gte: periodStart, lt: periodEnd } },
-  });
+  const [logs, disconnections] = await Promise.all([
+    prisma.employeeTimeLog.findMany({
+      where: { idUser: userId, logDate: { gte: periodStart, lt: periodEnd } },
+    }),
+    fetchDisconnectionWindows(periodStart, periodEnd, userId),
+  ]);
 
   const weekdayLogs = logs.filter((log) => {
     const day = new Date(log.logDate).getUTCDay();
     return day !== 0 && day !== 6;
   });
 
-  const days = weekdayLogs.map((log) => computeDayMetrics(log));
+  const days = weekdayLogs.map((log) =>
+    computeDayMetrics(log, disconnections.get(disconnectionKey(userId, log.logDate))),
+  );
 
   return {
     totalHours: round2(days.reduce((sum, d) => sum + d.totalHours, 0)),
     overtime: round2(days.reduce((sum, d) => sum + d.overtime, 0)),
     firstBreakExcess: round2(days.reduce((sum, d) => sum + d.firstBreakExcess, 0)),
     secondBreakExcess: round2(days.reduce((sum, d) => sum + d.secondBreakExcess, 0)),
+    disconnectedMinutes: round2(days.reduce((sum, d) => sum + d.disconnectedMinutes, 0)),
   };
 }
 

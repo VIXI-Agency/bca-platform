@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { Prisma } from '@prisma/client';
+import { computeDayMetrics, disconnectionKey, fetchDisconnectionWindows } from '@/lib/payroll/compute';
 
 /**
  * Get time logs for all (or one) employee for a given pay period.
@@ -77,20 +78,46 @@ export async function GET(request: NextRequest) {
       ORDER BY u.Name, t.LogDate
     `;
 
-    const data = rows.map((r) => ({
-      timeLogId: r.TimeLogId,
-      userId: r.IdUser,
-      employeeName: `${r.Name ?? ''} ${r.Lastname ?? ''}`.trim(),
-      date: r.LogDate.toISOString().split('T')[0],
-      clockIn: r.ClockIn?.toISOString() ?? null,
-      firstBreakOut: r.FirstBreakOut?.toISOString() ?? null,
-      firstBreakIn: r.FirstBreakIn?.toISOString() ?? null,
-      lunchOut: r.LunchOut?.toISOString() ?? null,
-      lunchIn: r.LunchIn?.toISOString() ?? null,
-      secondBreakOut: r.SecondBreakOut?.toISOString() ?? null,
-      secondBreakIn: r.SecondBreakIn?.toISOString() ?? null,
-      clockOut: r.ClockOut?.toISOString() ?? null,
-    }));
+    const uid = userIdParam ? parseInt(userIdParam, 10) : NaN;
+    const disconnections = await fetchDisconnectionWindows(
+      weekStart,
+      weekEnd,
+      !isNaN(uid) && uid > 0 ? uid : undefined,
+    );
+
+    const data = rows.map((r) => {
+      const metrics = computeDayMetrics(
+        {
+          clockIn: r.ClockIn,
+          firstBreakOut: r.FirstBreakOut,
+          firstBreakIn: r.FirstBreakIn,
+          lunchOut: r.LunchOut,
+          lunchIn: r.LunchIn,
+          secondBreakOut: r.SecondBreakOut,
+          secondBreakIn: r.SecondBreakIn,
+          clockOut: r.ClockOut,
+        },
+        disconnections.get(disconnectionKey(r.IdUser, r.LogDate)),
+      );
+      return {
+        timeLogId: r.TimeLogId,
+        userId: r.IdUser,
+        employeeName: `${r.Name ?? ''} ${r.Lastname ?? ''}`.trim(),
+        date: r.LogDate.toISOString().split('T')[0],
+        clockIn: r.ClockIn?.toISOString() ?? null,
+        firstBreakOut: r.FirstBreakOut?.toISOString() ?? null,
+        firstBreakIn: r.FirstBreakIn?.toISOString() ?? null,
+        lunchOut: r.LunchOut?.toISOString() ?? null,
+        lunchIn: r.LunchIn?.toISOString() ?? null,
+        secondBreakOut: r.SecondBreakOut?.toISOString() ?? null,
+        secondBreakIn: r.SecondBreakIn?.toISOString() ?? null,
+        clockOut: r.ClockOut?.toISOString() ?? null,
+        // Paid hours (regular + overtime) from the shared payroll math, so this
+        // tab can't disagree with the Payment Report.
+        paidHours: r.ClockIn && r.ClockOut ? metrics.totalHours + metrics.overtime : null,
+        disconnectedMinutes: metrics.disconnectedMinutes,
+      };
+    });
 
     return NextResponse.json(data);
   } catch (error) {

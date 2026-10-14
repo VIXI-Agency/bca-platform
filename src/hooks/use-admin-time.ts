@@ -1,6 +1,7 @@
 'use client';
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { invalidatePayData } from './invalidate-pay-data';
 
 /* -------------------------------------------------- */
 /*  Types                                              */
@@ -72,6 +73,8 @@ export interface TimesheetResponse {
   weekStart: string;
   weekEnd: string;
   weekTotals: WeekTotals;
+  /** 'approved' or 'paid' means the period is locked for edits. */
+  payRunStatus: 'approved' | 'paid' | 'void' | null;
 }
 
 export type DisconnectionType =
@@ -242,12 +245,7 @@ export function useEditTime() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       }),
-    onSuccess: (_data, variables) => {
-      qc.invalidateQueries({
-        queryKey: ['admin-timesheet', variables.userId],
-      });
-      qc.invalidateQueries({ queryKey: ['admin-audit-log'] });
-    },
+    onSuccess: () => invalidatePayData(qc),
   });
 }
 
@@ -273,10 +271,8 @@ export function useDisconnectEmployee() {
       }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['admin-time-statuses'] });
-      // Disconnected time now changes paid hours, so every view of hours is stale.
-      qc.invalidateQueries({ queryKey: ['admin-timesheet'] });
-      qc.invalidateQueries({ queryKey: ['admin-disconnections'] });
-      qc.invalidateQueries({ queryKey: ['admin-time-history'] });
+      // Disconnected time changes paid hours, so every view of hours is stale.
+      invalidatePayData(qc);
     },
   });
 }
@@ -289,7 +285,8 @@ export function useUpdatePayRate() {
   return useMutation<
     unknown,
     Error,
-    { userId: number; payRate?: number; otPayRate?: number }
+    // null clears a rate; undefined (dropped by JSON) would leave it unchanged.
+    { userId: number; payRate: number | null; otPayRate: number | null }
   >({
     mutationFn: ({ userId, ...rest }) =>
       fetchJson(`/api/users/${userId}`, {
@@ -297,9 +294,7 @@ export function useUpdatePayRate() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(rest),
       }),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['admin-time-employees'] });
-    },
+    onSuccess: () => invalidatePayData(qc),
   });
 }
 
@@ -320,8 +315,6 @@ export function useSaveBonus() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ period: week, ...fields }),
       }),
-    onSuccess: (_data, variables) => {
-      qc.invalidateQueries({ queryKey: ['admin-bonus', variables.userId, variables.week] });
-    },
+    onSuccess: () => invalidatePayData(qc),
   });
 }

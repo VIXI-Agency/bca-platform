@@ -1,17 +1,46 @@
 import { NextResponse } from 'next/server';
+import { Prisma } from '@prisma/client';
 import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { clockWeekSchema, payRunApproveSchema } from '@/lib/validators';
-import { getPayPeriodStart, getPayPeriodEnd, parseDateParam, resolvePayPeriodStart } from '@/lib/time';
-import { computePayStatement } from '@/lib/payroll/compute';
+import {
+  getPayPeriodStart,
+  getPayPeriodEnd,
+  getTodayRangePST,
+  parseDateParam,
+  resolvePayPeriodStart,
+} from '@/lib/time';
+import { computePayStatement, type PayStatementAmounts } from '@/lib/payroll/compute';
 import { BONUS_FIELDS, BONUS_FIELD_LABELS } from '@/lib/payroll/constants';
 
-async function activeEmployees() {
+const isoDate = (d: Date) => d.toISOString().split('T')[0];
+
+/**
+ * Everyone on this period's payroll: active employees, plus anyone who
+ * logged time in the period and has since been deactivated — they are
+ * still owed for the days they worked (e.g. a final paycheck).
+ */
+async function payrollEmployees(periodStart: Date, periodEnd: Date) {
+  const worked = await prisma.employeeTimeLog.findMany({
+    where: { logDate: { gte: periodStart, lt: periodEnd } },
+    select: { idUser: true },
+    distinct: ['idUser'],
+  });
   return prisma.user.findMany({
-    where: { OR: [{ status: null }, { status: false }], idRole: { in: [1, 2, 3] } },
+    where: {
+      OR: [
+        { OR: [{ status: null }, { status: false }], idRole: { in: [1, 2, 3] } },
+        { idUser: { in: worked.map((w) => w.idUser) } },
+      ],
+    },
     select: { idUser: true, name: true, lastname: true },
     orderBy: [{ name: 'asc' }, { lastname: 'asc' }],
   });
+}
+
+/** A period can be approved once it is over: on its closing Friday or later (Pacific). */
+function periodHasEnded(periodEnd: Date): boolean {
+  return getTodayRangePST().todayStart.getTime() >= periodEnd.getTime();
 }
 
 export async function GET(request: Request) {
@@ -35,23 +64,28 @@ export async function GET(request: Request) {
     }
     const periodStart = resolvePayPeriodStart(parsed.data.week);
     const periodEnd = getPayPeriodEnd(periodStart);
+    const periodInfo = {
+      periodStart: isoDate(periodStart),
+      // Stored/computed end is exclusive (next Friday); show Thursday.
+      periodEnd: isoDate(new Date(periodEnd.getTime() - 1)),
+      periodEnded: periodHasEnded(periodEnd),
+    };
 
     const run = await prisma.payRun.findUnique({
       where: { periodStart },
       include: { statements: { orderBy: { employeeName: 'asc' } } },
     });
 
-    if (run) {
+    // A voided run no longer describes what will be paid; show live numbers
+    // (the period is editable again) and keep the run's status for the badge.
+    if (run && run.status !== 'void') {
       return NextResponse.json({
         isLive: false,
         run: {
           id: run.idPayRun,
-          periodStart: run.periodStart.toISOString().split('T')[0],
-          // Stored end is exclusive (next Friday); show the last day, Thursday,
-          // same as the live preview below.
-          periodEnd: new Date(run.periodEnd.getTime() - 1).toISOString().split('T')[0],
+          ...periodInfo,
           status: run.status,
-          scheduledPayDate: run.scheduledPayDate?.toISOString().split('T')[0] ?? null,
+          scheduledPayDate: run.scheduledPayDate ? isoDate(run.scheduledPayDate) : null,
           notes: run.notes ?? '',
         },
         statements: run.statements.map((s) => ({
@@ -69,14 +103,12 @@ export async function GET(request: Request) {
           status: s.status,
           paymentMethod: s.paymentMethod,
           paymentReference: s.paymentReference,
-          paidDate: s.paidDate?.toISOString().split('T')[0] ?? null,
+          paidDate: s.paidDate ? isoDate(s.paidDate) : null,
         })),
       });
     }
 
-    // No run yet for this period — compute a live preview for every active
-    // employee so the admin can see what approving would snapshot.
-    const employees = await activeEmployees();
+    const employees = await payrollEmployees(periodStart, periodEnd);
     const statements = await Promise.all(
       employees.map(async (emp) => {
         const amounts = await computePayStatement(emp.idUser, periodStart);
@@ -103,10 +135,9 @@ export async function GET(request: Request) {
     return NextResponse.json({
       isLive: true,
       run: {
-        id: null,
-        periodStart: periodStart.toISOString().split('T')[0],
-        periodEnd: new Date(periodEnd.getTime() - 1).toISOString().split('T')[0],
-        status: null,
+        id: run?.idPayRun ?? null,
+        ...periodInfo,
+        status: run?.status ?? null,
         scheduledPayDate: null,
         notes: '',
       },
@@ -118,9 +149,25 @@ export async function GET(request: Request) {
   }
 }
 
-/** Approve (or re-approve) a pay period: snapshots every active employee's
- *  current hours/rate/bonus breakdown into PayStatements that stop tracking
- *  live edits from this point on. Only the owner can approve payroll. */
+function statementLines(amounts: PayStatementAmounts) {
+  const lines: { kind: string; category: string | null; label: string; quantity: number | null; rate: number | null; amount: number }[] = [
+    { kind: 'regular', category: null, label: 'Regular', quantity: amounts.regularHours, rate: amounts.payRate, amount: amounts.regularPay },
+  ];
+  if (amounts.overtimeHours > 0) {
+    lines.push({ kind: 'overtime', category: null, label: 'Overtime', quantity: amounts.overtimeHours, rate: amounts.otPayRate, amount: amounts.overtimePay });
+  }
+  for (const key of BONUS_FIELDS) {
+    const amount = amounts.bonusAmounts[key];
+    if (amount > 0) {
+      lines.push({ kind: 'bonus', category: key, label: BONUS_FIELD_LABELS[key], quantity: null, rate: null, amount });
+    }
+  }
+  return lines;
+}
+
+/** Approve (or re-approve) a pay period: snapshots every employee on the
+ *  period's payroll into PayStatements that stop tracking live edits from
+ *  this point on. Only an administrator can approve payroll. */
 export async function POST(request: Request) {
   try {
     const session = await auth();
@@ -146,109 +193,128 @@ export async function POST(request: Request) {
     const periodStart = getPayPeriodStart(parseDateParam(period));
     const periodEnd = getPayPeriodEnd(periodStart);
 
-    const existing = await prisma.payRun.findUnique({ where: { periodStart } });
-    if (existing?.status === 'paid') {
+    // Approving locks the period. Done mid-week, the snapshot would miss the
+    // rest of the week's punches and lock out disconnect/reconnect while
+    // people are still working.
+    if (!periodHasEnded(periodEnd)) {
       return NextResponse.json(
-        { error: 'This pay run has already been paid and cannot be re-approved.' },
+        { error: `This pay period runs through ${isoDate(new Date(periodEnd.getTime() - 1))}. It can be approved starting ${isoDate(periodEnd)}.` },
         { status: 409 }
       );
     }
 
     const scheduledDate = scheduledPayDate ? parseDateParam(scheduledPayDate) : null;
 
-    const run = await prisma.payRun.upsert({
-      where: { periodStart },
-      create: {
-        periodStart,
-        periodEnd,
-        status: 'approved',
-        scheduledPayDate: scheduledDate,
-        notes: notes || null,
-        approvedBy: String(adminUserId),
-        approvedAt: new Date(),
-      },
-      update: {
-        status: 'approved',
-        scheduledPayDate: scheduledDate,
-        notes: notes || null,
-        approvedBy: String(adminUserId),
-        approvedAt: new Date(),
-        voidedBy: null,
-        voidedAt: null,
-        voidReason: null,
-      },
-    });
+    // Compute every statement first (reads only), then write everything in
+    // one transaction, so a failure part-way can't leave an approved — and
+    // therefore locked — period with only some employees snapshotted.
+    const employees = await payrollEmployees(periodStart, periodEnd);
+    const computed = await Promise.all(
+      employees.map(async (emp) => ({ emp, amounts: await computePayStatement(emp.idUser, periodStart) })),
+    );
 
-    const employees = await activeEmployees();
+    const ALREADY_PAID = 'ALREADY_PAID';
+    let runId: number;
+    try {
+      runId = await prisma.$transaction(
+        async (tx) => {
+          const existing = await tx.payRun.findUnique({
+            where: { periodStart },
+            select: { idPayRun: true, status: true },
+          });
+          if (existing?.status === 'paid') throw new Error(ALREADY_PAID);
 
-    for (const emp of employees) {
-      const amounts = await computePayStatement(emp.idUser, periodStart);
-      const employeeName = `${emp.name ?? ''} ${emp.lastname ?? ''}`.trim();
-      const statementData = {
-        employeeName,
-        regularHours: amounts.regularHours,
-        overtimeHours: amounts.overtimeHours,
-        payRate: amounts.payRate,
-        otPayRate: amounts.otPayRate,
-        regularPay: amounts.regularPay,
-        overtimePay: amounts.overtimePay,
-        bonusTotal: amounts.bonusTotal,
-        grossPay: amounts.grossPay,
-      };
+          const runData = {
+            status: 'approved',
+            scheduledPayDate: scheduledDate,
+            notes: notes || null,
+            approvedBy: String(adminUserId),
+            approvedAt: new Date(),
+            voidedBy: null,
+            voidedAt: null,
+            voidReason: null,
+          };
+          const run = existing
+            ? await tx.payRun.update({ where: { idPayRun: existing.idPayRun }, data: runData })
+            : await tx.payRun.create({ data: { periodStart, periodEnd, ...runData } });
 
-      // Atomic guard against a concurrent "mark paid": a plain upsert would
-      // unconditionally overwrite a statement another request just marked
-      // paid between a pre-loop read and this write. Scoping the update's
-      // WHERE to status != 'paid' makes the database itself enforce "never
-      // overwrite a paid statement", not a snapshot taken before the loop.
-      const updated = await prisma.payStatement.updateMany({
-        where: { idPayRun: run.idPayRun, idUser: emp.idUser, status: { not: 'paid' } },
-        data: { ...statementData, status: 'pending' },
-      });
+          // Someone dropped off this period's payroll since the last approval
+          // (deactivated, no hours): their unpaid statement must not stay payable.
+          await tx.payStatement.updateMany({
+            where: {
+              idPayRun: run.idPayRun,
+              status: { not: 'paid' },
+              idUser: { notIn: employees.map((e) => e.idUser) },
+            },
+            data: { status: 'void' },
+          });
 
-      let statementId: number;
-      if (updated.count > 0) {
-        const row = await prisma.payStatement.findUniqueOrThrow({
-          where: { idPayRun_idUser: { idPayRun: run.idPayRun, idUser: emp.idUser } },
-          select: { idStatement: true },
-        });
-        statementId = row.idStatement;
-      } else {
-        // Nothing updated: either no statement exists yet, or it exists and
-        // is already paid (in which case we leave it untouched).
-        const existing = await prisma.payStatement.findUnique({
-          where: { idPayRun_idUser: { idPayRun: run.idPayRun, idUser: emp.idUser } },
-          select: { idStatement: true },
-        });
-        if (existing) continue;
-        const created = await prisma.payStatement.create({
-          data: { idPayRun: run.idPayRun, idUser: emp.idUser, ...statementData, status: 'pending' },
-        });
-        statementId = created.idStatement;
+          for (const { emp, amounts } of computed) {
+            const statementData = {
+              employeeName: `${emp.name ?? ''} ${emp.lastname ?? ''}`.trim(),
+              regularHours: amounts.regularHours,
+              overtimeHours: amounts.overtimeHours,
+              payRate: amounts.payRate,
+              otPayRate: amounts.otPayRate,
+              regularPay: amounts.regularPay,
+              overtimePay: amounts.overtimePay,
+              bonusTotal: amounts.bonusTotal,
+              grossPay: amounts.grossPay,
+              status: 'pending',
+            };
+
+            // Scoped to status != 'paid': a statement already marked paid is
+            // never overwritten, whatever happened since the last approval.
+            const updated = await tx.payStatement.updateMany({
+              where: { idPayRun: run.idPayRun, idUser: emp.idUser, status: { not: 'paid' } },
+              data: statementData,
+            });
+
+            const current = await tx.payStatement.findUnique({
+              where: { idPayRun_idUser: { idPayRun: run.idPayRun, idUser: emp.idUser } },
+              select: { idStatement: true },
+            });
+            let statementId: number;
+            if (updated.count > 0 && current) {
+              statementId = current.idStatement;
+            } else if (current) {
+              continue; // already paid — leave it and its lines alone
+            } else {
+              const created = await tx.payStatement.create({
+                data: { idPayRun: run.idPayRun, idUser: emp.idUser, ...statementData },
+              });
+              statementId = created.idStatement;
+            }
+
+            await tx.payStatementLine.deleteMany({ where: { idStatement: statementId } });
+            await tx.payStatementLine.createMany({
+              data: statementLines(amounts).map((l) => ({ ...l, idStatement: statementId })),
+            });
+          }
+
+          return run.idPayRun;
+        },
+        { maxWait: 10_000, timeout: 60_000 },
+      );
+    } catch (err) {
+      if (err instanceof Error && err.message === ALREADY_PAID) {
+        return NextResponse.json(
+          { error: 'This pay run has already been paid and cannot be re-approved.' },
+          { status: 409 }
+        );
       }
-
-      const lines: { kind: string; category: string | null; label: string; quantity: number | null; rate: number | null; amount: number }[] = [
-        { kind: 'regular', category: null, label: 'Regular', quantity: amounts.regularHours, rate: amounts.payRate, amount: amounts.regularPay },
-      ];
-      if (amounts.overtimeHours > 0) {
-        lines.push({ kind: 'overtime', category: null, label: 'Overtime', quantity: amounts.overtimeHours, rate: amounts.otPayRate, amount: amounts.overtimePay });
+      // Two approvals of a brand-new period at the same moment: the second
+      // hits the unique PeriodStart index.
+      if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
+        return NextResponse.json(
+          { error: 'This period was just approved by someone else. Refresh and try again.' },
+          { status: 409 }
+        );
       }
-      for (const key of BONUS_FIELDS) {
-        const amount = amounts.bonusAmounts[key];
-        if (amount > 0) {
-          lines.push({ kind: 'bonus', category: key, label: BONUS_FIELD_LABELS[key], quantity: null, rate: null, amount });
-        }
-      }
-
-      await prisma.$transaction([
-        prisma.payStatementLine.deleteMany({ where: { idStatement: statementId } }),
-        prisma.payStatementLine.createMany({
-          data: lines.map((l) => ({ ...l, idStatement: statementId })),
-        }),
-      ]);
+      throw err;
     }
 
-    return NextResponse.json({ success: true, runId: run.idPayRun });
+    return NextResponse.json({ success: true, runId });
   } catch (error) {
     console.error('Payroll runs POST error:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });

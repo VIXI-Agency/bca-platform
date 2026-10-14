@@ -2,6 +2,7 @@
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import type { PaymentMethod } from '@/lib/payroll/constants';
+import { invalidatePayData } from './invalidate-pay-data';
 
 export interface PayStatementRow {
   id: number | null;
@@ -25,6 +26,8 @@ export interface PayRunInfo {
   id: number | null;
   periodStart: string;
   periodEnd: string;
+  /** False while the period is still running: it can't be approved yet. */
+  periodEnded: boolean;
   status: 'approved' | 'paid' | 'void' | null;
   scheduledPayDate: string | null;
   notes: string;
@@ -92,9 +95,7 @@ export function useApprovePayRun() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       }),
-    onSuccess: (_data, variables) => {
-      qc.invalidateQueries({ queryKey: ['payroll-run', variables.period] });
-    },
+    onSuccess: () => invalidatePayData(qc),
   });
 }
 
@@ -118,10 +119,7 @@ export function useMarkStatementsPaid() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ statementIds, paymentMethod, paymentReference, paidDate }),
       }),
-    onSuccess: (_data, variables) => {
-      qc.invalidateQueries({ queryKey: ['payroll-run', variables.week] });
-      qc.invalidateQueries({ queryKey: ['payroll-history'] });
-    },
+    onSuccess: () => invalidatePayData(qc),
   });
 }
 
@@ -134,9 +132,7 @@ export function useVoidPayRun() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ reason }),
       }),
-    onSuccess: (_data, variables) => {
-      qc.invalidateQueries({ queryKey: ['payroll-run', variables.week] });
-    },
+    onSuccess: () => invalidatePayData(qc),
   });
 }
 

@@ -4,7 +4,7 @@ import { prisma } from '@/lib/prisma';
 import { updateUserSchema } from '@/lib/validators';
 import bcrypt from 'bcryptjs';
 
-function decimalEq(a: unknown, b: number | undefined): boolean {
+function decimalEq(a: unknown, b: number | null | undefined): boolean {
   const aNum = a != null ? Number(a) : null;
   const bNum = b ?? null;
   return aNum === bNum;

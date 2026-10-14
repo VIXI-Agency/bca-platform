@@ -71,7 +71,7 @@ function statusBadge(status: string | null) {
     case 'approved':
       return <Badge variant="warning">Approved — will pay</Badge>;
     case 'void':
-      return <Badge variant="destructive">Void</Badge>;
+      return <Badge variant="destructive">Voided — showing live numbers</Badge>;
     default:
       return <Badge variant="outline">Live preview — not approved</Badge>;
   }
@@ -139,6 +139,7 @@ function PayRunTab({ canManage }: { canManage: boolean }) {
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [payDialogOpen, setPayDialogOpen] = useState(false);
   const [voidDialogOpen, setVoidDialogOpen] = useState(false);
+  const [approveDialogOpen, setApproveDialogOpen] = useState(false);
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('direct_deposit');
   const [paymentReference, setPaymentReference] = useState('');
   const [paidDate, setPaidDate] = useState(() => localDateISO(new Date()));
@@ -149,7 +150,7 @@ function PayRunTab({ canManage }: { canManage: boolean }) {
     if (!selectedWeek && weekOptions.length > 0) setSelectedWeek(weekOptions[0].value);
   }, [weekOptions, selectedWeek]);
 
-  const { data, isLoading } = usePayRun(selectedWeek);
+  const { data, isLoading, isError, error: loadError } = usePayRun(selectedWeek);
   const approve = useApprovePayRun();
   const markPaid = useMarkStatementsPaid();
   const voidRun = useVoidPayRun();
@@ -189,30 +190,46 @@ function PayRunTab({ canManage }: { canManage: boolean }) {
     { regularHours: 0, overtimeHours: 0, regularPay: 0, overtimePay: 0, bonusTotal: 0, grossPay: 0 },
   );
 
+  // Each action keeps its dialog open on failure; the error (e.g. a 409
+  // because someone else just paid a statement) is shown inside it via the
+  // mutation's own error state.
   async function handleApprove() {
-    await approve.mutateAsync({ period: selectedWeek });
+    try {
+      await approve.mutateAsync({ period: selectedWeek });
+      setApproveDialogOpen(false);
+    } catch {
+      /* shown from approve.error */
+    }
   }
 
   async function handleMarkPaid() {
     if (!data?.run.id || selected.size === 0) return;
-    await markPaid.mutateAsync({
-      runId: data.run.id,
-      week: selectedWeek,
-      statementIds: Array.from(selected),
-      paymentMethod,
-      paymentReference: paymentReference || undefined,
-      paidDate,
-    });
-    setPayDialogOpen(false);
-    setPaymentReference('');
-    setSelected(new Set());
+    try {
+      await markPaid.mutateAsync({
+        runId: data.run.id,
+        week: selectedWeek,
+        statementIds: Array.from(selected),
+        paymentMethod,
+        paymentReference: paymentReference || undefined,
+        paidDate,
+      });
+      setPayDialogOpen(false);
+      setPaymentReference('');
+      setSelected(new Set());
+    } catch {
+      /* shown from markPaid.error */
+    }
   }
 
   async function handleVoid() {
     if (!data?.run.id) return;
-    await voidRun.mutateAsync({ runId: data.run.id, week: selectedWeek, reason: voidReason });
-    setVoidDialogOpen(false);
-    setVoidReason('');
+    try {
+      await voidRun.mutateAsync({ runId: data.run.id, week: selectedWeek, reason: voidReason });
+      setVoidDialogOpen(false);
+      setVoidReason('');
+    } catch {
+      /* shown from voidRun.error */
+    }
   }
 
   const canApprove = canManage && data && data.run.status !== 'paid';
@@ -266,8 +283,16 @@ function PayRunTab({ canManage }: { canManage: boolean }) {
 
             <div className="flex flex-wrap gap-2">
               {canApprove && (
-                <Button onClick={handleApprove} disabled={approve.isPending} className="gap-1.5">
-                  {approve.isPending ? <Loading size="sm" /> : <CheckCircle2 className="h-4 w-4" />}
+                <Button
+                  onClick={() => {
+                    approve.reset();
+                    setApproveDialogOpen(true);
+                  }}
+                  disabled={approve.isPending || !data?.run.periodEnded}
+                  title={data?.run.periodEnded ? undefined : 'This period is still running — it can be approved starting Friday.'}
+                  className="gap-1.5"
+                >
+                  <CheckCircle2 className="h-4 w-4" />
                   {data?.run.status === 'approved' ? 'Re-approve (recompute unpaid)' : 'Approve This Period'}
                 </Button>
               )}
@@ -293,10 +318,24 @@ function PayRunTab({ canManage }: { canManage: boolean }) {
         </CardContent>
       </Card>
 
+      {canManage && data && !data.run.periodEnded && (
+        <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>
+          This period runs through {data.run.periodEnd} and is still open — these are live numbers. It can be approved starting the following Friday.
+        </p>
+      )}
+
       {isLoading && (
         <div className="flex items-center justify-center py-16">
           <Loading />
         </div>
+      )}
+
+      {isError && (
+        <Card>
+          <CardContent className="py-8 text-center text-sm text-red-500">
+            Couldn&apos;t load this pay period: {loadError?.message ?? 'unknown error'}
+          </CardContent>
+        </Card>
       )}
 
       {!isLoading && data && (
@@ -347,6 +386,11 @@ function PayRunTab({ canManage }: { canManage: boolean }) {
                         {s.payRate == null && (
                           <span className="ml-1.5 text-xs" style={{ color: 'var(--text-muted)' }}>
                             (no rate set)
+                          </span>
+                        )}
+                        {s.overtimeHours > 0 && s.otPayRate == null && (
+                          <span className="ml-1.5 text-xs text-red-500">
+                            (OT unpaid: no OT rate)
                           </span>
                         )}
                       </td>
@@ -419,6 +463,7 @@ function PayRunTab({ canManage }: { canManage: boolean }) {
               <Label>Date Paid</Label>
               <Input type="date" value={paidDate} onChange={(e) => setPaidDate(e.target.value)} />
             </div>
+            {markPaid.error && <p className="text-sm text-red-500">{markPaid.error.message}</p>}
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setPayDialogOpen(false)}>Cancel</Button>
@@ -442,11 +487,36 @@ function PayRunTab({ canManage }: { canManage: boolean }) {
               <Label>Reason</Label>
               <Input value={voidReason} onChange={(e) => setVoidReason(e.target.value)} placeholder="Why is this run being voided?" />
             </div>
+            {voidRun.error && <p className="text-sm text-red-500">{voidRun.error.message}</p>}
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setVoidDialogOpen(false)}>Cancel</Button>
             <Button variant="destructive" onClick={handleVoid} disabled={voidReason.trim().length < 8 || voidRun.isPending}>
               {voidRun.isPending ? <Loading size="sm" /> : 'Void Run'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={approveDialogOpen} onOpenChange={setApproveDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>
+              {data?.run.status === 'approved' ? 'Re-approve' : 'Approve'} {data?.run.periodStart} – {data?.run.periodEnd}?
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 py-2 text-sm" style={{ color: 'var(--text-secondary)' }}>
+            <p>
+              This saves {data?.statements.length ?? 0} pay statements totalling{' '}
+              <strong style={{ color: 'var(--text-primary)' }}>{formatCurrency(totals.grossPay)}</strong> and locks
+              the period: hours, bonuses and disconnections for it can&apos;t be edited until the run is voided.
+            </p>
+            {approve.error && <p className="text-red-500">{approve.error.message}</p>}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setApproveDialogOpen(false)}>Cancel</Button>
+            <Button onClick={handleApprove} disabled={approve.isPending}>
+              {approve.isPending ? <Loading size="sm" /> : 'Approve'}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -465,7 +535,7 @@ function PaymentHistoryTab() {
   const [page, setPage] = useState(1);
 
   const { data: employees } = usePayrollEmployees();
-  const { data, isLoading } = usePaymentHistory({
+  const { data, isLoading, isError, error: loadError } = usePaymentHistory({
     userId: employeeFilter !== 'all' ? Number(employeeFilter) : undefined,
     status: statusFilter !== 'all' ? (statusFilter as 'pending' | 'paid' | 'void') : undefined,
     page,
@@ -510,6 +580,14 @@ function PaymentHistoryTab() {
         <div className="flex items-center justify-center py-16">
           <Loading />
         </div>
+      )}
+
+      {isError && (
+        <Card>
+          <CardContent className="py-8 text-center text-sm text-red-500">
+            Couldn&apos;t load payment history: {loadError?.message ?? 'unknown error'}
+          </CardContent>
+        </Card>
       )}
 
       {!isLoading && data && (

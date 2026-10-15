@@ -5,10 +5,10 @@ import { useSession } from 'next-auth/react';
 import { Pencil, Users, FileText, History, DollarSign } from 'lucide-react';
 import Header from '@/components/layout/header';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
-import { EmployeeStatusTab } from './_components/employee-status-tab';
+import { EmployeeStatusTab } from './_components/employee-status/employee-status-tab';
 import { TimeHistoryTab } from './_components/time-history-tab';
 import { AuditLogTab } from './_components/audit-log-tab';
-import { EditTimeTab } from './_components/edit-time-tab';
+import { EditTimeTab } from './_components/edit-time/edit-time-tab';
 import { PaymentReportTab } from './_components/payment-report/payment-report-tab';
 
 /* -------------------------------------------------- */

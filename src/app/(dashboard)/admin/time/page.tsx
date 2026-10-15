@@ -77,7 +77,10 @@ export default function AdminTimePage() {
             <AuditLogTab />
           </TabsContent>
 
-          <TabsContent value="report">
+          {/* Kept mounted while another tab is open (only hidden), so looking
+              at another tab doesn't throw away the selected employee, a typed
+              rate or unsaved bonuses. */}
+          <TabsContent value="report" forceMount className="data-[state=inactive]:hidden">
             <PaymentReportTab />
           </TabsContent>
         </Tabs>

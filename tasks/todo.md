@@ -76,8 +76,9 @@ Base: `main` @ `74886f6`. Detalle, decisiones y riesgos en `tasks/plan.md`.
 
 ## Fase 2: una pestaña por tarea (mover tal cual)
 
-### Task 4: Mover `EmployeeStatusTab` a `_components/employee-status-tab.tsx`
+### Task 4: Mover `EmployeeStatusTab` a `_components/employee-status-tab.tsx` ✅
 **Aceptación:** chequeo de movimiento sin diferencias · snapshot sin cambios · `page.tsx` solo la importa.
+**Resultado:** sin diferencias (9 archivos) · 207 tests · build OK · `print:` 33 · lint 9 (línea base).
 **Verificación:** comandos comunes.
 **Dependencias:** T3. **Archivos:** `employee-status-tab.tsx`, `page.tsx`. **Tamaño:** S.
 

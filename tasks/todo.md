@@ -128,10 +128,11 @@ Base: `main` @ `74886f6`. Detalle, decisiones y riesgos en `tasks/plan.md`.
 - Extraer los subcomponentes `RateEditor`, `BonusEditor`, `ReportTable`, `DisconnectionsSummary` y `PaymentSummary`, cada uno con sus props.
 - El estado se queda en `PaymentReportTab`.
 
-**Aceptación:**
-- [ ] `computeReportTotals` tiene tests y da exactamente lo mismo que `computePayStatement` para los mismos datos: redondeo, OT sin tarifa y bonos.
-- [ ] Cada archivo resultante tiene menos de ~200 líneas.
-- [ ] Las clases `print:` de cada subcomponente son las mismas del original (comparación por archivo con el script).
+**Aceptación:** ✅
+- [x] `computeReportTotals` (`payment-report/totals.ts`) tiene 9 tests y da exactamente lo mismo que `computePayStatement` para los mismos datos: redondeo, OT sin tarifa y bonos. Una mutación (quitar el redondeo a centavos) hace fallar el test.
+- [x] Cada archivo resultante tiene menos de ~200 líneas (el mayor: `payment-report-tab.tsx`, 144). El estado y los handlers pasaron a `use-payment-report.ts`.
+- [x] Las clases `print:` son las mismas del original: el chequeo de movimiento no reporta **ninguna línea original faltante** (solo agrega firmas y props), y el CSS de impresión es igual a la línea base.
+- [x] Prueba de equivalencia temporal (no commiteada): el tab anterior y el nuevo, con empleado elegido y todas las secciones (OT, desconexiones, modificaciones, bonos, periodo bloqueado, errores de guardado), renderizan **HTML idéntico** en 4 escenarios; alterar una clase `print:` la hace fallar.
 
 **Verificación:** comandos comunes + conteo de `@media print` igual a la línea base.
 **Dependencias:** Checkpoint B. **Archivos:** `payment-report/*` (4–6 archivos). **Tamaño:** M.

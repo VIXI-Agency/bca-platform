@@ -33,6 +33,32 @@ export const PERIOD_BONUS_FIELDS = [
 export type PeriodBonusField = (typeof PERIOD_BONUS_FIELDS)[number];
 
 /**
+ * Per-period bonuses that also record how many there were ("Accounts (4)").
+ * The count is informational: the amount typed is what's paid.
+ */
+export const COUNTED_BONUS_FIELDS = ['accounts', 'verifiedLeads'] as const;
+export type CountedBonusField = (typeof COUNTED_BONUS_FIELDS)[number];
+
+/** Where each counted bonus keeps its count (API field = PayrollBonuses column). */
+export const BONUS_COUNT_KEYS = {
+  accounts: 'accountsCount',
+  verifiedLeads: 'verifiedLeadsCount',
+} as const satisfies Record<CountedBonusField, string>;
+export type BonusCountKey = (typeof BONUS_COUNT_KEYS)[CountedBonusField];
+
+export const isCountedBonus = (key: string): key is CountedBonusField =>
+  (COUNTED_BONUS_FIELDS as readonly string[]).includes(key);
+
+/**
+ * The count shown next to a counted bonus: what was typed, or 1 when only an
+ * amount was entered. No amount means no bonus, so no count either.
+ */
+export function bonusCount(count: number | null | undefined, amount: number): number | null {
+  if (!(amount > 0)) return null;
+  return count != null && count > 0 ? count : 1;
+}
+
+/**
  * Caps per pay period (Friday–Thursday). Wheel Spins can land on the same
  * day; a CCF Spiff is daily, so at most one per day.
  */
@@ -52,7 +78,7 @@ export const BONUS_FIELD_LABELS: Record<BonusFieldKey, string> = {
   wheelSpins: 'Wheel Spins',
   ccfSpiffs: 'CCF Spiffs',
   accounts: 'Accounts',
-  reloads: 'Reloads',
+  reloads: 'Reloads Spiffs',
   verifiedLeads: 'Verified Leads',
 };
 

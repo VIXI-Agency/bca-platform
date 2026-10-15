@@ -1,10 +1,14 @@
 import { prisma } from '@/lib/prisma';
 import { getPayPeriodEnd } from '@/lib/time';
 import {
+  BONUS_COUNT_KEYS,
   BONUS_FIELDS,
+  COUNTED_BONUS_FIELDS,
   DATED_BONUS_CATEGORIES,
+  bonusCount,
   isDatedBonus,
   type BonusFieldKey,
+  type CountedBonusField,
   type DatedBonusCategory,
 } from './constants';
 
@@ -252,6 +256,8 @@ export interface PayStatementAmounts {
   regularPay: number;
   overtimePay: number;
   bonusAmounts: Record<BonusFieldKey, number>;
+  /** How many accounts / verified leads (null when that bonus isn't paid). */
+  bonusCounts: Record<CountedBonusField, number | null>;
   bonusTotal: number;
   grossPay: number;
 }
@@ -298,6 +304,12 @@ export async function computePayStatement(userId: number, periodStart: Date): Pr
     ]),
   ) as Record<BonusFieldKey, number>;
   const bonusTotal = round2(BONUS_FIELDS.reduce((sum, key) => sum + bonusAmounts[key], 0));
+  const bonusCounts = Object.fromEntries(
+    COUNTED_BONUS_FIELDS.map((key) => {
+      const typed = bonus?.[BONUS_COUNT_KEYS[key]];
+      return [key, bonusCount(typed != null ? Number(typed) : null, bonusAmounts[key])];
+    }),
+  ) as Record<CountedBonusField, number | null>;
 
   return {
     regularHours: hours.totalHours,
@@ -307,6 +319,7 @@ export async function computePayStatement(userId: number, periodStart: Date): Pr
     regularPay,
     overtimePay,
     bonusAmounts,
+    bonusCounts,
     bonusTotal,
     grossPay: round2(regularPay + overtimePay + bonusTotal),
   };

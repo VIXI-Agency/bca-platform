@@ -8,6 +8,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import {
   PERIOD_BONUS_FIELDS,
+  type CountedBonusField,
   type DatedBonusCategory,
   type PeriodBonusField,
 } from '@/lib/payroll/constants';
@@ -60,6 +61,8 @@ interface Case {
   payRate: string;
   otPayRate: string | null;
   bonus: Partial<Record<PeriodBonusField, number>>;
+  /** How many accounts / verified leads, as typed (null = left blank). */
+  counts?: Partial<Record<CountedBonusField, number | null>>;
   /** Dated entries (Wheel Spins, CCF Spiffs) as stored. */
   entries?: { category: DatedBonusCategory; amount: string }[];
 }
@@ -70,6 +73,8 @@ const CASES: Case[] = [
   { name: 'overtime with no OT rate (paid $0)', clockOuts: ['16:30'], payRate: '10.00', otPayRate: null, bonus: {} },
   { name: 'a rate that needs rounding to cents', clockOuts: ['13:30'], payRate: '15.3333', otPayRate: null, bonus: {} },
   { name: 'odd minutes and bonuses', clockOuts: ['14:37', '15:02', '13:11'], payRate: '7.00', otPayRate: '10.50', bonus: { discretionaryBonus: 25, accounts: 0.2 }, entries: [{ category: 'wheelSpins', amount: '0.10' }, { category: 'ccfSpiffs', amount: '5.00' }, { category: 'ccfSpiffs', amount: '2.55' }] },
+  { name: 'counted bonuses, one count left blank', clockOuts: ['14:30'], payRate: '10.00', otPayRate: null, bonus: { accounts: 15, verifiedLeads: 20 }, counts: { accounts: 4, verifiedLeads: null } },
+  { name: 'a count with no amount', clockOuts: ['14:30'], payRate: '10.00', otPayRate: null, bonus: {}, counts: { accounts: 3 } },
 ];
 
 beforeEach(() => {
@@ -82,7 +87,11 @@ describe('computeReportTotals', () => {
     const rows = c.clockOuts.map((out, i) => log(days[i], out));
     timeLogFindMany.mockResolvedValue(rows);
     userFindUnique.mockResolvedValue({ payRate: c.payRate, otPayRate: c.otPayRate });
-    bonusFindUnique.mockResolvedValue(c.bonus);
+    bonusFindUnique.mockResolvedValue({
+      ...c.bonus,
+      accountsCount: c.counts?.accounts ?? null,
+      verifiedLeadsCount: c.counts?.verifiedLeads ?? null,
+    });
     bonusEntryFindMany.mockResolvedValue(c.entries ?? []);
 
     const server = await computePayStatement(USER, PERIOD);
@@ -98,9 +107,14 @@ describe('computeReportTotals', () => {
       payRateInput: c.payRate,
       otPayRateInput: c.otPayRate ?? '',
       bonusInputs,
+      countInputs: {
+        accounts: c.counts?.accounts != null ? String(c.counts.accounts) : '',
+        verifiedLeads: c.counts?.verifiedLeads != null ? String(c.counts.verifiedLeads) : '',
+      },
       datedTotals,
     });
 
+    expect(client.bonusCounts).toEqual(server.bonusCounts);
     expect(client.regularPay).toBe(server.regularPay);
     expect(client.otPay).toBe(server.overtimePay);
     expect(client.bonusAmounts).toEqual(server.bonusAmounts);
@@ -146,6 +160,31 @@ describe('computeReportTotals', () => {
     expect(r.otPayRate).toBeNull();
     expect(r.bonusAmounts.discretionaryBonus).toBe(0);
     expect(r.bonusAmounts.collectionsBonus).toBe(0);
+  });
+
+  it('counts 1 when only the amount is typed, and nothing when only the count is', () => {
+    const r = computeReportTotals({
+      totals: { totalHours: 8, overtime: 0 },
+      payRateInput: '10',
+      otPayRateInput: '',
+      bonusInputs: { ...noBonus(), accounts: '15' },
+      countInputs: { accounts: '', verifiedLeads: '7' },
+      datedTotals: noDated(),
+    });
+    expect(r.bonusCounts).toEqual({ accounts: 1, verifiedLeads: null });
+    expect(r.bonusTotal).toBe(15);
+  });
+
+  it.each(['2.5', '-3', 'x'])('treats a count of %s as not typed', (count) => {
+    const r = computeReportTotals({
+      totals: { totalHours: 8, overtime: 0 },
+      payRateInput: '10',
+      otPayRateInput: '',
+      bonusInputs: { ...noBonus(), accounts: '15' },
+      countInputs: { accounts: count, verifiedLeads: '' },
+      datedTotals: noDated(),
+    });
+    expect(r.bonusCounts.accounts).toBe(1);
   });
 
   it('has no amounts before the timesheet loads', () => {

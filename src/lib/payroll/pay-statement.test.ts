@@ -265,6 +265,19 @@ describe('computePayStatement', () => {
     expect(bonusEntryFindMany.mock.calls[0][0].where).toEqual({ idUser: USER, periodStart: PERIOD });
   });
 
+  it('carries how many accounts and verified leads the bonuses are for, defaulting to 1', async () => {
+    bonusFindUnique.mockResolvedValue({ accounts: '15.00', accountsCount: 4, verifiedLeads: '20.00', verifiedLeadsCount: null });
+    const s = await computePayStatement(USER, PERIOD);
+    expect(s.bonusCounts).toEqual({ accounts: 4, verifiedLeads: 1 });
+    expect(s.bonusTotal).toBe(35); // counts are informational: the amounts are paid
+  });
+
+  it('has no count for a counted bonus with no amount', async () => {
+    bonusFindUnique.mockResolvedValue({ accounts: null, accountsCount: 4 });
+    const s = await computePayStatement(USER, PERIOD);
+    expect(s.bonusCounts).toEqual({ accounts: null, verifiedLeads: null });
+  });
+
   it('ignores the legacy WheelSpins column (its amounts now live in dated entries)', async () => {
     bonusFindUnique.mockResolvedValue({ wheelSpins: '14.00', discretionaryBonus: '5.00' });
     const s = await computePayStatement(USER, PERIOD);

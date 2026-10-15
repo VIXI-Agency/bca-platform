@@ -1,8 +1,11 @@
 import {
   BONUS_FIELDS,
+  COUNTED_BONUS_FIELDS,
   PERIOD_BONUS_FIELDS,
+  bonusCount,
   isDatedBonus,
   type BonusFieldKey,
+  type CountedBonusField,
   type DatedBonusCategory,
   type PeriodBonusField,
 } from '@/lib/payroll/constants';
@@ -14,6 +17,8 @@ export interface ReportTotalsInput {
   otPayRateInput: string;
   /** What's typed for the bonuses that are one amount per period. */
   bonusInputs: Record<PeriodBonusField, string>;
+  /** What's typed in the # box of Accounts / Verified Leads. */
+  countInputs?: Partial<Record<CountedBonusField, string>>;
   /** Saved dated entries (Wheel Spins, CCF Spiffs), summed per category. */
   datedTotals: Record<DatedBonusCategory, number>;
 }
@@ -26,6 +31,8 @@ export interface ReportTotals {
   otRateMissing: boolean;
   otPay: number | null;
   bonusAmounts: Record<BonusFieldKey, number>;
+  /** How many accounts / verified leads to print (null when that bonus isn't paid). */
+  bonusCounts: Record<CountedBonusField, number | null>;
   bonusTotal: number;
   totalPay: number | null;
 }
@@ -36,6 +43,7 @@ export function computeReportTotals({
   payRateInput,
   otPayRateInput,
   bonusInputs,
+  countInputs = {},
   datedTotals,
 }: ReportTotalsInput): ReportTotals {
   // The rate used for the live calculation and for print comes from what's
@@ -66,7 +74,17 @@ export function computeReportTotals({
     BONUS_FIELDS.map((key) => [key, isDatedBonus(key) ? datedTotals[key] : typed[key]]),
   ) as Record<BonusFieldKey, number>;
   const bonusTotal = cents(BONUS_FIELDS.reduce((sum, key) => sum + bonusAmounts[key], 0));
+  const bonusCounts = Object.fromEntries(
+    COUNTED_BONUS_FIELDS.map((key) => [key, bonusCount(parseCount(countInputs[key]), bonusAmounts[key])]),
+  ) as Record<CountedBonusField, number | null>;
   const totalPay = regularPay != null && otPay != null ? cents(regularPay + otPay + bonusTotal) : null;
 
-  return { payRate, otPayRate, regularPay, hasOvertime, otRateMissing, otPay, bonusAmounts, bonusTotal, totalPay };
+  return { payRate, otPayRate, regularPay, hasOvertime, otRateMissing, otPay, bonusAmounts, bonusCounts, bonusTotal, totalPay };
+}
+
+/** A typed count as a whole number, or null when blank or not a valid count. */
+export function parseCount(raw: string | undefined): number | null {
+  if (!raw?.trim()) return null;
+  const n = Number(raw);
+  return Number.isInteger(n) && n >= 0 && n <= 999 ? n : null;
 }

@@ -56,6 +56,19 @@ describe('PaymentSummary', () => {
     expect(render({ bonusEntries: [] })).not.toContain('Wheel Spins');
   });
 
+  it('shows how many accounts and verified leads next to their label', () => {
+    const html = render({
+      bonusAmounts: { ...noBonus, accounts: 15, verifiedLeads: 20, reloads: 5 },
+      bonusCounts: { accounts: 4, verifiedLeads: 1 },
+      totalPay: 180.98,
+    });
+    expect(html).toContain('Accounts (4)');
+    expect(html).toContain('$15.00');
+    expect(html).toContain('Verified Leads (1)');
+    expect(html).toContain('Reloads Spiffs');
+    expect(html).not.toContain('Reloads Spiffs (');
+  });
+
   it('shows unpaid overtime in decimal hours too', () => {
     const html = render({ totals: totals(8, 1.25), otRateMissing: true, regularPay: 56, totalPay: 56 });
     expect(html).toContain('Overtime (1.25 h) — not paid: no OT rate set');

@@ -1,7 +1,14 @@
 'use client';
 
 import type { BonusEntry, WeekTotals } from '@/hooks/use-admin-time';
-import { BONUS_FIELDS, BONUS_FIELD_LABELS, isDatedBonus, type BonusFieldKey } from '@/lib/payroll/constants';
+import {
+  BONUS_FIELDS,
+  BONUS_FIELD_LABELS,
+  isCountedBonus,
+  isDatedBonus,
+  type BonusFieldKey,
+  type CountedBonusField,
+} from '@/lib/payroll/constants';
 import { formatCurrency } from '@/lib/utils';
 
 /** Pay is computed from hours rounded to 2 decimals per day, so the summary
@@ -25,6 +32,8 @@ interface PaymentSummaryProps {
   bonusAmounts: Record<BonusFieldKey, number>;
   /** Dated bonuses (Wheel Spins, CCF Spiffs): printed one line per entry. */
   bonusEntries?: BonusEntry[];
+  /** How many accounts / verified leads: printed as "Accounts (4)". */
+  bonusCounts?: Partial<Record<CountedBonusField, number | null>>;
   totalPay: number;
 }
 
@@ -38,6 +47,7 @@ export function PaymentSummary({
   otRateMissing,
   bonusAmounts,
   bonusEntries = [],
+  bonusCounts = {},
   totalPay,
 }: PaymentSummaryProps) {
   return (
@@ -73,9 +83,10 @@ export function PaymentSummary({
           ];
         }
         if (bonusAmounts[key] <= 0) return [];
+        const count = isCountedBonus(key) ? bonusCounts[key] : null;
         return [
           <div key={key} className="flex justify-between text-sm print:text-[9.5px]" style={{ color: 'var(--text-secondary)' }}>
-            <span>{BONUS_FIELD_LABELS[key]}</span>
+            <span>{count != null ? `${BONUS_FIELD_LABELS[key]} (${count})` : BONUS_FIELD_LABELS[key]}</span>
             <span>{formatCurrency(bonusAmounts[key])}</span>
           </div>,
         ];

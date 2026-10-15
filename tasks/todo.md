@@ -88,8 +88,9 @@ Base: `main` @ `74886f6`. Detalle, decisiones y riesgos en `tasks/plan.md`.
 **Verificación:** comandos comunes.
 **Dependencias:** T3. **Archivos:** `time-history-tab.tsx`, `page.tsx`. **Tamaño:** S.
 
-### Task 6: Mover `AuditLogTab` a `_components/audit-log-tab.tsx`
+### Task 6: Mover `AuditLogTab` a `_components/audit-log-tab.tsx` ✅
 **Aceptación:** chequeo de movimiento sin diferencias · snapshot sin cambios.
+**Resultado:** sin diferencias (12 archivos) · 207 tests · build OK · `print:` 33 · lint 9. (El `empLoading` sin uso que reporta el lint vive en esta pestaña; se quita en T12.)
 **Verificación:** comandos comunes.
 **Dependencias:** T3. **Archivos:** `audit-log-tab.tsx`, `page.tsx`. **Tamaño:** S.
 

@@ -103,10 +103,11 @@ Base: `main` @ `74886f6`. Detalle, decisiones y riesgos en `tasks/plan.md`.
 ### Task 8: Mover `PaymentReportTab` a `_components/payment-report/payment-report-tab.tsx`
 **Descripción:** Movimiento tal cual, incluyendo `BONUS_FIELD_LABELS` y `formatCurrency` locales; los duplicados se quitan en T12. Es la pestaña con toda la lógica de impresión.
 
-**Aceptación:**
-- [ ] Chequeo de movimiento sin diferencias; en particular, las 67 líneas `print:` y las 8 `print-area`/`no-print`/`print-only` están presentes y sin cambios.
-- [ ] Snapshot sin cambios.
-- [ ] `page.tsx` queda solo con el guard de rol y las `Tabs` (~80 líneas).
+**Aceptación:** ✅
+- [x] Chequeo de movimiento sin diferencias (2,122 líneas en 14 archivos); en particular, las 67 líneas `print:` y las 8 `print-area`/`no-print`/`print-only` están presentes y sin cambios.
+- [x] Snapshot sin cambios (207 tests).
+- [x] `page.tsx` queda solo con el guard de rol y las `Tabs` (92 líneas, incluido el banner `Sub-components` que se quita en T12).
+- [x] Build OK; CSS de impresión igual a la línea base (33 · 2 · 4 · 1 · 2); lint 9.
 
 **Verificación:** comandos comunes + conteo de `@media print` igual a la línea base.
 **Dependencias:** T3. **Archivos:** `payment-report/payment-report-tab.tsx`, `page.tsx`. **Tamaño:** S.

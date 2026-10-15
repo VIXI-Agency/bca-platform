@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import {
   useEmployeeList,
   useEmployeeTimesheet,
@@ -11,6 +11,7 @@ import {
 } from '@/hooks/use-admin-time';
 import { payPeriodOptions } from '@/lib/time';
 import { computeReportTotals } from './totals';
+import { nextSeed, type SeedKey } from './seed';
 
 /** State, data and save handlers behind the Payment Report tab. */
 export function usePaymentReport() {
@@ -45,21 +46,29 @@ export function usePaymentReport() {
     [employees, userId],
   );
 
-  // Seed the rate inputs from the employee's saved rate whenever the
-  // selected employee changes (not on every render — the admin may be
-  // actively typing a correction).
-  useEffect(() => {
-    setPayRateInput(employee?.payRate != null ? String(employee.payRate) : '');
-    setOtPayRateInput(employee?.otPayRate != null ? String(employee.otPayRate) : '');
-  }, [employee?.userId, employee?.payRate, employee?.otPayRate]);
+  // Fill the editors from saved values once per selection — never again on a
+  // refetch of the same selection (after Save, for one), which used to
+  // overwrite whatever the admin typed meanwhile. See nextSeed.
+  const rateSeed = useRef<SeedKey>(null);
+  const bonusSeed = useRef<SeedKey>(null);
 
-  // Bonus categories are scoped per employee + pay period (not a standing
-  // rate), so they re-seed whenever either changes, from whatever's saved
-  // for that period.
+  // The rate is the employee's standing rate: seeded per employee.
   useEffect(() => {
+    const next = nextSeed(rateSeed.current, String(userId), employee);
+    if (!next) return;
+    rateSeed.current = next.key;
+    setPayRateInput(next.from?.payRate != null ? String(next.from.payRate) : '');
+    setOtPayRateInput(next.from?.otPayRate != null ? String(next.from.otPayRate) : '');
+  }, [userId, employee]);
+
+  // Bonuses are per employee + pay period: seeded per that pair.
+  useEffect(() => {
+    const next = nextSeed(bonusSeed.current, `${userId}|${selectedWeek}`, bonus);
+    if (!next) return;
+    bonusSeed.current = next.key;
     setBonusInputs(
       Object.fromEntries(
-        BONUS_FIELDS.map((key) => [key, bonus?.[key] != null ? String(bonus[key]) : '']),
+        BONUS_FIELDS.map((key) => [key, next.from?.[key] != null ? String(next.from[key]) : '']),
       ) as Record<BonusFieldKey, string>,
     );
   }, [userId, selectedWeek, bonus]);

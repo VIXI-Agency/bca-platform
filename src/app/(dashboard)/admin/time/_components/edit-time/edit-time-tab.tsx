@@ -10,7 +10,7 @@ import {
   useEditTime,
   type DayLog,
 } from '@/hooks/use-admin-time';
-import { generateWeekOptions } from '../../_lib/pay-periods';
+import { payPeriodOptions } from '@/lib/time';
 import { LockedPeriodNotice } from '../locked-period-notice';
 import { AuditTable } from '../audit-table';
 import { EditTimeSelectors } from './edit-time-selectors';
@@ -36,7 +36,7 @@ export function EditTimeTab() {
   const [editNewValue, setEditNewValue] = useState('');
   const [editReason, setEditReason] = useState('');
 
-  const weekOptions = useMemo(() => generateWeekOptions(12), []);
+  const weekOptions = useMemo(() => payPeriodOptions(12), []);
 
   // Default to current week
   useEffect(() => {

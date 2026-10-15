@@ -9,7 +9,7 @@ import {
   BONUS_FIELDS,
   type BonusFieldKey,
 } from '@/hooks/use-admin-time';
-import { generateWeekOptions } from '../../_lib/pay-periods';
+import { payPeriodOptions } from '@/lib/time';
 import { computeReportTotals } from './totals';
 
 /** State, data and save handlers behind the Payment Report tab. */
@@ -27,7 +27,7 @@ export function usePaymentReport() {
     () => Object.fromEntries(BONUS_FIELDS.map((key) => [key, ''])) as Record<BonusFieldKey, string>,
   );
 
-  const weekOptions = useMemo(() => generateWeekOptions(24), []);
+  const weekOptions = useMemo(() => payPeriodOptions(24), []);
 
   useEffect(() => {
     if (!selectedWeek && weekOptions.length > 0) {

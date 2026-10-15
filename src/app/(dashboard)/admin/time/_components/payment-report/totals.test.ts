@@ -6,7 +6,7 @@
  * hours, rates and bonuses.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { BONUS_FIELDS, type BonusFieldKey } from '@/hooks/use-admin-time';
+import { BONUS_FIELDS, type BonusFieldKey } from '@/lib/payroll/constants';
 
 const timeLogFindMany = vi.fn();
 const userFindUnique = vi.fn();

@@ -5,8 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Loading } from '@/components/ui/loading';
-import { BONUS_FIELDS, type BonusFieldKey } from '@/hooks/use-admin-time';
-import { BONUS_FIELD_LABELS } from './labels';
+import { BONUS_FIELDS, BONUS_FIELD_LABELS, type BonusFieldKey } from '@/lib/payroll/constants';
 
 interface BonusEditorProps {
   bonusInputs: Record<BonusFieldKey, string>;

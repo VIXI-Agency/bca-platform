@@ -2,7 +2,7 @@
 
 import { Badge } from '@/components/ui/badge';
 import type { Employee } from '@/hooks/use-admin-time';
-import { formatCurrency } from './labels';
+import { formatCurrency } from '@/lib/utils';
 
 /** Company letterhead, shown only on the printed report. */
 export function ReportLetterhead() {

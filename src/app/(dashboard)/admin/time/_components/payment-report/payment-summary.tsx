@@ -1,8 +1,9 @@
 'use client';
 
-import { BONUS_FIELDS, type BonusFieldKey, type WeekTotals } from '@/hooks/use-admin-time';
+import type { WeekTotals } from '@/hooks/use-admin-time';
+import { BONUS_FIELDS, BONUS_FIELD_LABELS, type BonusFieldKey } from '@/lib/payroll/constants';
+import { formatCurrency } from '@/lib/utils';
 import { formatDuration } from '../../_lib/format';
-import { BONUS_FIELD_LABELS, formatCurrency } from './labels';
 
 interface PaymentSummaryProps {
   totals: WeekTotals | undefined;

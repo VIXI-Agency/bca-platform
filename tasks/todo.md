@@ -50,13 +50,16 @@ Base: `main` @ `74886f6`. Detalle, decisiones y riesgos en `tasks/plan.md`.
 **Archivos:** `_lib/format.ts`, `_lib/format.test.ts`, `_lib/constants.ts`, `page.tsx`.
 **Tamaño:** S.
 
-### Task 3: Extraer componentes compartidos a `_components/`
+### Task 3: Extraer componentes compartidos a `_components/` ✅
 **Descripción:** Mover sin cambios `LockedPeriodNotice`, `StatusBadge`, `LiveTimer`, `TimeCell` + `BreakCell` (a `time-cells.tsx`) y `AuditTable`, cada uno con `'use client'`. `page.tsx` los importa.
 
 **Aceptación:**
-- [ ] Chequeo de movimiento sin diferencias.
-- [ ] Snapshot sin cambios.
-- [ ] Ningún archivo nuevo pasa de ~120 líneas.
+- [x] Chequeo de movimiento sin diferencias (2,122 líneas en 8 archivos).
+- [x] Snapshot sin cambios (207 tests en verde).
+- [x] Ningún archivo nuevo pasa de ~120 líneas (el mayor, `audit-table.tsx`, tiene 108). `page.tsx`: 2,333 → 1,968 líneas.
+- [x] Build OK; CSS de impresión igual a la línea base (33 · 2 · 4 · 1 · 2); lint igual a la línea base (9).
+
+> Nota: el banner de comentario `Sub-components` sigue en `page.tsx` porque el chequeo de movimiento exige conservar cada línea. Se quita en T12 como diferencia declarada.
 
 **Verificación:** comandos comunes + conteo de `@media print` igual a la línea base.
 **Dependencias:** T2.

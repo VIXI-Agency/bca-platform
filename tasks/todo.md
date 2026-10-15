@@ -82,8 +82,9 @@ Base: `main` @ `74886f6`. Detalle, decisiones y riesgos en `tasks/plan.md`.
 **Verificación:** comandos comunes.
 **Dependencias:** T3. **Archivos:** `employee-status-tab.tsx`, `page.tsx`. **Tamaño:** S.
 
-### Task 5: Mover `TimeHistoryTab` a `_components/time-history-tab.tsx`
+### Task 5: Mover `TimeHistoryTab` a `_components/time-history-tab.tsx` ✅
 **Aceptación:** chequeo de movimiento sin diferencias · snapshot sin cambios.
+**Resultado:** sin diferencias (11 archivos) · 207 tests · build OK · `print:` 33 · lint 9. El alias `generateWeekOptions` (con su banner `Helpers`) pasó a `_lib/pay-periods.ts` para que lo compartan las pestañas; se elimina en T12.
 **Verificación:** comandos comunes.
 **Dependencias:** T3. **Archivos:** `time-history-tab.tsx`, `page.tsx`. **Tamaño:** S.
 

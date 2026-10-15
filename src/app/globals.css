@@ -420,6 +420,28 @@ a:hover {
     display: block;
   }
 
+  /* visibility:hidden above hides the dashboard but keeps its box, and Chrome's
+     print preview sizes `min-h-screen` (100vh) from the *window*, not the
+     sheet — so the invisible layout ran past one page and every report got a
+     blank second page. On a page that has a report, take everything that is
+     neither the report nor one of its ancestors out of the layout (including
+     what extensions append to <html> after <body>), and let the ancestors
+     shrink to nothing so the document is only as tall as the report. Pages
+     without a .print-area are untouched. */
+  html:has(.print-area) > :not(head):not(body),
+  body:has(.print-area) *:not(.print-area):not(.print-area *):not(:has(.print-area)) {
+    display: none !important;
+  }
+  html:has(.print-area),
+  body:has(.print-area),
+  body:has(.print-area) *:has(.print-area) {
+    min-height: 0 !important;
+    height: auto !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    overflow: visible !important;
+  }
+
   /* Fitting one landscape sheet is done with real, smaller font-sizes and
      padding on the report's own elements (print: variants in the JSX),
      NOT a zoom/scale trick — confirmed the hard way: `zoom` shrinks what

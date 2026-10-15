@@ -107,16 +107,46 @@ export { BONUS_FIELDS, type BonusFieldKey };
 
 export type BonusResponse = Record<BonusFieldKey, number | null>;
 
+/** A disconnection's span in an audit entry (PST wall-clock TIME values). */
+export interface DisconnectionSpan {
+  start: string;
+  end: string | null;
+  type: string | null;
+}
+
 export interface Audit {
+  /** Time edits and disconnection changes have separate id sequences. */
+  kind?: 'time' | 'disconnection';
   id: number;
   userId: number;
   employeeName: string;
   date: string;
+  /** A time field ('clockIn', …) or 'disconnection_add' | _edit | _remove. */
   field: string;
   oldValue: string | null;
   newValue: string;
+  /** Disconnection changes only: the workday and the span before/after. */
+  disconnection?: { day: string; before: DisconnectionSpan | null; after: DisconnectionSpan | null };
   modifiedBy: string;
   modifiedAt: string;
+  reason: string;
+}
+
+export interface AddDisconnectionPayload {
+  userId: number;
+  date: string;
+  start: string;
+  /** null = never reconnected that day: counts until clock-out. */
+  end: string | null;
+  type: DisconnectionType;
+  reason: string;
+}
+
+export interface EditDisconnectionPayload {
+  id: number;
+  start: string;
+  end: string | null;
+  type: DisconnectionType;
   reason: string;
 }
 
@@ -278,6 +308,54 @@ export function useDisconnectEmployee() {
       // Disconnected time changes paid hours, so every view of hours is stale.
       invalidatePayData(qc);
     },
+  });
+}
+
+/** Refreshes everything a disconnection change affects (pay, lists, live status). */
+function invalidateDisconnections(qc: ReturnType<typeof useQueryClient>) {
+  qc.invalidateQueries({ queryKey: ['admin-time-statuses'] });
+  invalidatePayData(qc);
+}
+
+/** Records a disconnection after the fact (a day already worked). */
+export function useAddDisconnection() {
+  const qc = useQueryClient();
+  return useMutation<unknown, Error, AddDisconnectionPayload>({
+    mutationFn: (payload) =>
+      fetchJson('/api/admin/time/disconnections', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      }),
+    onSuccess: () => invalidateDisconnections(qc),
+  });
+}
+
+/** Fixes the times or type of a disconnection entered wrong. */
+export function useEditDisconnection() {
+  const qc = useQueryClient();
+  return useMutation<unknown, Error, EditDisconnectionPayload>({
+    mutationFn: ({ id, ...body }) =>
+      fetchJson(`/api/admin/time/disconnections/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      }),
+    onSuccess: () => invalidateDisconnections(qc),
+  });
+}
+
+/** Removes a disconnection entered by mistake (it stops counting against pay). */
+export function useRemoveDisconnection() {
+  const qc = useQueryClient();
+  return useMutation<unknown, Error, { id: number; reason: string }>({
+    mutationFn: ({ id, reason }) =>
+      fetchJson(`/api/admin/time/disconnections/${id}`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reason }),
+      }),
+    onSuccess: () => invalidateDisconnections(qc),
   });
 }
 

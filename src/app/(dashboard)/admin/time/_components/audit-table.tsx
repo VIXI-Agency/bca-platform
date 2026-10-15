@@ -3,7 +3,7 @@
 import { Badge } from '@/components/ui/badge';
 import type { Audit } from '@/hooks/use-admin-time';
 import { fieldLabel } from '../_lib/constants';
-import { formatTime } from '../_lib/format';
+import { formatTime, formatSpan } from '../_lib/format';
 
 /* -------------------------------------------------- */
 /*  Shared audit table                                 */
@@ -39,7 +39,7 @@ export function AuditTable({
         <tbody>
           {audits.map((audit) => (
             <tr
-              key={audit.id}
+              key={`${audit.kind ?? 'time'}-${audit.id}`}
               className="border-b transition-colors hover:bg-[var(--bg-secondary)]"
               style={{ borderColor: 'var(--border)' }}
             >
@@ -76,15 +76,29 @@ export function AuditTable({
               )}
               <td className="px-3 py-3 print:px-[6px] print:py-[2px]">
                 <Badge variant="outline" className="print:px-[5px] print:py-0 print:text-[7.5px]">{fieldLabel(audit.field)}</Badge>
+                {audit.disconnection && (
+                  <div className="mt-0.5 whitespace-nowrap text-xs text-[var(--text-muted)] print:mt-0 print:text-[7px]">
+                    for{' '}
+                    {new Date(audit.disconnection.day + 'T00:00:00').toLocaleDateString('en-US', {
+                      weekday: 'short',
+                      month: 'numeric',
+                      day: 'numeric',
+                    })}
+                  </div>
+                )}
               </td>
               <td className="px-3 py-3 text-[var(--text-secondary)] print:px-[6px] print:py-[2px]">
-                {audit.oldValue ? formatTime(audit.oldValue) : '--:--'}
+                {audit.disconnection
+                  ? formatSpan(audit.disconnection.before)
+                  : audit.oldValue ? formatTime(audit.oldValue) : '--:--'}
               </td>
               <td
                 className="px-3 py-3 font-medium print:px-[6px] print:py-[2px]"
                 style={{ color: 'var(--accent)' }}
               >
-                {formatTime(audit.newValue)}
+                {audit.disconnection
+                  ? audit.disconnection.after ? formatSpan(audit.disconnection.after) : 'Removed'
+                  : formatTime(audit.newValue)}
               </td>
               <td
                 className="px-3 py-3 print:px-[6px] print:py-[2px]"

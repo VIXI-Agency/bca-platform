@@ -1,6 +1,7 @@
 'use client';
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { BONUS_FIELDS, type BonusFieldKey } from '@/lib/payroll/constants';
 import { invalidatePayData } from './invalidate-pay-data';
 
 /* -------------------------------------------------- */
@@ -100,18 +101,9 @@ export interface DisconnectionsResponse {
   counts: Record<DisconnectionType, number>;
 }
 
-export const BONUS_FIELDS = [
-  'discretionaryBonus',
-  'collectionsBonus',
-  'trainingBonus',
-  'managerBonus',
-  'wheelSpins',
-  'accounts',
-  'reloads',
-  'verifiedLeads',
-] as const;
-
-export type BonusFieldKey = (typeof BONUS_FIELDS)[number];
+// Defined once in @/lib/payroll/constants (shared with the API and Payroll);
+// re-exported so existing imports from this hook keep working.
+export { BONUS_FIELDS, type BonusFieldKey };
 
 export type BonusResponse = Record<BonusFieldKey, number | null>;
 

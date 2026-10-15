@@ -15,7 +15,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { useEmployeeList, useTimeHistory, type TimeHistoryEntry } from '@/hooks/use-admin-time';
-import { generateWeekOptions } from '../_lib/pay-periods';
+import { payPeriodOptions } from '@/lib/time';
 import { formatTime, formatDuration } from '../_lib/format';
 
 /* ================================================== */
@@ -29,7 +29,7 @@ export function TimeHistoryTab() {
   const [selectedWeek, setSelectedWeek] = useState<string>('');
   const [empSearch, setEmpSearch] = useState('');
 
-  const weekOptions = useMemo(() => generateWeekOptions(24), []);
+  const weekOptions = useMemo(() => payPeriodOptions(24), []);
 
   useEffect(() => {
     if (!selectedWeek && weekOptions.length > 0) {

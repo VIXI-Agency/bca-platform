@@ -45,6 +45,7 @@ import {
 } from '@/hooks/use-payroll';
 import { PAYMENT_METHODS, PAYMENT_METHOD_LABELS, type PaymentMethod } from '@/lib/payroll/constants';
 import { payPeriodOptions } from '@/lib/time';
+import { formatCurrency } from '@/lib/utils';
 
 /* -------------------------------------------------- */
 /*  Helpers                                            */
@@ -54,10 +55,6 @@ import { payPeriodOptions } from '@/lib/time';
  *  would roll over to tomorrow after ~5pm Pacific). */
 function localDateISO(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-}
-
-function formatCurrency(amount: number): string {
-  return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(amount);
 }
 
 function formatHours(n: number): string {

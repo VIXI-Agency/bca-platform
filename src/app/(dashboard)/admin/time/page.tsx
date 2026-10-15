@@ -1,6 +1,5 @@
 'use client';
 
-import { useCallback } from 'react';
 import { useSession } from 'next-auth/react';
 import { Pencil, Users, FileText, History, DollarSign } from 'lucide-react';
 import Header from '@/components/layout/header';
@@ -10,10 +9,6 @@ import { TimeHistoryTab } from './_components/time-history-tab';
 import { AuditLogTab } from './_components/audit-log-tab';
 import { EditTimeTab } from './_components/edit-time/edit-time-tab';
 import { PaymentReportTab } from './_components/payment-report/payment-report-tab';
-
-/* -------------------------------------------------- */
-/*  Sub-components                                     */
-/* -------------------------------------------------- */
 
 /* -------------------------------------------------- */
 /*  Main Page                                          */

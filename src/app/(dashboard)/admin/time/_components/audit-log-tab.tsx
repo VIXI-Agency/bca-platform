@@ -13,7 +13,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { useEmployeeList, useEmployeeTimesheet } from '@/hooks/use-admin-time';
-import { generateWeekOptions } from '../_lib/pay-periods';
+import { payPeriodOptions } from '@/lib/time';
 import { AuditTable } from './audit-table';
 
 /* ================================================== */
@@ -21,7 +21,7 @@ import { AuditTable } from './audit-table';
 /* ================================================== */
 
 export function AuditLogTab() {
-  const { data: employees, isLoading: empLoading } = useEmployeeList();
+  const { data: employees } = useEmployeeList();
 
   // We fetch the audit data from a dedicated endpoint or re-use the timesheet.
   // For simplicity, we build a client-side filter approach:
@@ -29,7 +29,7 @@ export function AuditLogTab() {
   const [filterUserId, setFilterUserId] = useState<string>('');
   const [filterWeek, setFilterWeek] = useState<string>('');
 
-  const weekOptions = useMemo(() => generateWeekOptions(12), []);
+  const weekOptions = useMemo(() => payPeriodOptions(12), []);
 
   useEffect(() => {
     if (!filterWeek && weekOptions.length > 0) {

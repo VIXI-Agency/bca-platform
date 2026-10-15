@@ -1,4 +1,4 @@
-import { BONUS_FIELDS, type BonusFieldKey } from '@/hooks/use-admin-time';
+import { BONUS_FIELDS, type BonusFieldKey } from '@/lib/payroll/constants';
 
 export interface ReportTotalsInput {
   /** The period's paid hours from the timesheet (undefined until it loads). */

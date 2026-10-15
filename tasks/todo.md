@@ -177,10 +177,11 @@ Base: `main` @ `74886f6`. Detalle, decisiones y riesgos en `tasks/plan.md`.
 - Alias `generateWeekOptions` → `payPeriodOptions`.
 - Quitar el `useCallback` sin uso y `empLoading`.
 
-**Aceptación:**
-- [ ] `grep` confirma una sola definición de `formatCurrency`, `BONUS_FIELD_LABELS` y `BONUS_FIELDS` en `src/`.
-- [ ] Snapshot sin cambios.
-- [ ] Las advertencias de lint de esos archivos bajan.
+**Aceptación:** ✅
+- [x] Una sola definición de `formatCurrency` (`@/lib/utils`), `BONUS_FIELD_LABELS` y `BONUS_FIELDS` (`@/lib/payroll/constants`) en `src/`. `use-admin-time.ts` re-exporta `BONUS_FIELDS`/`BonusFieldKey`.
+- [x] Snapshot sin cambios (216 tests). Build OK. CSS de impresión igual a la línea base.
+- [x] El lint de `admin/time/` baja de 7 errores + 2 advertencias a 7 errores + 0 advertencias (se fueron `useCallback` y `empLoading`).
+- [x] El chequeo de movimiento solo reporta como faltantes las líneas eliminadas a propósito: los banners `Helpers` y `Sub-components`, el alias `generateWeekOptions`, `empLoading` y los duplicados de `BONUS_FIELD_LABELS` y `formatCurrency`. Ninguna tiene clases de impresión.
 
 **Verificación:** comandos comunes.
 **Dependencias:** Checkpoint C. **Archivos:** `payment-report-tab.tsx` (o su hook), `admin/payroll/page.tsx`, `hooks/use-admin-time.ts`, pestañas que usan `generateWeekOptions`. **Tamaño:** M.

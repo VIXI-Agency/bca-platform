@@ -150,6 +150,12 @@ Base: `main` @ `74886f6`. Detalle, decisiones y riesgos en `tasks/plan.md`.
 ### Task 11: Dividir `EmployeeStatusTab` (~357 líneas)
 **Descripción:** Extraer `EmployeeStatusTable` y `DisconnectDialog`.
 **Aceptación:** archivos de menos de ~200 líneas · snapshot sin cambios.
+**Resultado:** ✅
+- Archivos en `_components/employee-status/`: `employee-status-tab.tsx` 185, `disconnect-dialog.tsx`, `employee-status-table.tsx` y `status-summary.tsx` (este último extra, para no pasar de ~200).
+- Ninguna línea original falta y el snapshot no cambió; ese snapshot pinta la tabla completa de esta pestaña.
+- La prueba de equivalencia temporal da HTML idéntico en 6 escenarios: diálogo de desconexión con error, reconexión en proceso, filtros, sin coincidencias, sin empleados y cargando.
+
+**Checkpoint C (local):** ningún archivo de `admin/time/` pasa de 223 líneas · 216 tests · build OK · CSS de impresión igual a la línea base · lint 9.
 **Verificación:** comandos comunes.
 **Dependencias:** Checkpoint B. **Archivos:** `employee-status/*` (3 archivos). **Tamaño:** M.
 

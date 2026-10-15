@@ -94,8 +94,9 @@ Base: `main` @ `74886f6`. Detalle, decisiones y riesgos en `tasks/plan.md`.
 **Verificación:** comandos comunes.
 **Dependencias:** T3. **Archivos:** `audit-log-tab.tsx`, `page.tsx`. **Tamaño:** S.
 
-### Task 7: Mover `EditTimeTab` a `_components/edit-time-tab.tsx`
+### Task 7: Mover `EditTimeTab` a `_components/edit-time-tab.tsx` ✅
 **Aceptación:** chequeo de movimiento sin diferencias · snapshot sin cambios.
+**Resultado:** sin diferencias (13 archivos) · 207 tests · build OK · `print:` 33 · lint 9.
 **Verificación:** comandos comunes.
 **Dependencias:** T3. **Archivos:** `edit-time-tab.tsx`, `page.tsx`. **Tamaño:** S (un archivo grande, pero es un movimiento mecánico).
 

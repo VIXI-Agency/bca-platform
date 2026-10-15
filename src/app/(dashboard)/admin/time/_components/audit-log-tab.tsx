@@ -12,7 +12,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { useEmployeeList, useEmployeeTimesheet } from '@/hooks/use-admin-time';
+import { useEmployeeList, useEmployeeTimesheet, usePeriodAudits } from '@/hooks/use-admin-time';
 import { payPeriodOptions } from '@/lib/time';
 import { AuditTable } from './audit-table';
 
@@ -37,14 +37,19 @@ export function AuditLogTab() {
     }
   }, [weekOptions, filterWeek]);
 
-  // Load audits for each selected combination
-  const userId = filterUserId ? parseInt(filterUserId, 10) : 0;
-  const { data: timesheetData, isLoading: loading } = useEmployeeTimesheet(
+  // One employee's audits come with their timesheet; "All Employees" has its
+  // own endpoint (parseInt('all') used to disable the query and always show
+  // "No modifications found").
+  const isAll = filterUserId === 'all';
+  const userId = filterUserId && !isAll ? parseInt(filterUserId, 10) : 0;
+  const { data: timesheetData, isLoading: timesheetLoading } = useEmployeeTimesheet(
     userId,
     filterWeek
   );
+  const { data: periodAudits, isLoading: periodLoading } = usePeriodAudits(filterWeek, isAll);
 
-  const audits = timesheetData?.audits ?? [];
+  const loading = isAll ? periodLoading : timesheetLoading;
+  const audits = (isAll ? periodAudits : timesheetData?.audits) ?? [];
 
   return (
     <div className="space-y-6 pt-4">

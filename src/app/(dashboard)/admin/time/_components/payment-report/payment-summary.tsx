@@ -3,7 +3,11 @@
 import type { WeekTotals } from '@/hooks/use-admin-time';
 import { BONUS_FIELDS, BONUS_FIELD_LABELS, type BonusFieldKey } from '@/lib/payroll/constants';
 import { formatCurrency } from '@/lib/utils';
-import { formatDuration } from '../../_lib/format';
+
+/** Pay is computed from hours rounded to 2 decimals per day, so the summary
+ *  shows those hours ("20.14 h") — in minutes, its math wouldn't check out
+ *  (20h 08m × $7.00 is $140.93, but the 20.14 h actually paid is $140.98). */
+const hours = (h: number) => `${h.toFixed(2)} h`;
 
 interface PaymentSummaryProps {
   totals: WeekTotals | undefined;
@@ -30,18 +34,18 @@ export function PaymentSummary({
   return (
     <div className="space-y-1 border-t pt-4 print:space-y-0 print:pt-[6px]" style={{ borderColor: 'var(--border)' }}>
       <div className="flex justify-between text-sm print:text-[9.5px]" style={{ color: 'var(--text-secondary)' }}>
-        <span>Regular ({formatDuration(Math.round((totals?.totalHours ?? 0) * 60))} × {formatCurrency(payRate!)})</span>
+        <span>Regular ({hours(totals?.totalHours ?? 0)} × {formatCurrency(payRate!)})</span>
         <span>{formatCurrency(regularPay!)}</span>
       </div>
       {otPay! > 0 && (
         <div className="flex justify-between text-sm print:text-[9.5px]" style={{ color: 'var(--text-secondary)' }}>
-          <span>Overtime ({formatDuration(Math.round((totals?.overtime ?? 0) * 60))} × {formatCurrency(otPayRate!)})</span>
+          <span>Overtime ({hours(totals?.overtime ?? 0)} × {formatCurrency(otPayRate!)})</span>
           <span>{formatCurrency(otPay!)}</span>
         </div>
       )}
       {otRateMissing && (
         <div className="flex justify-between text-sm text-red-500 print:text-[9.5px]">
-          <span>Overtime ({formatDuration(Math.round((totals?.overtime ?? 0) * 60))}) — not paid: no OT rate set</span>
+          <span>Overtime ({hours(totals?.overtime ?? 0)}) — not paid: no OT rate set</span>
           <span>{formatCurrency(0)}</span>
         </div>
       )}

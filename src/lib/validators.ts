@@ -6,8 +6,12 @@ const calendarDate = z
   .string()
   .regex(/^\d{4}-\d{2}-\d{2}$/, 'Date must be YYYY-MM-DD format')
   .refine((s) => {
+    // Zod still runs this refine when the regex above failed, so a non-date
+    // string must not reach toISOString() (it throws on an Invalid Date and
+    // turned a bad ?week= into a 500).
     const [y, m, d] = s.split('-').map(Number);
-    return new Date(Date.UTC(y, m - 1, d)).toISOString().startsWith(s);
+    const date = new Date(Date.UTC(y, m - 1, d));
+    return !isNaN(date.getTime()) && date.toISOString().startsWith(s);
   }, 'Invalid date');
 
 // Auth

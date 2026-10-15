@@ -78,6 +78,7 @@ vi.mock('@/hooks/use-admin-time', async () => ({
   useTimeHistory: () => ({ data: history, isLoading: false }),
   useDisconnections: () => ({ data: undefined, isLoading: false }),
   usePeriodAudits: () => ({ data: undefined, isLoading: false }),
+  useBonusEntries: () => ({ data: undefined, isLoading: false }),
   useBonus: () => ({ data: undefined, isLoading: false }),
   useEditTime: mutation,
   useDisconnectEmployee: mutation,

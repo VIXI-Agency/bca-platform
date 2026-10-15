@@ -24,9 +24,16 @@ export function PaymentReportTab() {
     empLoading, filteredEmployees, weekOptions, navigateWeek,
     isLoading, timesheet, dayLogs, totals, disconnections, employee, periodLabel,
     payRateInput, setPayRateInput, otPayRateInput, setOtPayRateInput, rateIsDirty, handleSaveRate, updatePayRate,
-    bonusInputs, setBonusInputs, bonusIsDirty, bonusLoading, handleSaveBonus, saveBonus,
+    bonusInputs, setBonusInputs, bonusIsDirty, bonusLoading, handleSaveBonus, saveBonus, bonusEntries,
     payRate, otPayRate, regularPay, otPay, otRateMissing, bonusAmounts, totalPay,
   } = usePaymentReport();
+
+  const userId = selectedUserId ? parseInt(selectedUserId, 10) : 0;
+  const locked = timesheet?.payRunStatus === 'approved' || timesheet?.payRunStatus === 'paid';
+  // Dated bonuses can go on any workday of the period that has already happened.
+  const now = new Date();
+  const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+  const bonusDays = dayLogs.map((d) => d.date).filter((d) => d <= today);
 
   return (
     <div className="space-y-6 pt-4">
@@ -101,6 +108,10 @@ export function PaymentReportTab() {
                 bonusLoading={bonusLoading}
                 handleSaveBonus={handleSaveBonus}
                 saveBonus={saveBonus}
+                userId={userId}
+                bonusEntries={bonusEntries}
+                bonusDays={bonusDays}
+                locked={locked}
               />
 
               {/* Timesheet table */}
@@ -132,6 +143,7 @@ export function PaymentReportTab() {
                   otPay={otPay}
                   otRateMissing={otRateMissing}
                   bonusAmounts={bonusAmounts}
+                bonusEntries={bonusEntries}
                   totalPay={totalPay}
                 />
               )}

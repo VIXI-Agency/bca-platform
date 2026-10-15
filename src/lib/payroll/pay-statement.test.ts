@@ -5,6 +5,7 @@ const disconnectionFindMany = vi.fn();
 const userFindUnique = vi.fn();
 const bonusFindUnique = vi.fn();
 const payRunFindUnique = vi.fn();
+const bonusEntryFindMany = vi.fn();
 
 vi.mock('@/lib/prisma', () => ({
   prisma: {
@@ -13,6 +14,7 @@ vi.mock('@/lib/prisma', () => ({
     user: { findUnique: (...a: unknown[]) => userFindUnique(...a) },
     payrollBonus: { findUnique: (...a: unknown[]) => bonusFindUnique(...a) },
     payRun: { findUnique: (...a: unknown[]) => payRunFindUnique(...a) },
+    payrollBonusEntry: { findMany: (...a: unknown[]) => bonusEntryFindMany(...a) },
   },
 }));
 
@@ -65,6 +67,7 @@ beforeEach(() => {
   disconnectionFindMany.mockResolvedValue([]);
   userFindUnique.mockResolvedValue({ payRate: '15.00', otPayRate: '22.50' });
   bonusFindUnique.mockResolvedValue(null);
+  bonusEntryFindMany.mockResolvedValue([]);
 });
 
 describe('computePeriodHours', () => {
@@ -150,11 +153,11 @@ describe('computePayStatement', () => {
       collectionsBonus: '25.50',
       trainingBonus: '10.00',
       managerBonus: '5.25',
-      wheelSpins: '3.00',
       accounts: '2.00',
       reloads: '1.10',
       verifiedLeads: '0.15',
     });
+    bonusEntryFindMany.mockResolvedValue([{ category: 'wheelSpins', amount: '3.00' }]);
 
     const s = await computePayStatement(USER, PERIOD);
 
@@ -171,6 +174,7 @@ describe('computePayStatement', () => {
       trainingBonus: 10,
       managerBonus: 5.25,
       wheelSpins: 3,
+      ccfSpiffs: 0,
       accounts: 2,
       reloads: 1.1,
       verifiedLeads: 0.15,
@@ -245,6 +249,27 @@ describe('computePayStatement', () => {
     bonusFindUnique.mockResolvedValue({ discretionaryBonus: 0.1, collectionsBonus: 0.2 });
     const s = await computePayStatement(USER, PERIOD);
     expect(s.bonusTotal).toBe(0.3);
+  });
+
+  it('sums Wheel Spins and CCF Spiffs from their dated entries', async () => {
+    bonusEntryFindMany.mockResolvedValue([
+      { category: 'wheelSpins', amount: '7.50' },
+      { category: 'wheelSpins', amount: '6.50' },
+      { category: 'ccfSpiffs', amount: '0.10' },
+      { category: 'ccfSpiffs', amount: '0.20' },
+    ]);
+    const s = await computePayStatement(USER, PERIOD);
+    expect(s.bonusAmounts.wheelSpins).toBe(14);
+    expect(s.bonusAmounts.ccfSpiffs).toBe(0.3);
+    expect(s.bonusTotal).toBe(14.3);
+    expect(bonusEntryFindMany.mock.calls[0][0].where).toEqual({ idUser: USER, periodStart: PERIOD });
+  });
+
+  it('ignores the legacy WheelSpins column (its amounts now live in dated entries)', async () => {
+    bonusFindUnique.mockResolvedValue({ wheelSpins: '14.00', discretionaryBonus: '5.00' });
+    const s = await computePayStatement(USER, PERIOD);
+    expect(s.bonusAmounts.wheelSpins).toBe(0);
+    expect(s.bonusTotal).toBe(5);
   });
 
   it('looks up the bonus row for this employee and period', async () => {

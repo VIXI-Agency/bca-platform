@@ -4,9 +4,11 @@ import { prisma } from '@/lib/prisma';
 import { clockWeekSchema, payrollBonusSchema } from '@/lib/validators';
 import { getPayPeriodStart, parseDateParam, resolvePayPeriodStart } from '@/lib/time';
 import { isPeriodLocked } from '@/lib/payroll/compute';
-import { BONUS_FIELDS, type BonusFieldKey } from '@/lib/payroll/constants';
+import { PERIOD_BONUS_FIELDS, type PeriodBonusField } from '@/lib/payroll/constants';
 
-type BonusAmounts = Record<BonusFieldKey, number | null>;
+// One typed amount per period. Wheel Spins and CCF Spiffs are dated entries
+// (see ./bonus-entries); the legacy WheelSpins column is no longer read.
+type BonusAmounts = Record<PeriodBonusField, number | null>;
 
 export async function GET(
   request: Request,
@@ -45,7 +47,7 @@ export async function GET(
     });
 
     const amounts: BonusAmounts = Object.fromEntries(
-      BONUS_FIELDS.map((key) => [key, bonus?.[key] != null ? Number(bonus[key]) : null]),
+      PERIOD_BONUS_FIELDS.map((key) => [key, bonus?.[key] != null ? Number(bonus[key]) : null]),
     ) as BonusAmounts;
 
     return NextResponse.json(amounts);
@@ -97,7 +99,7 @@ export async function PUT(
     }
 
     const fieldData = Object.fromEntries(
-      BONUS_FIELDS.map((key) => [key, fields[key] ?? null]),
+      PERIOD_BONUS_FIELDS.map((key) => [key, fields[key] ?? null]),
     );
 
     const bonus = await prisma.payrollBonus.upsert({
@@ -116,7 +118,7 @@ export async function PUT(
     });
 
     const amounts: BonusAmounts = Object.fromEntries(
-      BONUS_FIELDS.map((key) => [key, bonus[key] != null ? Number(bonus[key]) : null]),
+      PERIOD_BONUS_FIELDS.map((key) => [key, bonus[key] != null ? Number(bonus[key]) : null]),
     ) as BonusAmounts;
 
     return NextResponse.json(amounts);

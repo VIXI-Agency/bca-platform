@@ -1,11 +1,21 @@
-import { BONUS_FIELDS, type BonusFieldKey } from '@/lib/payroll/constants';
+import {
+  BONUS_FIELDS,
+  PERIOD_BONUS_FIELDS,
+  isDatedBonus,
+  type BonusFieldKey,
+  type DatedBonusCategory,
+  type PeriodBonusField,
+} from '@/lib/payroll/constants';
 
 export interface ReportTotalsInput {
   /** The period's paid hours from the timesheet (undefined until it loads). */
   totals: { totalHours: number; overtime: number } | undefined;
   payRateInput: string;
   otPayRateInput: string;
-  bonusInputs: Record<BonusFieldKey, string>;
+  /** What's typed for the bonuses that are one amount per period. */
+  bonusInputs: Record<PeriodBonusField, string>;
+  /** Saved dated entries (Wheel Spins, CCF Spiffs), summed per category. */
+  datedTotals: Record<DatedBonusCategory, number>;
 }
 
 export interface ReportTotals {
@@ -26,6 +36,7 @@ export function computeReportTotals({
   payRateInput,
   otPayRateInput,
   bonusInputs,
+  datedTotals,
 }: ReportTotalsInput): ReportTotals {
   // The rate used for the live calculation and for print comes from what's
   // currently typed, not from the saved record — so the total updates as
@@ -45,11 +56,14 @@ export function computeReportTotals({
   const otPay = totals ? (hasOvertime && otPayRate != null ? cents(totals.overtime * otPayRate) : 0) : null;
   // Bonus/incentive categories: manually-entered dollar amounts, not computed
   // from any formula — kept separate from the hourly/OT math and summed in.
-  const bonusAmounts = Object.fromEntries(
-    BONUS_FIELDS.map((key) => {
+  const typed = Object.fromEntries(
+    PERIOD_BONUS_FIELDS.map((key) => {
       const raw = bonusInputs[key].trim() ? Number(bonusInputs[key]) : null;
       return [key, raw != null && !isNaN(raw) && raw >= 0 ? raw : 0];
     }),
+  ) as Record<PeriodBonusField, number>;
+  const bonusAmounts = Object.fromEntries(
+    BONUS_FIELDS.map((key) => [key, isDatedBonus(key) ? datedTotals[key] : typed[key]]),
   ) as Record<BonusFieldKey, number>;
   const bonusTotal = cents(BONUS_FIELDS.reduce((sum, key) => sum + bonusAmounts[key], 0));
   const totalPay = regularPay != null && otPay != null ? cents(regularPay + otPay + bonusTotal) : null;

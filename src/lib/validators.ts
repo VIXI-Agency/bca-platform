@@ -141,7 +141,6 @@ export const payrollBonusSchema = z.object({
   collectionsBonus: bonusAmountField,
   trainingBonus: bonusAmountField,
   managerBonus: bonusAmountField,
-  wheelSpins: bonusAmountField,
   accounts: bonusAmountField,
   reloads: bonusAmountField,
   verifiedLeads: bonusAmountField,

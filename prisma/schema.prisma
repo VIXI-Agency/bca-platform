@@ -280,6 +280,25 @@ model PayrollBonus {
   @@schema("benjaise_sqluser2")
 }
 
+/// A bonus earned on a specific day (Wheel Spins, CCF Spiffs), with its own
+/// amount. The per-period caps live in DATED_BONUS_RULES. PayrollBonuses
+/// .WheelSpins is legacy: its amounts were copied here by migration
+/// 20261015_dated_bonuses and the app no longer reads it.
+model PayrollBonusEntry {
+  idEntry     Int      @id @default(autoincrement()) @map("IdEntry")
+  idUser      Int      @map("IdUser")
+  periodStart DateTime @map("PeriodStart") @db.Date
+  category    String   @map("Category") // 'wheelSpins' | 'ccfSpiffs'
+  entryDate   DateTime @map("EntryDate") @db.Date
+  amount      Decimal  @map("Amount") @db.Decimal(10, 2)
+  modifiedBy  String?  @map("ModifiedBy")
+  createdAt   DateTime @default(now()) @map("CreatedAt")
+
+  @@index([idUser, periodStart], map: "IX_PayrollBonusEntries_User_Period")
+  @@map("PayrollBonusEntries")
+  @@schema("benjaise_sqluser2")
+}
+
 // Phase 1 payroll module: an approved/paid PayRun snapshots live numbers
 // (hours × rate, OT, each bonus category) into PayStatements that never
 // change again, so printing last month's report always matches what was

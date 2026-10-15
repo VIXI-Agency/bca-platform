@@ -96,6 +96,7 @@ export async function fetchDisconnectionWindows(
   const rows = await prisma.employeeDisconnection.findMany({
     where: {
       disconnectionDate: { gte: from, lt: to },
+      removedAt: null, // removed by an admin: no longer counts against pay
       ...(userId ? { idUser: userId } : {}),
     },
     select: { idUser: true, disconnectionDate: true, disconnectionTime: true, reconnectionTime: true },

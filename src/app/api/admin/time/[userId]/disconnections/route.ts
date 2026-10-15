@@ -3,7 +3,7 @@ import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { clockWeekSchema } from '@/lib/validators';
 import { getPayPeriodEnd, resolvePayPeriodStart } from '@/lib/time';
-import { DISCONNECTION_TYPES } from '../../disconnect/route';
+import { DISCONNECTION_TYPES } from '@/lib/admin-time/disconnections';
 
 export async function GET(
   request: Request,
@@ -42,8 +42,9 @@ export async function GET(
       where: {
         idUser: targetUserId,
         disconnectionDate: { gte: periodStart, lt: periodEnd },
+        removedAt: null,
       },
-      orderBy: { disconnectionDate: 'asc' },
+      orderBy: [{ disconnectionDate: 'asc' }, { disconnectionTime: 'asc' }],
     });
 
     const counts: Record<string, number> = Object.fromEntries(

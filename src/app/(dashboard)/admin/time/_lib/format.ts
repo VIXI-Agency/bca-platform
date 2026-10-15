@@ -57,6 +57,12 @@ export function formatDuration(mins: number | null): string {
   return `${h}h ${String(m).padStart(2, '0')}m`;
 }
 
+/** A disconnection span for the audit trail: "8:54am–9:10am" or "8:54am–clock-out". */
+export function formatSpan(span: { start: string; end: string | null } | null): string {
+  if (!span) return '--';
+  return `${formatTime(span.start)}–${span.end ? formatTime(span.end) : 'clock-out'}`;
+}
+
 export function formatMinutes(mins: number): string {
   return `${mins} min`;
 }

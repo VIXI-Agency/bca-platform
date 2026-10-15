@@ -16,6 +16,7 @@ import { AuditTable } from '../audit-table';
 import { EditTimeSelectors } from './edit-time-selectors';
 import { TimesheetTable } from './timesheet-table';
 import { EditTimeDialog } from './edit-time-dialog';
+import { DisconnectionsPanel } from './disconnections-panel';
 
 /* ================================================== */
 /*  TAB 2: Edit Time                                   */
@@ -166,6 +167,17 @@ export function EditTimeTab() {
             <TimesheetTable dayLogs={dayLogs} openEditDialog={openEditDialog} />
           </CardContent>
         </Card>
+      )}
+
+      {/* Disconnections: fix wrong ones, add ones nobody recorded at the time */}
+      {selectedUserId && !timesheetLoading && (
+        <DisconnectionsPanel
+          userId={userId}
+          week={selectedWeek}
+          employeeName={selectedEmployeeName}
+          workDates={dayLogs.map((d) => d.date)}
+          locked={timesheetData?.payRunStatus === 'approved' || timesheetData?.payRunStatus === 'paid'}
+        />
       )}
 
       {/* Week audit log */}

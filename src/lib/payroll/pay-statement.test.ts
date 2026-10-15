@@ -271,7 +271,13 @@ describe('fetchDisconnectionWindows', () => {
     expect(map.get(disconnectionKey(2, day('2026-10-12')))).toHaveLength(1);
     expect(disconnectionFindMany.mock.calls[0][0].where).toEqual({
       disconnectionDate: { gte: day('2026-10-09'), lt: day('2026-10-16') },
+      removedAt: null,
     });
+  });
+
+  it('leaves out disconnections an admin removed, so they stop reducing pay', async () => {
+    await fetchDisconnectionWindows(day('2026-10-09'), day('2026-10-16'), 7);
+    expect(disconnectionFindMany.mock.calls[0][0].where).toMatchObject({ removedAt: null, idUser: 7 });
   });
 
   it('builds keys from the UTC calendar date', () => {

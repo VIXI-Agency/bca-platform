@@ -221,11 +221,40 @@ model EmployeeDisconnection {
   disconnectionType  String?   @map("DisconnectionType")
   disconnectedBy     String?   @map("DisconnectedBy")
   reconnectedBy      String?   @map("ReconnectedBy")
+  // Legacy meaning: 0 = reconnected. Not a delete flag — see removedAt.
   isActive           Boolean?  @default(true) @map("IsActive")
+  // Soft delete: a removed disconnection no longer counts against pay.
+  removedAt          DateTime? @map("RemovedAt")
+  removedBy          String?   @map("RemovedBy")
 
   user               User      @relation("DisconnectedUser", fields: [idUser], references: [idUser], onDelete: NoAction, onUpdate: NoAction)
+  audits             EmployeeDisconnectionAudit[]
 
   @@map("EmployeeDisconnections")
+  @@schema("benjaise_sqluser2")
+}
+
+/// Every add / edit / remove of a disconnection made after the fact.
+model EmployeeDisconnectionAudit {
+  idAudit           Int       @id @default(autoincrement()) @map("IdAudit")
+  idDisconnection   Int       @map("IdDisconnection")
+  idUser            Int       @map("IdUser")
+  action            String    @map("Action") // 'add' | 'edit' | 'remove'
+  disconnectionDate DateTime  @map("DisconnectionDate") @db.Date
+  oldStart          DateTime? @map("OldStart") @db.Time
+  oldEnd            DateTime? @map("OldEnd") @db.Time
+  oldType           String?   @map("OldType")
+  newStart          DateTime? @map("NewStart") @db.Time
+  newEnd            DateTime? @map("NewEnd") @db.Time
+  newType           String?   @map("NewType")
+  reason            String    @map("Reason")
+  modifiedBy        String    @map("ModifiedBy")
+  modifiedAt        DateTime  @default(now()) @map("ModifiedAt")
+
+  disconnection     EmployeeDisconnection @relation(fields: [idDisconnection], references: [idDisconnection], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([disconnectionDate, idUser], map: "IX_EmployeeDisconnectionAudits_Date")
+  @@map("EmployeeDisconnectionAudits")
   @@schema("benjaise_sqluser2")
 }
 

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { formatTime, breakMinutes, elapsedMinutes, formatDuration, formatMinutes } from './format';
+import { formatTime, breakMinutes, elapsedMinutes, formatDuration, formatMinutes, formatSpan } from './format';
 
 describe('formatTime', () => {
   it('reads a TIME column (1970-01-01, Pacific wall clock in UTC fields)', () => {
@@ -80,6 +80,20 @@ describe('formatDuration', () => {
 
   it('shows a placeholder for null', () => {
     expect(formatDuration(null)).toBe('--:--');
+  });
+});
+
+describe('formatSpan', () => {
+  it('shows a disconnection’s start and reconnection', () => {
+    expect(formatSpan({ start: '1970-01-01T08:54:00.000Z', end: '1970-01-01T09:10:00.000Z' })).toBe('8:54am–9:10am');
+  });
+
+  it('says clock-out when there was no reconnection', () => {
+    expect(formatSpan({ start: '1970-01-01T13:05:00.000Z', end: null })).toBe('1:05pm–clock-out');
+  });
+
+  it('shows a placeholder when there is no span (added or removed)', () => {
+    expect(formatSpan(null)).toBe('--');
   });
 });
 

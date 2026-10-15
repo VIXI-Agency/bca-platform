@@ -42,8 +42,15 @@ export const EDITABLE_FIELDS: { key: string; label: string }[] = [
   { key: 'clockOut', label: 'Clock Out' },
 ];
 
+/** Audit "field" values for disconnection changes made after the fact. */
+const DISCONNECTION_CHANGE_LABELS: Record<string, string> = {
+  disconnection_add: 'Disconnection added',
+  disconnection_edit: 'Disconnection edited',
+  disconnection_remove: 'Disconnection removed',
+};
+
 export function fieldLabel(key: string): string {
-  return EDITABLE_FIELDS.find((f) => f.key === key)?.label ?? key;
+  return EDITABLE_FIELDS.find((f) => f.key === key)?.label ?? DISCONNECTION_CHANGE_LABELS[key] ?? key;
 }
 
 export const DISCONNECTION_TYPE_OPTIONS: { value: DisconnectionType; label: string }[] = [

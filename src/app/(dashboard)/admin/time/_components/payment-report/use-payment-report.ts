@@ -6,9 +6,14 @@ import {
   useUpdatePayRate,
   useBonus,
   useSaveBonus,
-  BONUS_FIELDS,
-  type BonusFieldKey,
+  useBonusEntries,
 } from '@/hooks/use-admin-time';
+import {
+  DATED_BONUS_CATEGORIES,
+  PERIOD_BONUS_FIELDS,
+  type DatedBonusCategory,
+  type PeriodBonusField,
+} from '@/lib/payroll/constants';
 import { payPeriodOptions } from '@/lib/time';
 import { computeReportTotals } from './totals';
 import { nextSeed, type SeedKey } from './seed';
@@ -24,8 +29,8 @@ export function usePaymentReport() {
   const [empSearch, setEmpSearch] = useState('');
   const [payRateInput, setPayRateInput] = useState('');
   const [otPayRateInput, setOtPayRateInput] = useState('');
-  const [bonusInputs, setBonusInputs] = useState<Record<BonusFieldKey, string>>(
-    () => Object.fromEntries(BONUS_FIELDS.map((key) => [key, ''])) as Record<BonusFieldKey, string>,
+  const [bonusInputs, setBonusInputs] = useState<Record<PeriodBonusField, string>>(
+    () => Object.fromEntries(PERIOD_BONUS_FIELDS.map((key) => [key, ''])) as Record<PeriodBonusField, string>,
   );
 
   const weekOptions = useMemo(() => payPeriodOptions(24), []);
@@ -40,6 +45,7 @@ export function usePaymentReport() {
   const { data: timesheet, isLoading: timesheetLoading } = useEmployeeTimesheet(userId, selectedWeek);
   const { data: disconnections, isLoading: disconnectionsLoading } = useDisconnections(userId, selectedWeek);
   const { data: bonus, isLoading: bonusLoading } = useBonus(userId, selectedWeek);
+  const { data: bonusEntries } = useBonusEntries(userId, selectedWeek);
 
   const employee = useMemo(
     () => employees?.find((e) => e.userId === userId),
@@ -68,8 +74,8 @@ export function usePaymentReport() {
     bonusSeed.current = next.key;
     setBonusInputs(
       Object.fromEntries(
-        BONUS_FIELDS.map((key) => [key, next.from?.[key] != null ? String(next.from[key]) : '']),
-      ) as Record<BonusFieldKey, string>,
+        PERIOD_BONUS_FIELDS.map((key) => [key, next.from?.[key] != null ? String(next.from[key]) : '']),
+      ) as Record<PeriodBonusField, string>,
     );
   }, [userId, selectedWeek, bonus]);
 
@@ -91,18 +97,28 @@ export function usePaymentReport() {
   const dayLogs = timesheet?.data ?? [];
   const totals = timesheet?.weekTotals;
 
+  // Wheel Spins and CCF Spiffs: saved dated entries, summed per category.
+  const entries = useMemo(() => bonusEntries ?? [], [bonusEntries]);
+  const datedTotals = Object.fromEntries(
+    DATED_BONUS_CATEGORIES.map((key) => [
+      key,
+      Math.round(entries.filter((e) => e.category === key).reduce((sum, e) => sum + e.amount, 0) * 100) / 100,
+    ]),
+  ) as Record<DatedBonusCategory, number>;
+
   const { payRate, otPayRate, regularPay, otRateMissing, otPay, bonusAmounts, totalPay } = computeReportTotals({
     totals,
     payRateInput,
     otPayRateInput,
     bonusInputs,
+    datedTotals,
   });
   const periodLabel = weekOptions.find((w) => w.value === selectedWeek)?.label ?? '';
 
   const rateIsDirty =
     employee != null &&
     (payRate !== (employee.payRate ?? null) || otPayRate !== (employee.otPayRate ?? null));
-  const bonusIsDirty = BONUS_FIELDS.some((key) => bonusAmounts[key] !== (bonus?.[key] ?? 0));
+  const bonusIsDirty = PERIOD_BONUS_FIELDS.some((key) => bonusAmounts[key] !== (bonus?.[key] ?? 0));
 
   // Errors (e.g. a locked period) are shown next to each Save button from the
   // mutation's own error state.
@@ -120,7 +136,8 @@ export function usePaymentReport() {
   async function handleSaveBonus() {
     if (!userId || !selectedWeek) return;
     try {
-      await saveBonus.mutateAsync({ userId, week: selectedWeek, ...bonusAmounts });
+      const typed = Object.fromEntries(PERIOD_BONUS_FIELDS.map((key) => [key, bonusAmounts[key]])) as Record<PeriodBonusField, number>;
+      await saveBonus.mutateAsync({ userId, week: selectedWeek, ...typed });
     } catch {
       /* shown from saveBonus.error */
     }
@@ -131,7 +148,7 @@ export function usePaymentReport() {
     empLoading, filteredEmployees, weekOptions, navigateWeek,
     isLoading, timesheet, dayLogs, totals, disconnections, employee, periodLabel,
     payRateInput, setPayRateInput, otPayRateInput, setOtPayRateInput, rateIsDirty, handleSaveRate, updatePayRate,
-    bonusInputs, setBonusInputs, bonusIsDirty, bonusLoading, handleSaveBonus, saveBonus,
+    bonusInputs, setBonusInputs, bonusIsDirty, bonusLoading, handleSaveBonus, saveBonus, bonusEntries: entries,
     payRate, otPayRate, regularPay, otPay, otRateMissing, bonusAmounts, totalPay,
   };
 }

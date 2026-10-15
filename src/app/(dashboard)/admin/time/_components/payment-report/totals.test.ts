@@ -6,11 +6,16 @@
  * hours, rates and bonuses.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { BONUS_FIELDS, type BonusFieldKey } from '@/lib/payroll/constants';
+import {
+  PERIOD_BONUS_FIELDS,
+  type DatedBonusCategory,
+  type PeriodBonusField,
+} from '@/lib/payroll/constants';
 
 const timeLogFindMany = vi.fn();
 const userFindUnique = vi.fn();
 const bonusFindUnique = vi.fn();
+const bonusEntryFindMany = vi.fn();
 
 vi.mock('@/lib/prisma', () => ({
   prisma: {
@@ -18,6 +23,7 @@ vi.mock('@/lib/prisma', () => ({
     employeeDisconnection: { findMany: () => Promise.resolve([]) },
     user: { findUnique: (...a: unknown[]) => userFindUnique(...a) },
     payrollBonus: { findUnique: (...a: unknown[]) => bonusFindUnique(...a) },
+    payrollBonusEntry: { findMany: (...a: unknown[]) => bonusEntryFindMany(...a) },
   },
 }));
 
@@ -45,14 +51,17 @@ const log = (iso: string, clockOut: string) => ({
 });
 
 const noBonus = () =>
-  Object.fromEntries(BONUS_FIELDS.map((key) => [key, ''])) as Record<BonusFieldKey, string>;
+  Object.fromEntries(PERIOD_BONUS_FIELDS.map((key) => [key, ''])) as Record<PeriodBonusField, string>;
+const noDated = (): Record<DatedBonusCategory, number> => ({ wheelSpins: 0, ccfSpiffs: 0 });
 
 interface Case {
   name: string;
   clockOuts: string[];
   payRate: string;
   otPayRate: string | null;
-  bonus: Partial<Record<BonusFieldKey, number>>;
+  bonus: Partial<Record<PeriodBonusField, number>>;
+  /** Dated entries (Wheel Spins, CCF Spiffs) as stored. */
+  entries?: { category: DatedBonusCategory; amount: string }[];
 }
 
 const CASES: Case[] = [
@@ -60,7 +69,7 @@ const CASES: Case[] = [
   { name: 'daily overtime with an OT rate', clockOuts: ['16:30'], payRate: '10.00', otPayRate: '15.00', bonus: {} },
   { name: 'overtime with no OT rate (paid $0)', clockOuts: ['16:30'], payRate: '10.00', otPayRate: null, bonus: {} },
   { name: 'a rate that needs rounding to cents', clockOuts: ['13:30'], payRate: '15.3333', otPayRate: null, bonus: {} },
-  { name: 'odd minutes and bonuses', clockOuts: ['14:37', '15:02', '13:11'], payRate: '7.00', otPayRate: '10.50', bonus: { discretionaryBonus: 25, wheelSpins: 0.1, accounts: 0.2 } },
+  { name: 'odd minutes and bonuses', clockOuts: ['14:37', '15:02', '13:11'], payRate: '7.00', otPayRate: '10.50', bonus: { discretionaryBonus: 25, accounts: 0.2 }, entries: [{ category: 'wheelSpins', amount: '0.10' }, { category: 'ccfSpiffs', amount: '5.00' }, { category: 'ccfSpiffs', amount: '2.55' }] },
 ];
 
 beforeEach(() => {
@@ -74,17 +83,22 @@ describe('computeReportTotals', () => {
     timeLogFindMany.mockResolvedValue(rows);
     userFindUnique.mockResolvedValue({ payRate: c.payRate, otPayRate: c.otPayRate });
     bonusFindUnique.mockResolvedValue(c.bonus);
+    bonusEntryFindMany.mockResolvedValue(c.entries ?? []);
 
     const server = await computePayStatement(USER, PERIOD);
     const hours = await computePeriodHours(USER, PERIOD);
     const bonusInputs = { ...noBonus() };
-    for (const [key, value] of Object.entries(c.bonus)) bonusInputs[key as BonusFieldKey] = String(value);
+    for (const [key, value] of Object.entries(c.bonus)) bonusInputs[key as PeriodBonusField] = String(value);
+    // What the report gets from the dated-entries endpoint, summed per category.
+    const datedTotals = noDated();
+    for (const e of c.entries ?? []) datedTotals[e.category] = Math.round((datedTotals[e.category] + Number(e.amount)) * 100) / 100;
 
     const client = computeReportTotals({
       totals: hours,
       payRateInput: c.payRate,
       otPayRateInput: c.otPayRate ?? '',
       bonusInputs,
+      datedTotals,
     });
 
     expect(client.regularPay).toBe(server.regularPay);
@@ -100,6 +114,7 @@ describe('computeReportTotals', () => {
       payRateInput: '10',
       otPayRateInput: '',
       bonusInputs: noBonus(),
+      datedTotals: noDated(),
     });
     expect(r.otRateMissing).toBe(true);
     expect(r.otPay).toBe(0);
@@ -112,6 +127,7 @@ describe('computeReportTotals', () => {
       payRateInput: '',
       otPayRateInput: '15',
       bonusInputs: noBonus(),
+      datedTotals: noDated(),
     });
     expect(r.payRate).toBeNull();
     expect(r.regularPay).toBeNull();
@@ -124,6 +140,7 @@ describe('computeReportTotals', () => {
       payRateInput: '-5',
       otPayRateInput: 'abc',
       bonusInputs: { ...noBonus(), discretionaryBonus: '-10', collectionsBonus: 'x' },
+      datedTotals: noDated(),
     });
     expect(r.payRate).toBeNull();
     expect(r.otPayRate).toBeNull();
@@ -137,6 +154,7 @@ describe('computeReportTotals', () => {
       payRateInput: '10',
       otPayRateInput: '15',
       bonusInputs: noBonus(),
+      datedTotals: noDated(),
     });
     expect(r.regularPay).toBeNull();
     expect(r.otPay).toBeNull();

@@ -5,15 +5,28 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Loading } from '@/components/ui/loading';
-import { BONUS_FIELDS, BONUS_FIELD_LABELS, type BonusFieldKey } from '@/lib/payroll/constants';
+import type { BonusEntry } from '@/hooks/use-admin-time';
+import {
+  BONUS_FIELD_LABELS,
+  DATED_BONUS_CATEGORIES,
+  PERIOD_BONUS_FIELDS,
+  type PeriodBonusField,
+} from '@/lib/payroll/constants';
+import { DatedBonusList } from './dated-bonus-list';
 
 interface BonusEditorProps {
-  bonusInputs: Record<BonusFieldKey, string>;
-  setBonusInputs: Dispatch<SetStateAction<Record<BonusFieldKey, string>>>;
+  bonusInputs: Record<PeriodBonusField, string>;
+  setBonusInputs: Dispatch<SetStateAction<Record<PeriodBonusField, string>>>;
   bonusIsDirty: boolean;
   bonusLoading: boolean;
   handleSaveBonus: () => void;
   saveBonus: { isPending: boolean; error: Error | null };
+  /** For the dated bonuses (Wheel Spins, CCF Spiffs), which save on their own. */
+  userId: number;
+  bonusEntries: BonusEntry[];
+  /** Workdays of the period that have already happened. */
+  bonusDays: string[];
+  locked: boolean;
 }
 
 /** The per-period bonus/incentive inputs (hidden in print). */
@@ -24,6 +37,10 @@ export function BonusEditor({
   bonusLoading,
   handleSaveBonus,
   saveBonus,
+  userId,
+  bonusEntries,
+  bonusDays,
+  locked,
 }: BonusEditorProps) {
   return (
     <div
@@ -48,7 +65,7 @@ export function BonusEditor({
         </Button>
       </div>
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        {BONUS_FIELDS.map((key) => (
+        {PERIOD_BONUS_FIELDS.map((key) => (
           <div key={key} className="space-y-1">
             <Label htmlFor={`report-bonus-${key}`} className="text-xs" style={{ color: 'var(--text-secondary)' }}>
               {BONUS_FIELD_LABELS[key]}
@@ -68,6 +85,21 @@ export function BonusEditor({
         ))}
       </div>
       {saveBonus.error && <p className="text-xs text-red-500">{saveBonus.error.message}</p>}
+
+      {/* Earned on specific days: each entry has its own date and amount and is
+          saved as soon as it's added (no Save Bonuses needed). */}
+      <div className="grid gap-3 sm:grid-cols-2">
+        {DATED_BONUS_CATEGORIES.map((category) => (
+          <DatedBonusList
+            key={category}
+            userId={userId}
+            category={category}
+            entries={bonusEntries.filter((e) => e.category === category)}
+            days={bonusDays}
+            locked={locked}
+          />
+        ))}
+      </div>
     </div>
   );
 }

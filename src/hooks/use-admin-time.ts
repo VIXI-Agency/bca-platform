@@ -1,7 +1,12 @@
 'use client';
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { BONUS_FIELDS, type BonusFieldKey } from '@/lib/payroll/constants';
+import {
+  BONUS_FIELDS,
+  type BonusFieldKey,
+  type DatedBonusCategory,
+  type PeriodBonusField,
+} from '@/lib/payroll/constants';
 import { invalidatePayData } from './invalidate-pay-data';
 
 /* -------------------------------------------------- */
@@ -105,7 +110,16 @@ export interface DisconnectionsResponse {
 // re-exported so existing imports from this hook keep working.
 export { BONUS_FIELDS, type BonusFieldKey };
 
-export type BonusResponse = Record<BonusFieldKey, number | null>;
+/** The bonuses typed as one amount per period (Wheel Spins / CCF Spiffs are dated entries). */
+export type BonusResponse = Record<PeriodBonusField, number | null>;
+
+/** One dated bonus (Wheel Spins, CCF Spiffs). */
+export interface BonusEntry {
+  id: number;
+  category: DatedBonusCategory;
+  date: string;
+  amount: number;
+}
 
 /** A disconnection's span in an audit entry (PST wall-clock TIME values). */
 export interface DisconnectionSpan {
@@ -246,6 +260,18 @@ export function usePeriodAudits(week: string, enabled: boolean) {
   });
 }
 
+/** The pay period's dated bonuses (Wheel Spins, CCF Spiffs) for one employee. */
+export function useBonusEntries(userId: number, week: string) {
+  return useQuery<BonusEntry[]>({
+    queryKey: ['admin-bonus-entries', userId, week],
+    queryFn: async () => {
+      const json = await fetchJson<{ entries: BonusEntry[] }>(`/api/admin/time/${userId}/bonus-entries?week=${week}`);
+      return json.entries;
+    },
+    enabled: !!userId && !!week,
+  });
+}
+
 export function useDisconnections(userId: number, week: string) {
   return useQuery<DisconnectionsResponse>({
     queryKey: ['admin-disconnections', userId, week],
@@ -359,6 +385,29 @@ export function useRemoveDisconnection() {
   });
 }
 
+/** Adds one dated bonus; the server enforces each category's caps. */
+export function useAddBonusEntry() {
+  const qc = useQueryClient();
+  return useMutation<unknown, Error, { userId: number; category: DatedBonusCategory; date: string; amount: number }>({
+    mutationFn: ({ userId, ...body }) =>
+      fetchJson(`/api/admin/time/${userId}/bonus-entries`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      }),
+    onSuccess: () => invalidatePayData(qc),
+  });
+}
+
+/** Removes one dated bonus. */
+export function useRemoveBonusEntry() {
+  const qc = useQueryClient();
+  return useMutation<unknown, Error, { id: number }>({
+    mutationFn: ({ id }) => fetchJson(`/api/admin/time/bonus-entries/${id}`, { method: 'DELETE' }),
+    onSuccess: () => invalidatePayData(qc),
+  });
+}
+
 /** Minimal pay-rate update: PUTs only payRate/otPayRate, not the full user
  *  edit form — lets the Payment Report set a rate inline without needing
  *  the rest of the user's profile fields on hand. */
@@ -389,7 +438,7 @@ export function useSaveBonus() {
   return useMutation<
     BonusResponse,
     Error,
-    { userId: number; week: string } & Partial<Record<BonusFieldKey, number | null>>
+    { userId: number; week: string } & Partial<Record<PeriodBonusField, number | null>>
   >({
     mutationFn: ({ userId, week, ...fields }) =>
       fetchJson(`/api/admin/time/${userId}/bonus`, {

@@ -366,6 +366,10 @@ jobs:
               ftp.storbinary(f'STOR {REMOTE_DIR}/iisnode-entry.js', f)
           print('Uploaded iisnode-entry.js')
 
+          # Keep the web.config that is live now, to put back if IIS can't load
+          # the new one (see the health check at the end).
+          previous_web_config = _read_remote(f'{REMOTE_DIR}/web.config')
+
           # web.config with timestamp to force restart
           with open(os.path.join(base, 'web.config'), 'r') as f:
               wc = f.read()
@@ -395,5 +399,45 @@ jobs:
           print('Uploaded .env')
 
           ftp.quit()
+
+          # --- Health check ---
+          # A web.config IIS can't load (HTTP 500.19, e.g. a section the host
+          # has locked) takes the whole site down. If that happens, put the
+          # previous web.config back and fail the run.
+          import urllib.request, urllib.error
+
+          def probe(path):
+              try:
+                  with urllib.request.urlopen(f'https://yourdebtcollectors.com{path}', timeout=60) as r:
+                      return r.status, r.read(4000).decode('utf-8', 'ignore'), r.headers.get('Content-Type', '')
+              except urllib.error.HTTPError as e:
+                  return e.code, e.read(4000).decode('utf-8', 'ignore'), e.headers.get('Content-Type', '')
+              except Exception as e:
+                  return None, str(e), ''
+
+          status, body = None, ''
+          for attempt in range(10):
+              time.sleep(15)  # iisnode restarts the app after the web.config upload
+              status, body, _ = probe('/login')
+              print(f'Health check {attempt + 1}: /login -> {status}')
+              if status == 200 or '500.19' in body:
+                  break
+
+          if '500.19' in body:
+              print('IIS cannot load the new web.config (HTTP 500.19) - restoring the previous one')
+              if previous_web_config:
+                  ftp = ftp_connect()
+                  ftp.storbinary(f'STOR {REMOTE_DIR}/web.config', BytesIO(previous_web_config.encode()))
+                  ftp.quit()
+                  print('Previous web.config restored')
+              raise SystemExit('Deploy failed: web.config rejected by IIS (500.19); rolled back')
+          if status != 200:
+              print(f'WARNING: /login answered {status} after the deploy; check /logs/iisnode')
+
+          # Error responses should reach the browser as the app's own JSON
+          # (httpErrors existingResponse="PassThrough"), not IIS error pages.
+          api_status, api_body, api_type = probe('/api/clock')
+          print(f'Unauthenticated /api/clock -> {api_status} {api_type}: {api_body[:80]!r}')
+
           print(f'\nDeploy complete at {ts}')
           print('Visit https://yourdebtcollectors.com')

@@ -137,6 +137,11 @@ back by renaming on failure. **This only fixes downtime — it does NOT fix the
 - **AUTH_URL per environment**: set `AUTH_URL=https://qa.yourdebtcollectors.com`
   for QA, prod URL for prod. With `trustHost:true` NextAuth can also infer host,
   but an inherited/wrong `AUTH_URL` causes redirects to the wrong domain.
+- **IIS replaces error bodies unless told not to.** Without
+  `<httpErrors existingResponse="PassThrough" />` in `web.config`, every 4xx/5xx
+  from the app reached the browser as an empty/generic IIS page, so the UI could
+  only show "Request failed (409)". `deploy.yml` now health-checks `/login` after
+  uploading `web.config` and restores the previous one if IIS answers 500.19.
 - **Browsers cache 301s hard.** A permanent redirect served once (e.g. the old
   qa→prod middleware) sticks in the browser; test fixes in an incognito window.
 - **Builds are largely reproducible** but `BUILD_ID` is random per build, and

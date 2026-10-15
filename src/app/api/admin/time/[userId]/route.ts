@@ -4,6 +4,7 @@ import { prisma } from '@/lib/prisma';
 import { clockWeekSchema } from '@/lib/validators';
 import { getPayPeriodEnd, getPayPeriodWorkDates, resolvePayPeriodStart } from '@/lib/time';
 import { computeDayMetrics, disconnectionKey, fetchDisconnectionWindows } from '@/lib/payroll/compute';
+import { toAuditDtos } from '@/lib/admin-time/audit-dto';
 
 export async function GET(
   request: Request,
@@ -165,40 +166,8 @@ export async function GET(
       );
     });
 
-    // modifiedBy is stored as a raw idUser string — resolve it to a name so
-    // the audit trail doesn't just show "262".
-    const modifierIds = Array.from(
-      new Set(
-        audits
-          .map((a) => a.modifiedBy)
-          .filter((v): v is string => !!v && /^\d+$/.test(v))
-      )
-    ).map(Number);
-    const modifiers = modifierIds.length
-      ? await prisma.user.findMany({
-          where: { idUser: { in: modifierIds } },
-          select: { idUser: true, name: true, lastname: true },
-        })
-      : [];
-    const modifierNames = new Map(
-      modifiers.map((m) => [
-        String(m.idUser),
-        `${m.name ?? ''} ${m.lastname ?? ''}`.trim() || `User #${m.idUser}`,
-      ])
-    );
-
-    const transformedAudits = audits.map((a) => ({
-      id: a.auditId,
-      userId: targetUserId,
-      employeeName: `${user.name ?? ''} ${user.lastname ?? ''}`.trim(),
-      date: new Date(a.modifiedDate).toISOString().split('T')[0],
-      field: a.fieldModified ?? '',
-      oldValue: a.oldValue,
-      newValue: a.newValue ?? '',
-      modifiedBy: a.modifiedBy ? (modifierNames.get(a.modifiedBy) ?? a.modifiedBy) : '',
-      modifiedAt: a.modifiedDate?.toISOString() ?? '',
-      reason: a.reason ?? '',
-    }));
+    // Names for the employee and for each editor (stored as raw idUser strings).
+    const transformedAudits = await toAuditDtos(audits);
 
     return NextResponse.json({
       data: fullWeek,

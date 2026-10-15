@@ -204,6 +204,18 @@ export function useEmployeeTimesheet(userId: number, week: string) {
   });
 }
 
+/** Every employee's manual time edits in a pay period (Audit Log → All Employees). */
+export function usePeriodAudits(week: string, enabled: boolean) {
+  return useQuery<Audit[]>({
+    queryKey: ['admin-audits', week],
+    queryFn: async () => {
+      const json = await fetchJson<{ audits: Audit[] }>(`/api/admin/time/audits?week=${week}`);
+      return json.audits;
+    },
+    enabled: enabled && !!week,
+  });
+}
+
 export function useDisconnections(userId: number, week: string) {
   return useQuery<DisconnectionsResponse>({
     queryKey: ['admin-disconnections', userId, week],

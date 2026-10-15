@@ -140,6 +140,10 @@ Base: `main` @ `74886f6`. Detalle, decisiones y riesgos en `tasks/plan.md`.
 ### Task 10: Dividir `EditTimeTab` (~552 líneas)
 **Descripción:** Extraer `TimesheetTable` y `EditTimeDialog`; el estado y las mutaciones se quedan en `EditTimeTab`.
 **Aceptación:** archivos de menos de ~250 líneas · snapshot sin cambios · editar una hora funciona igual (revisión manual en el Checkpoint C).
+**Resultado:** ✅
+- Archivos en `_components/edit-time/`: `edit-time-tab.tsx` 202, `edit-time-dialog.tsx` 192, `timesheet-table.tsx` 186, `edit-time-selectors.tsx` 131 (este último extra, para no pasar de ~250).
+- Ninguna línea original falta y el snapshot no cambió (216 tests).
+- La prueba de equivalencia temporal da HTML idéntico entre el tab anterior y el nuevo en 5 escenarios: diálogo abierto con error, guardando, sin datos, cargando y sin empleado. Cambiar el umbral de break excedido la hace fallar.
 **Verificación:** comandos comunes.
 **Dependencias:** Checkpoint B. **Archivos:** `edit-time/*` (3 archivos). **Tamaño:** M.
 

@@ -13,7 +13,6 @@ import {
   FileText,
   ChevronLeft,
   ChevronRight,
-  AlertTriangle,
   RefreshCw,
   History,
   DollarSign,
@@ -57,11 +56,22 @@ import {
   type BonusFieldKey,
   type EmployeeStatus,
   type DayLog,
-  type Audit,
   type TimeHistoryEntry,
   type DisconnectionType,
 } from '@/hooks/use-admin-time';
 import { payPeriodOptions } from '@/lib/time';
+import { formatTime, breakMinutes, formatDuration } from './_lib/format';
+import {
+  STATUS_CONFIG,
+  fieldLabel,
+  DISCONNECTION_TYPE_OPTIONS,
+  DISCONNECTION_TYPE_LABELS,
+} from './_lib/constants';
+import { LockedPeriodNotice } from './_components/locked-period-notice';
+import { StatusBadge } from './_components/status-badge';
+import { LiveTimer } from './_components/live-timer';
+import { TimeCell, BreakCell } from './_components/time-cells';
+import { AuditTable } from './_components/audit-table';
 
 /* -------------------------------------------------- */
 /*  Helpers                                            */
@@ -71,179 +81,9 @@ import { payPeriodOptions } from '@/lib/time';
 // Payroll page and the API use, so every screen agrees on which week is which.
 const generateWeekOptions = payPeriodOptions;
 
-/** Shown when the period's pay run is approved or paid: the server refuses
- *  edits to its hours, bonuses and disconnections until the run is voided. */
-function LockedPeriodNotice({ status }: { status: 'approved' | 'paid' | 'void' | null }) {
-  if (status !== 'approved' && status !== 'paid') return null;
-  return (
-    <div className="no-print mb-3 flex items-center gap-2 rounded-lg border border-[var(--warning)] bg-[var(--warning-subtle)] px-3 py-2 text-sm text-[var(--warning)]">
-      <AlertTriangle className="h-4 w-4 shrink-0" />
-      This pay period is {status === 'paid' ? 'paid' : 'approved'} in Payroll and locked. Hours, bonuses and
-      disconnections can&apos;t be changed unless the pay run is voided.
-    </div>
-  );
-}
-
-function formatTime(time?: string | null): string {
-  if (!time) return '--:--';
-  let h: number, m: number;
-  if (time.includes('T')) {
-    const d = new Date(time);
-    h = d.getUTCHours();
-    m = d.getUTCMinutes();
-  } else {
-    [h, m] = time.split(':').map(Number);
-  }
-  const suffix = h >= 12 ? 'pm' : 'am';
-  const h12 = h % 12 || 12;
-  return `${h12}:${String(m).padStart(2, '0')}${suffix}`;
-}
-
-/** Compute break duration in minutes between out and in times. */
-function breakMinutes(out?: string | null, inTime?: string | null): number | null {
-  if (!out || !inTime) return null;
-  const toMs = (t: string) => {
-    if (t.includes('T')) return new Date(t).getTime();
-    const [h, m] = t.split(':').map(Number);
-    return h * 60 + m;
-  };
-  const outMs = toMs(out);
-  const inMs = toMs(inTime);
-  if (typeof outMs === 'number' && typeof inMs === 'number') {
-    // If both are epoch ms
-    if (out.includes('T')) return Math.round((inMs - outMs) / 60000);
-    return inMs - outMs; // already in minutes
-  }
-  return null;
-}
-
-/** Live elapsed minutes from a start time to now (PST-aware, max 24h). */
-function elapsedMinutes(start?: string | null): number {
-  if (!start) return 0;
-  // Start time is PST stored as UTC-labeled (e.g., 09:50 PST → T09:50:00.000Z)
-  const d = new Date(start);
-  const startMinOfDay = d.getUTCHours() * 60 + d.getUTCMinutes();
-  // Get current PST time using Intl (handles DST automatically)
-  const pstParts = new Intl.DateTimeFormat('en-US', {
-    timeZone: 'America/Los_Angeles',
-    hour: 'numeric', minute: 'numeric', hour12: false,
-  }).formatToParts(new Date());
-  const nowH = parseInt(pstParts.find(p => p.type === 'hour')?.value ?? '0');
-  const nowM = parseInt(pstParts.find(p => p.type === 'minute')?.value ?? '0');
-  const nowMinOfDay = nowH * 60 + nowM;
-  const diff = nowMinOfDay - startMinOfDay;
-  // Clamp to 0..1440 (one day max) to prevent negative or astronomically large values
-  return Math.max(0, Math.min(diff, 1440));
-}
-
-function formatDuration(mins: number | null): string {
-  if (mins === null) return '--:--';
-  const h = Math.floor(Math.abs(mins) / 60);
-  const m = Math.abs(mins) % 60;
-  return `${h}h ${String(m).padStart(2, '0')}m`;
-}
-
-function formatMinutes(mins: number): string {
-  return `${mins} min`;
-}
-
-const STATUS_CONFIG: Record<
-  EmployeeStatus['status'],
-  { label: string; color: string; bg: string }
-> = {
-  working: {
-    label: 'Working',
-    color: '#22c55e',
-    bg: 'rgba(34, 197, 94, 0.1)',
-  },
-  on_break: {
-    label: 'On Break',
-    color: '#eab308',
-    bg: 'rgba(234, 179, 8, 0.1)',
-  },
-  at_lunch: {
-    label: 'At Lunch',
-    color: '#f97316',
-    bg: 'rgba(249, 115, 22, 0.1)',
-  },
-  not_clocked_in: {
-    label: 'Not Clocked In',
-    color: '#6b7280',
-    bg: 'rgba(107, 114, 128, 0.1)',
-  },
-  clocked_out: {
-    label: 'Clocked Out',
-    color: '#3b82f6',
-    bg: 'rgba(59, 130, 246, 0.1)',
-  },
-};
-
-const EDITABLE_FIELDS: { key: string; label: string }[] = [
-  { key: 'clockIn', label: 'Clock In' },
-  { key: 'firstBreakOut', label: '1st Break Out' },
-  { key: 'firstBreakIn', label: '1st Break In' },
-  { key: 'lunchOut', label: 'Lunch Out' },
-  { key: 'lunchIn', label: 'Lunch In' },
-  { key: 'secondBreakOut', label: '2nd Break Out' },
-  { key: 'secondBreakIn', label: '2nd Break In' },
-  { key: 'clockOut', label: 'Clock Out' },
-];
-
-function fieldLabel(key: string): string {
-  return EDITABLE_FIELDS.find((f) => f.key === key)?.label ?? key;
-}
-
-const DISCONNECTION_TYPE_OPTIONS: { value: DisconnectionType; label: string }[] = [
-  { value: 'absence', label: 'Absence' },
-  { value: 'early_leave', label: 'Early Leave' },
-  { value: 'power_outage', label: 'Power Outage' },
-  { value: 'internet_outage', label: 'Internet Outage' },
-  { value: 'other', label: 'Other' },
-];
-
 /* -------------------------------------------------- */
 /*  Sub-components                                     */
 /* -------------------------------------------------- */
-
-function StatusBadge({ status }: { status: EmployeeStatus['status'] }) {
-  const cfg = STATUS_CONFIG[status] ?? STATUS_CONFIG.not_clocked_in;
-  return (
-    <span
-      className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-semibold"
-      style={{ backgroundColor: cfg.bg, color: cfg.color }}
-    >
-      <span
-        className="h-1.5 w-1.5 rounded-full"
-        style={{ backgroundColor: cfg.color }}
-      />
-      {cfg.label}
-    </span>
-  );
-}
-
-function LiveTimer({ start, warn }: { start?: string | null; warn?: boolean }) {
-  const [mins, setMins] = useState(() => elapsedMinutes(start));
-
-  useEffect(() => {
-    if (!start) return;
-    setMins(elapsedMinutes(start));
-    const id = setInterval(() => setMins(elapsedMinutes(start)), 15000);
-    return () => clearInterval(id);
-  }, [start]);
-
-  if (!start) return null;
-
-  const exceeded = warn && mins > 10;
-
-  return (
-    <span
-      className={`text-xs font-medium ${exceeded ? 'rounded bg-red-500/10 px-1.5 py-0.5 text-red-400' : 'text-[var(--text-secondary)]'}`}
-    >
-      {formatMinutes(mins)}
-      {exceeded && ' (exceeded)'}
-    </span>
-  );
-}
 
 /* -------------------------------------------------- */
 /*  Main Page                                          */
@@ -1237,102 +1077,6 @@ function EditTimeTab() {
   );
 }
 
-/* -------------------------------------------------- */
-/*  Timesheet cell components                          */
-/* -------------------------------------------------- */
-
-function TimeCell({
-  value,
-  modified,
-  onClick,
-}: {
-  value: string;
-  modified: boolean;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      onClick={onClick}
-      className="group/cell inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-sm transition-colors hover:bg-[var(--accent-subtle)]"
-      style={{ color: 'var(--text-primary)' }}
-    >
-      {value}
-      {modified && (
-        <Pencil
-          className="h-3 w-3 shrink-0"
-          style={{ color: 'var(--accent)' }}
-          aria-label="Modified by admin"
-        />
-      )}
-      <Pencil className="h-3 w-3 shrink-0 opacity-0 transition-opacity group-hover/cell:opacity-40" />
-    </button>
-  );
-}
-
-function BreakCell({
-  outValue,
-  inValue,
-  duration,
-  exceeded,
-  modifiedOut,
-  modifiedIn,
-  onClickOut,
-  onClickIn,
-}: {
-  outValue: string;
-  inValue: string;
-  duration: string;
-  exceeded: boolean;
-  modifiedOut: boolean;
-  modifiedIn: boolean;
-  onClickOut: () => void;
-  onClickIn: () => void;
-}) {
-  return (
-    <div className="space-y-0.5">
-      <div className="flex items-center gap-1 text-xs text-[var(--text-muted)]">
-        <button
-          onClick={onClickOut}
-          className="rounded px-1 transition-colors hover:bg-[var(--accent-subtle)] hover:text-[var(--text-primary)]"
-        >
-          {outValue}
-          {modifiedOut && (
-            <Pencil
-              className="ml-0.5 inline h-2.5 w-2.5"
-              style={{ color: 'var(--accent)' }}
-            />
-          )}
-        </button>
-        <span>-</span>
-        <button
-          onClick={onClickIn}
-          className="rounded px-1 transition-colors hover:bg-[var(--accent-subtle)] hover:text-[var(--text-primary)]"
-        >
-          {inValue}
-          {modifiedIn && (
-            <Pencil
-              className="ml-0.5 inline h-2.5 w-2.5"
-              style={{ color: 'var(--accent)' }}
-            />
-          )}
-        </button>
-      </div>
-      <span
-        className={`text-xs font-medium ${
-          exceeded
-            ? 'rounded bg-red-500/10 px-1.5 py-0.5 text-red-400'
-            : 'text-[var(--text-secondary)]'
-        }`}
-      >
-        {duration}
-        {exceeded && (
-          <AlertTriangle className="ml-1 inline h-3 w-3 text-red-400" />
-        )}
-      </span>
-    </div>
-  );
-}
-
 /* ================================================== */
 /*  TAB 3: Time History                                */
 /* ================================================== */
@@ -1666,14 +1410,6 @@ function AuditLogTab() {
 /* ================================================== */
 /*  TAB 5: Payment Report                              */
 /* ================================================== */
-
-const DISCONNECTION_TYPE_LABELS: Record<DisconnectionType, string> = {
-  absence: 'Absences',
-  early_leave: 'Early Leave',
-  power_outage: 'Power Outage',
-  internet_outage: 'Internet Outage',
-  other: 'Other',
-};
 
 const BONUS_FIELD_LABELS: Record<BonusFieldKey, string> = {
   discretionaryBonus: 'Discretionary Bonus',
@@ -2226,108 +1962,6 @@ function PaymentReportTab() {
           </Card>
         </div>
       )}
-    </div>
-  );
-}
-
-/* -------------------------------------------------- */
-/*  Shared audit table                                 */
-/* -------------------------------------------------- */
-
-function AuditTable({
-  audits,
-  showEmployee,
-}: {
-  audits: Audit[];
-  showEmployee: boolean;
-}) {
-  return (
-    <div className="overflow-x-auto">
-      <table className="w-full text-sm print:text-[8.5px]">
-        <thead>
-          <tr
-            className="border-b text-left text-xs font-medium uppercase tracking-wider print:text-[7.5px]"
-            style={{
-              borderColor: 'var(--border)',
-              color: 'var(--text-muted)',
-            }}
-          >
-            <th className="pb-3 pr-3 print:pb-[2px] print:pr-[6px]">Date</th>
-            {showEmployee && <th className="pb-3 px-3 print:pb-[2px] print:px-[6px]">Employee</th>}
-            <th className="pb-3 px-3 print:pb-[2px] print:px-[6px]">Field</th>
-            <th className="pb-3 px-3 print:pb-[2px] print:px-[6px]">Old Value</th>
-            <th className="pb-3 px-3 print:pb-[2px] print:px-[6px]">New Value</th>
-            <th className="pb-3 px-3 print:pb-[2px] print:px-[6px]">Modified By</th>
-            <th className="pb-3 pl-3 print:pb-[2px] print:pl-[6px]">Reason</th>
-          </tr>
-        </thead>
-        <tbody>
-          {audits.map((audit) => (
-            <tr
-              key={audit.id}
-              className="border-b transition-colors hover:bg-[var(--bg-secondary)]"
-              style={{ borderColor: 'var(--border)' }}
-            >
-              <td
-                className="py-3 pr-3 print:py-[2px] print:pr-[6px]"
-                style={{ color: 'var(--text-primary)' }}
-              >
-                <div className="whitespace-nowrap">
-                  {new Date(audit.date + 'T00:00:00').toLocaleDateString(
-                    'en-US',
-                    {
-                      weekday: 'short',
-                      month: 'short',
-                      day: 'numeric',
-                    }
-                  )}
-                </div>
-                <div className="text-xs text-[var(--text-muted)] print:hidden">
-                  {new Date(audit.modifiedAt).toLocaleString('en-US', {
-                    month: 'short',
-                    day: 'numeric',
-                    hour: '2-digit',
-                    minute: '2-digit',
-                  })}
-                </div>
-              </td>
-              {showEmployee && (
-                <td
-                  className="px-3 py-3 font-medium print:px-[6px] print:py-[2px]"
-                  style={{ color: 'var(--text-primary)' }}
-                >
-                  {audit.employeeName}
-                </td>
-              )}
-              <td className="px-3 py-3 print:px-[6px] print:py-[2px]">
-                <Badge variant="outline" className="print:px-[5px] print:py-0 print:text-[7.5px]">{fieldLabel(audit.field)}</Badge>
-              </td>
-              <td className="px-3 py-3 text-[var(--text-secondary)] print:px-[6px] print:py-[2px]">
-                {audit.oldValue ? formatTime(audit.oldValue) : '--:--'}
-              </td>
-              <td
-                className="px-3 py-3 font-medium print:px-[6px] print:py-[2px]"
-                style={{ color: 'var(--accent)' }}
-              >
-                {formatTime(audit.newValue)}
-              </td>
-              <td
-                className="px-3 py-3 print:px-[6px] print:py-[2px]"
-                style={{ color: 'var(--text-secondary)' }}
-              >
-                {audit.modifiedBy}
-              </td>
-              <td
-                className="py-3 pl-3 max-w-[200px] truncate print:py-[2px] print:pl-[6px]"
-                style={{ color: audit.reason.trim().length < 8 ? 'var(--danger)' : 'var(--text-secondary)' }}
-                title={audit.reason.trim().length < 8 ? `No real reason given: "${audit.reason}"` : audit.reason}
-              >
-                {audit.reason.trim().length < 8 ? `⚠ "${audit.reason}" (no real reason given)` : audit.reason}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
     </div>
   );
 }

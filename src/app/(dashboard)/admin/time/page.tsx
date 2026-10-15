@@ -62,6 +62,13 @@ import {
   type DisconnectionType,
 } from '@/hooks/use-admin-time';
 import { payPeriodOptions } from '@/lib/time';
+import { formatTime, breakMinutes, elapsedMinutes, formatDuration, formatMinutes } from './_lib/format';
+import {
+  STATUS_CONFIG,
+  fieldLabel,
+  DISCONNECTION_TYPE_OPTIONS,
+  DISCONNECTION_TYPE_LABELS,
+} from './_lib/constants';
 
 /* -------------------------------------------------- */
 /*  Helpers                                            */
@@ -83,123 +90,6 @@ function LockedPeriodNotice({ status }: { status: 'approved' | 'paid' | 'void' |
     </div>
   );
 }
-
-function formatTime(time?: string | null): string {
-  if (!time) return '--:--';
-  let h: number, m: number;
-  if (time.includes('T')) {
-    const d = new Date(time);
-    h = d.getUTCHours();
-    m = d.getUTCMinutes();
-  } else {
-    [h, m] = time.split(':').map(Number);
-  }
-  const suffix = h >= 12 ? 'pm' : 'am';
-  const h12 = h % 12 || 12;
-  return `${h12}:${String(m).padStart(2, '0')}${suffix}`;
-}
-
-/** Compute break duration in minutes between out and in times. */
-function breakMinutes(out?: string | null, inTime?: string | null): number | null {
-  if (!out || !inTime) return null;
-  const toMs = (t: string) => {
-    if (t.includes('T')) return new Date(t).getTime();
-    const [h, m] = t.split(':').map(Number);
-    return h * 60 + m;
-  };
-  const outMs = toMs(out);
-  const inMs = toMs(inTime);
-  if (typeof outMs === 'number' && typeof inMs === 'number') {
-    // If both are epoch ms
-    if (out.includes('T')) return Math.round((inMs - outMs) / 60000);
-    return inMs - outMs; // already in minutes
-  }
-  return null;
-}
-
-/** Live elapsed minutes from a start time to now (PST-aware, max 24h). */
-function elapsedMinutes(start?: string | null): number {
-  if (!start) return 0;
-  // Start time is PST stored as UTC-labeled (e.g., 09:50 PST → T09:50:00.000Z)
-  const d = new Date(start);
-  const startMinOfDay = d.getUTCHours() * 60 + d.getUTCMinutes();
-  // Get current PST time using Intl (handles DST automatically)
-  const pstParts = new Intl.DateTimeFormat('en-US', {
-    timeZone: 'America/Los_Angeles',
-    hour: 'numeric', minute: 'numeric', hour12: false,
-  }).formatToParts(new Date());
-  const nowH = parseInt(pstParts.find(p => p.type === 'hour')?.value ?? '0');
-  const nowM = parseInt(pstParts.find(p => p.type === 'minute')?.value ?? '0');
-  const nowMinOfDay = nowH * 60 + nowM;
-  const diff = nowMinOfDay - startMinOfDay;
-  // Clamp to 0..1440 (one day max) to prevent negative or astronomically large values
-  return Math.max(0, Math.min(diff, 1440));
-}
-
-function formatDuration(mins: number | null): string {
-  if (mins === null) return '--:--';
-  const h = Math.floor(Math.abs(mins) / 60);
-  const m = Math.abs(mins) % 60;
-  return `${h}h ${String(m).padStart(2, '0')}m`;
-}
-
-function formatMinutes(mins: number): string {
-  return `${mins} min`;
-}
-
-const STATUS_CONFIG: Record<
-  EmployeeStatus['status'],
-  { label: string; color: string; bg: string }
-> = {
-  working: {
-    label: 'Working',
-    color: '#22c55e',
-    bg: 'rgba(34, 197, 94, 0.1)',
-  },
-  on_break: {
-    label: 'On Break',
-    color: '#eab308',
-    bg: 'rgba(234, 179, 8, 0.1)',
-  },
-  at_lunch: {
-    label: 'At Lunch',
-    color: '#f97316',
-    bg: 'rgba(249, 115, 22, 0.1)',
-  },
-  not_clocked_in: {
-    label: 'Not Clocked In',
-    color: '#6b7280',
-    bg: 'rgba(107, 114, 128, 0.1)',
-  },
-  clocked_out: {
-    label: 'Clocked Out',
-    color: '#3b82f6',
-    bg: 'rgba(59, 130, 246, 0.1)',
-  },
-};
-
-const EDITABLE_FIELDS: { key: string; label: string }[] = [
-  { key: 'clockIn', label: 'Clock In' },
-  { key: 'firstBreakOut', label: '1st Break Out' },
-  { key: 'firstBreakIn', label: '1st Break In' },
-  { key: 'lunchOut', label: 'Lunch Out' },
-  { key: 'lunchIn', label: 'Lunch In' },
-  { key: 'secondBreakOut', label: '2nd Break Out' },
-  { key: 'secondBreakIn', label: '2nd Break In' },
-  { key: 'clockOut', label: 'Clock Out' },
-];
-
-function fieldLabel(key: string): string {
-  return EDITABLE_FIELDS.find((f) => f.key === key)?.label ?? key;
-}
-
-const DISCONNECTION_TYPE_OPTIONS: { value: DisconnectionType; label: string }[] = [
-  { value: 'absence', label: 'Absence' },
-  { value: 'early_leave', label: 'Early Leave' },
-  { value: 'power_outage', label: 'Power Outage' },
-  { value: 'internet_outage', label: 'Internet Outage' },
-  { value: 'other', label: 'Other' },
-];
 
 /* -------------------------------------------------- */
 /*  Sub-components                                     */
@@ -1666,14 +1556,6 @@ function AuditLogTab() {
 /* ================================================== */
 /*  TAB 5: Payment Report                              */
 /* ================================================== */
-
-const DISCONNECTION_TYPE_LABELS: Record<DisconnectionType, string> = {
-  absence: 'Absences',
-  early_leave: 'Early Leave',
-  power_outage: 'Power Outage',
-  internet_outage: 'Internet Outage',
-  other: 'Other',
-};
 
 const BONUS_FIELD_LABELS: Record<BonusFieldKey, string> = {
   discretionaryBonus: 'Discretionary Bonus',

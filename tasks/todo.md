@@ -37,13 +37,13 @@ Base: `main` @ `74886f6`. Detalle, decisiones y riesgos en `tasks/plan.md`.
 
 ## Fase 1: base compartida
 
-### Task 2: Extraer helpers puros y constantes a `_lib/`
+### Task 2: Extraer helpers puros y constantes a `_lib/` ✅
 **Descripción:** Mover a `admin/time/_lib/format.ts` las funciones `formatTime`, `breakMinutes`, `elapsedMinutes`, `formatDuration` y `formatMinutes`. Mover a `admin/time/_lib/constants.ts` `STATUS_CONFIG`, `EDITABLE_FIELDS`, `fieldLabel`, `DISCONNECTION_TYPE_OPTIONS` y `DISCONNECTION_TYPE_LABELS`. Agregar tests unitarios de los formatters. `page.tsx` los importa.
 
 **Aceptación:**
-- [ ] Los cuerpos de las funciones son idénticos (chequeo de movimiento sin diferencias).
-- [ ] `format.test.ts` cubre `formatTime` (ISO y HH:mm), `breakMinutes` (incl. medianoche), `formatDuration` (null, negativos) y `formatMinutes`.
-- [ ] Snapshot de T1 sin cambios.
+- [x] Los cuerpos de las funciones son idénticos (chequeo de movimiento sin diferencias: 2,122 líneas).
+- [x] `format.test.ts` cubre `formatTime` (ISO y HH:mm), `breakMinutes` (incl. medianoche), `formatDuration` (null, negativos) y `formatMinutes` (16 tests; también `elapsedMinutes`).
+- [x] Snapshot de T1 sin cambios. Lint igual a la línea base (9). CSS de impresión igual a la línea base.
 
 **Verificación:** comandos comunes.
 **Dependencias:** T1.

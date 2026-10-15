@@ -3,12 +3,14 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 const session = { value: { user: { role: 1, userId: 1 } } as unknown };
 const auditFindMany = vi.fn();
 const usersFindMany = vi.fn();
+const disconnectionAuditFindMany = vi.fn();
 
 vi.mock('@/lib/auth', () => ({ auth: async () => session.value }));
 vi.mock('@/lib/prisma', () => ({
   prisma: {
     employeeTimeLogAudit: { findMany: (...a: unknown[]) => auditFindMany(...a) },
     user: { findMany: (...a: unknown[]) => usersFindMany(...a) },
+    employeeDisconnectionAudit: { findMany: (...a: unknown[]) => disconnectionAuditFindMany(...a) },
   },
 }));
 
@@ -29,6 +31,7 @@ beforeEach(() => {
     row(2, '20', '1', '2026-10-13'),
     row(1, '10', '20', '2026-10-09', { newValue: null, reason: '0' }),
   ]);
+  disconnectionAuditFindMany.mockResolvedValue([]);
   usersFindMany.mockResolvedValue([
     { idUser: 1, name: 'Carlos', lastname: 'Aragon' },
     { idUser: 10, name: 'Ana', lastname: 'Working' },
@@ -52,12 +55,12 @@ describe('GET /api/admin/time/audits', () => {
 
     expect(body.audits).toEqual([
       {
-        id: 2, userId: 20, employeeName: 'Ben', date: '2026-10-13', field: 'clockIn',
+        kind: 'time', id: 2, userId: 20, employeeName: 'Ben', date: '2026-10-13', field: 'clockIn',
         oldValue: '1970-01-01T06:02:00.000Z', newValue: '1970-01-01T06:00:00.000Z',
         modifiedBy: 'Carlos Aragon', modifiedAt: '2026-10-13T00:00:00.000Z', reason: 'Forgot to clock in',
       },
       {
-        id: 1, userId: 10, employeeName: 'Ana Working', date: '2026-10-09', field: 'clockIn',
+        kind: 'time', id: 1, userId: 10, employeeName: 'Ana Working', date: '2026-10-09', field: 'clockIn',
         oldValue: '1970-01-01T06:02:00.000Z', newValue: '',
         modifiedBy: 'Ben', modifiedAt: '2026-10-09T00:00:00.000Z', reason: '0',
       },
@@ -79,6 +82,29 @@ describe('GET /api/admin/time/audits', () => {
   it('accepts any day of the period and snaps to its Friday', async () => {
     await get('?week=2026-10-14');
     expect(auditFindMany.mock.calls[0][0].where.modifiedDate.gte).toEqual(new Date('2026-10-09T00:00:00.000Z'));
+  });
+
+  it('includes disconnection changes for the period, merged newest first', async () => {
+    disconnectionAuditFindMany.mockResolvedValue([{
+      idAudit: 5, idUser: 10, action: 'edit', disconnectionDate: new Date('2026-10-13T00:00:00.000Z'),
+      oldStart: T('08:54'), oldEnd: T('09:10'), oldType: 'other',
+      newStart: T('08:50'), newEnd: T('09:05'), newType: 'power_outage',
+      reason: 'Wrong times were entered', modifiedBy: '1', modifiedAt: new Date('2026-10-14T18:00:00.000Z'),
+    }]);
+    const body = await (await get('?week=2026-10-09')).json();
+
+    expect(disconnectionAuditFindMany.mock.calls[0][0].where).toEqual({
+      disconnectionDate: { gte: new Date('2026-10-09T00:00:00.000Z'), lt: new Date('2026-10-16T00:00:00.000Z') },
+    });
+    expect(body.audits.map((a: { kind: string; id: number }) => `${a.kind}-${a.id}`)).toEqual(['disconnection-5', 'time-2', 'time-1']);
+    expect(body.audits[0]).toMatchObject({
+      employeeName: 'Ana Working', field: 'disconnection_edit', modifiedBy: 'Carlos Aragon', reason: 'Wrong times were entered',
+      disconnection: {
+        day: '2026-10-13',
+        before: { start: '1970-01-01T08:54:00.000Z', end: '1970-01-01T09:10:00.000Z', type: 'other' },
+        after: { start: '1970-01-01T08:50:00.000Z', end: '1970-01-01T09:05:00.000Z', type: 'power_outage' },
+      },
+    });
   });
 
   it('caps the result size', async () => {

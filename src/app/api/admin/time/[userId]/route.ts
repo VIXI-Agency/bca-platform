@@ -4,7 +4,7 @@ import { prisma } from '@/lib/prisma';
 import { clockWeekSchema } from '@/lib/validators';
 import { getPayPeriodEnd, getPayPeriodWorkDates, resolvePayPeriodStart } from '@/lib/time';
 import { computeDayMetrics, disconnectionKey, fetchDisconnectionWindows } from '@/lib/payroll/compute';
-import { toAuditDtos } from '@/lib/admin-time/audit-dto';
+import { toAuditDtos, fetchDisconnectionAudits } from '@/lib/admin-time/audit-dto';
 
 export async function GET(
   request: Request,
@@ -166,8 +166,12 @@ export async function GET(
       );
     });
 
-    // Names for the employee and for each editor (stored as raw idUser strings).
-    const transformedAudits = await toAuditDtos(audits);
+    // Time edits plus disconnection changes, with names for the employee and
+    // each editor (stored as raw idUser strings).
+    const transformedAudits = await toAuditDtos(
+      audits,
+      await fetchDisconnectionAudits(periodStart, weekEnd, targetUserId),
+    );
 
     return NextResponse.json({
       data: fullWeek,

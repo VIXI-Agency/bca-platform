@@ -4,14 +4,7 @@ import { prisma } from '@/lib/prisma';
 import { z } from 'zod';
 import { nowPstAsUtc, getTodayRangePST, getPayPeriodStart } from '@/lib/time';
 import { isPeriodLocked } from '@/lib/payroll/compute';
-
-export const DISCONNECTION_TYPES = [
-  'absence',
-  'early_leave',
-  'power_outage',
-  'internet_outage',
-  'other',
-] as const;
+import { DISCONNECTION_TYPES } from '@/lib/admin-time/disconnections';
 
 const disconnectSchema = z.object({
   userId: z.number().int().positive(),
@@ -72,7 +65,7 @@ export async function POST(request: Request) {
     // Only today's open disconnection counts as active. One left open on an
     // earlier day ends at that day's clock-out for pay purposes, so it must
     // not block a new disconnect or be the row a reconnect closes.
-    const activeWhere = { idUser: userId, reconnectionTime: null, disconnectionDate: todayStart };
+    const activeWhere = { idUser: userId, reconnectionTime: null, disconnectionDate: todayStart, removedAt: null };
 
     if (action === 'disconnect') {
       const activeDisconnection = await prisma.employeeDisconnection.findFirst({

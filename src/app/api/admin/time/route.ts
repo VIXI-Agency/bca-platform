@@ -95,6 +95,7 @@ export async function GET() {
         where: {
           reconnectionTime: null,
           disconnectionDate: todayStart,
+          removedAt: null,
         },
         select: { idUser: true },
       }),

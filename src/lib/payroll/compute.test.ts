@@ -221,6 +221,42 @@ describe('computeDayMetrics — paid hours and daily overtime', () => {
   });
 });
 
+describe('computeDayMetrics — whole minutes (seconds are dropped)', () => {
+  it('pays 8h for a 6:00–2:30 day clocked in at 6:00:19 (Drew Hayes, Oct 9)', () => {
+    const m = computeDayMetrics(shift({ clockIn: '06:00:19', firstBreakOut: null, firstBreakIn: null, secondBreakOut: null, secondBreakIn: null }));
+    expect(m.totalHours).toBe(8);
+  });
+
+  it('counts a 10:02:47–10:33:20 lunch as 31 minutes, not 30m 33s (Drew Hayes, Oct 14)', () => {
+    const m = computeDayMetrics(shift({ lunchOut: '10:02:47', lunchIn: '10:33:20' }));
+    expect(m.lunchDurationMinutes).toBe(31);
+    expect(m.totalHours).toBe(7.98); // 8h30 shift − 31 min lunch = 7h59m
+  });
+
+  it('drops seconds from clock-out too (2:30:59 counts as 2:30)', () => {
+    expect(computeDayMetrics(shift({ clockOut: '14:30:59' })).totalHours).toBe(8);
+  });
+
+  it('pays the same with or without seconds on every punch', () => {
+    const withSeconds = computeDayMetrics(shift({
+      clockIn: '06:00:45', firstBreakOut: '08:00:12', firstBreakIn: '08:10:58',
+      lunchOut: '10:00:01', lunchIn: '10:30:59', secondBreakOut: '12:30:30', secondBreakIn: '12:40:30',
+      clockOut: '16:30:44',
+    }));
+    expect(withSeconds).toEqual(computeDayMetrics(shift({ clockOut: '16:30:00' })));
+  });
+
+  it('counts disconnections in whole minutes as well', () => {
+    const m = computeDayMetrics(shift(), [win('08:54:40', '09:10:20')]);
+    expect(m.disconnectedMinutes).toBe(16); // 8:54 → 9:10
+  });
+
+  it('pays nothing when clock-in and clock-out fall in the same minute', () => {
+    const m = computeDayMetrics(shift({ clockIn: '06:00:10', clockOut: '06:00:50', lunchOut: null, lunchIn: null }));
+    expect(m.totalHours + m.overtime).toBe(0);
+  });
+});
+
 describe('computeDayMetrics — clock-out before clock-in (no overnight shifts)', () => {
   it('pays nothing for a 2:00 typo meant as 2:00 PM (real 2024-12-16 row)', () => {
     const m = computeDayMetrics(shift({ clockIn: '06:02:20', lunchOut: '09:59:56', lunchIn: '10:30:00', clockOut: '02:00:00' }));

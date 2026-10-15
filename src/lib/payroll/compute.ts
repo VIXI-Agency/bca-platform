@@ -36,6 +36,15 @@ function round2(n: number): number {
 }
 
 /**
+ * A punch or disconnection time in ms, with its seconds dropped. Pay is
+ * counted in whole minutes (6:00:19 counts as 6:00): punches carry seconds,
+ * and a 6:00:19–2:30 day otherwise paid 7.99 h and showed as 7h 59m.
+ */
+function minuteMs(time: Date): number {
+  return Math.floor(new Date(time).getTime() / 60_000) * 60_000;
+}
+
+/**
  * Milliseconds of a shift lost to disconnections. Every disconnection type is
  * unpaid. Each window is clipped to clock-in..clock-out, overlapping windows
  * are merged so no minute is counted twice, and any part that falls inside
@@ -50,10 +59,10 @@ function disconnectedMs(
 ): number {
   const clipped = windows
     .map((w): [number, number] => {
-      const start = new Date(w.start).getTime();
+      const start = minuteMs(w.start);
       // A reconnect that reads earlier than the disconnect happened on a later
       // day (or is bad data); either way the employee was gone until clock-out.
-      const reconnect = w.end ? new Date(w.end).getTime() : null;
+      const reconnect = w.end ? minuteMs(w.end) : null;
       const end = reconnect !== null && reconnect >= start ? reconnect : clockOutMs;
       return [Math.max(start, clockInMs), Math.min(end, clockOutMs)];
     })
@@ -130,15 +139,15 @@ export function computeDayMetrics(
   let lunchDurationMinutes = 0;
   let disconnectedMinutes = 0;
 
-  const clockInMs = log.clockIn ? new Date(log.clockIn).getTime() : null;
-  const clockOutMs = log.clockOut ? new Date(log.clockOut).getTime() : null;
+  const clockInMs = log.clockIn ? minuteMs(log.clockIn) : null;
+  const clockOutMs = log.clockOut ? minuteMs(log.clockOut) : null;
 
   if (clockInMs !== null && clockOutMs !== null && clockOutMs > clockInMs) {
     let lunchMs = 0;
     let lunchSpan: [number, number] | null = null;
     if (log.lunchOut && log.lunchIn) {
-      const lunchOutMs = new Date(log.lunchOut).getTime();
-      let lunchInMs = new Date(log.lunchIn).getTime();
+      const lunchOutMs = minuteMs(log.lunchOut);
+      let lunchInMs = minuteMs(log.lunchIn);
       if (lunchInMs < lunchOutMs) lunchInMs += DAY_MS;
       lunchMs = lunchInMs - lunchOutMs;
       lunchDurationMinutes = lunchMs / (1000 * 60);
@@ -153,8 +162,8 @@ export function computeDayMetrics(
     // paid hours below — breaks are paid time regardless of length. Only
     // lunch (lunchMs) is unpaid and comes out of the total.
     if (log.firstBreakOut && log.firstBreakIn) {
-      const bOutMs = new Date(log.firstBreakOut).getTime();
-      let bInMs = new Date(log.firstBreakIn).getTime();
+      const bOutMs = minuteMs(log.firstBreakOut);
+      let bInMs = minuteMs(log.firstBreakIn);
       if (bInMs < bOutMs) bInMs += 24 * 60 * 60 * 1000;
       const breakMinutes = (bInMs - bOutMs) / (1000 * 60);
       if (breakMinutes > 10) {
@@ -163,8 +172,8 @@ export function computeDayMetrics(
     }
 
     if (log.secondBreakOut && log.secondBreakIn) {
-      const bOutMs = new Date(log.secondBreakOut).getTime();
-      let bInMs = new Date(log.secondBreakIn).getTime();
+      const bOutMs = minuteMs(log.secondBreakOut);
+      let bInMs = minuteMs(log.secondBreakIn);
       if (bInMs < bOutMs) bInMs += 24 * 60 * 60 * 1000;
       const breakMinutes = (bInMs - bOutMs) / (1000 * 60);
       if (breakMinutes > 10) {

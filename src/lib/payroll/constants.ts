@@ -1,12 +1,14 @@
 // Client-safe payroll constants — no Prisma import, so these can be used from
 // 'use client' hooks/components as well as server routes and src/lib/payroll/compute.ts.
 
+/** Every bonus category, in the order the report and statements list them. */
 export const BONUS_FIELDS = [
   'discretionaryBonus',
   'collectionsBonus',
   'trainingBonus',
   'managerBonus',
   'wheelSpins',
+  'ccfSpiffs',
   'accounts',
   'reloads',
   'verifiedLeads',
@@ -14,16 +16,63 @@ export const BONUS_FIELDS = [
 
 export type BonusFieldKey = (typeof BONUS_FIELDS)[number];
 
+/** Bonuses earned on a specific day: each entry has its own date and amount. */
+export const DATED_BONUS_CATEGORIES = ['wheelSpins', 'ccfSpiffs'] as const;
+export type DatedBonusCategory = (typeof DATED_BONUS_CATEGORIES)[number];
+
+/** Bonuses typed as one amount per pay period (a PayrollBonuses column each). */
+export const PERIOD_BONUS_FIELDS = [
+  'discretionaryBonus',
+  'collectionsBonus',
+  'trainingBonus',
+  'managerBonus',
+  'accounts',
+  'reloads',
+  'verifiedLeads',
+] as const;
+export type PeriodBonusField = (typeof PERIOD_BONUS_FIELDS)[number];
+
+/**
+ * Caps per pay period (Friday–Thursday). Wheel Spins can land on the same
+ * day; a CCF Spiff is daily, so at most one per day.
+ */
+export const DATED_BONUS_RULES: Record<DatedBonusCategory, { maxPerPeriod: number; onePerDay: boolean }> = {
+  wheelSpins: { maxPerPeriod: 2, onePerDay: false },
+  ccfSpiffs: { maxPerPeriod: 5, onePerDay: true },
+};
+
+export const isDatedBonus = (key: string): key is DatedBonusCategory =>
+  (DATED_BONUS_CATEGORIES as readonly string[]).includes(key);
+
 export const BONUS_FIELD_LABELS: Record<BonusFieldKey, string> = {
   discretionaryBonus: 'Discretionary Bonus',
   collectionsBonus: 'Collections Bonus',
   trainingBonus: 'Training Bonus',
   managerBonus: 'Manager Bonus',
   wheelSpins: 'Wheel Spins',
+  ccfSpiffs: 'CCF Spiffs',
   accounts: 'Accounts',
   reloads: 'Reloads',
   verifiedLeads: 'Verified Leads',
 };
+
+/** Why a new dated entry would break its category's rules, or null if it fits. */
+export function datedBonusRuleError(
+  category: DatedBonusCategory,
+  entryDate: string,
+  existing: { category: string; entryDate: string }[],
+): string | null {
+  const rule = DATED_BONUS_RULES[category];
+  const same = existing.filter((e) => e.category === category);
+  const label = BONUS_FIELD_LABELS[category];
+  if (same.length >= rule.maxPerPeriod) {
+    return `${label}: at most ${rule.maxPerPeriod} per pay period.`;
+  }
+  if (rule.onePerDay && same.some((e) => e.entryDate === entryDate)) {
+    return `${label}: only one per day.`;
+  }
+  return null;
+}
 
 export const PAY_RUN_STATUSES = ['approved', 'paid', 'void'] as const;
 export type PayRunStatus = (typeof PAY_RUN_STATUSES)[number];

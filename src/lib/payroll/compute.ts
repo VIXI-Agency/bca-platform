@@ -1,6 +1,12 @@
 import { prisma } from '@/lib/prisma';
 import { getPayPeriodEnd } from '@/lib/time';
-import { BONUS_FIELDS, type BonusFieldKey } from './constants';
+import {
+  BONUS_FIELDS,
+  DATED_BONUS_CATEGORIES,
+  isDatedBonus,
+  type BonusFieldKey,
+  type DatedBonusCategory,
+} from './constants';
 
 export interface TimeLogRow {
   clockIn: Date | null;
@@ -256,7 +262,7 @@ export interface PayStatementAmounts {
  * shows, and what gets snapshotted into a PayStatement on approval.
  */
 export async function computePayStatement(userId: number, periodStart: Date): Promise<PayStatementAmounts> {
-  const [hours, user, bonus] = await Promise.all([
+  const [hours, user, bonus, entries] = await Promise.all([
     computePeriodHours(userId, periodStart),
     prisma.user.findUnique({
       where: { idUser: userId },
@@ -264,6 +270,10 @@ export async function computePayStatement(userId: number, periodStart: Date): Pr
     }),
     prisma.payrollBonus.findUnique({
       where: { idUser_periodStart: { idUser: userId, periodStart } },
+    }),
+    prisma.payrollBonusEntry.findMany({
+      where: { idUser: userId, periodStart },
+      select: { category: true, amount: true },
     }),
   ]);
 
@@ -273,8 +283,19 @@ export async function computePayStatement(userId: number, periodStart: Date): Pr
   const regularPay = payRate != null ? round2(hours.totalHours * payRate) : 0;
   const overtimePay = hours.overtime > 0 && otPayRate != null ? round2(hours.overtime * otPayRate) : 0;
 
+  // One amount per period for most categories; Wheel Spins and CCF Spiffs are
+  // the sum of their dated entries (PayrollBonuses.WheelSpins is legacy).
+  const datedTotals = Object.fromEntries(
+    DATED_BONUS_CATEGORIES.map((key) => [
+      key,
+      round2(entries.filter((e) => e.category === key).reduce((sum, e) => sum + Number(e.amount), 0)),
+    ]),
+  ) as Record<DatedBonusCategory, number>;
   const bonusAmounts = Object.fromEntries(
-    BONUS_FIELDS.map((key) => [key, bonus?.[key] != null ? Number(bonus[key]) : 0]),
+    BONUS_FIELDS.map((key) => [
+      key,
+      isDatedBonus(key) ? datedTotals[key] : bonus?.[key] != null ? Number(bonus[key]) : 0,
+    ]),
   ) as Record<BonusFieldKey, number>;
   const bonusTotal = round2(BONUS_FIELDS.reduce((sum, key) => sum + bonusAmounts[key], 0));
 

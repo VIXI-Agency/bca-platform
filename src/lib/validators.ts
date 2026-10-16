@@ -134,6 +134,7 @@ export const timeEditSchema = z.object({
 
 // Payroll — bonus/incentive categories (manual, per employee per pay period)
 const bonusAmountField = z.number().nonnegative().max(999999.99).nullable().optional();
+const bonusCountField = z.number().int().min(0).max(999).nullable().optional();
 
 export const payrollBonusSchema = z.object({
   period: calendarDate,
@@ -144,6 +145,9 @@ export const payrollBonusSchema = z.object({
   accounts: bonusAmountField,
   reloads: bonusAmountField,
   verifiedLeads: bonusAmountField,
+  // How many accounts / verified leads the amount is for ("Accounts (4)").
+  accountsCount: bonusCountField,
+  verifiedLeadsCount: bonusCountField,
 });
 
 // Payroll — pay run workflow (approve a period's statements, mark paid, void)

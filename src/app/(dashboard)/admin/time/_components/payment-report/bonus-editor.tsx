@@ -10,6 +10,8 @@ import {
   BONUS_FIELD_LABELS,
   DATED_BONUS_CATEGORIES,
   PERIOD_BONUS_FIELDS,
+  isCountedBonus,
+  type CountedBonusField,
   type PeriodBonusField,
 } from '@/lib/payroll/constants';
 import { DatedBonusList } from './dated-bonus-list';
@@ -17,6 +19,9 @@ import { DatedBonusList } from './dated-bonus-list';
 interface BonusEditorProps {
   bonusInputs: Record<PeriodBonusField, string>;
   setBonusInputs: Dispatch<SetStateAction<Record<PeriodBonusField, string>>>;
+  /** How many accounts / verified leads (printed as "Accounts (4)"). */
+  countInputs: Record<CountedBonusField, string>;
+  setCountInputs: Dispatch<SetStateAction<Record<CountedBonusField, string>>>;
   bonusIsDirty: boolean;
   bonusLoading: boolean;
   handleSaveBonus: () => void;
@@ -29,10 +34,16 @@ interface BonusEditorProps {
   locked: boolean;
 }
 
+/** A count was typed but no amount: the bonus isn't paid, so the count is never shown. */
+const countWithoutAmount = (count: string, amount: string) =>
+  count.trim() !== '' && Number(count) > 0 && !(Number(amount) > 0);
+
 /** The per-period bonus/incentive inputs (hidden in print). */
 export function BonusEditor({
   bonusInputs,
   setBonusInputs,
+  countInputs,
+  setCountInputs,
   bonusIsDirty,
   bonusLoading,
   handleSaveBonus,
@@ -70,17 +81,37 @@ export function BonusEditor({
             <Label htmlFor={`report-bonus-${key}`} className="text-xs" style={{ color: 'var(--text-secondary)' }}>
               {BONUS_FIELD_LABELS[key]}
             </Label>
-            <Input
-              id={`report-bonus-${key}`}
-              type="number"
-              min="0"
-              step="0.01"
-              className="h-8"
-              value={bonusInputs[key]}
-              onChange={(e) => setBonusInputs((prev) => ({ ...prev, [key]: e.target.value }))}
-              placeholder="0.00"
-              disabled={bonusLoading}
-            />
+            <div className="flex gap-1">
+              {isCountedBonus(key) && (
+                <Input
+                  aria-label={`How many ${BONUS_FIELD_LABELS[key]}`}
+                  title={`How many ${BONUS_FIELD_LABELS[key].toLowerCase()} (blank = 1)`}
+                  type="number"
+                  min="0"
+                  max="999"
+                  step="1"
+                  className="h-8 w-16 shrink-0"
+                  value={countInputs[key]}
+                  onChange={(e) => setCountInputs((prev) => ({ ...prev, [key]: e.target.value }))}
+                  placeholder="#"
+                  disabled={bonusLoading}
+                />
+              )}
+              <Input
+                id={`report-bonus-${key}`}
+                type="number"
+                min="0"
+                step="0.01"
+                className="h-8 min-w-0"
+                value={bonusInputs[key]}
+                onChange={(e) => setBonusInputs((prev) => ({ ...prev, [key]: e.target.value }))}
+                placeholder="0.00"
+                disabled={bonusLoading}
+              />
+            </div>
+            {isCountedBonus(key) && countWithoutAmount(countInputs[key], bonusInputs[key]) && (
+              <p className="text-[11px] text-amber-600">Add the $ amount, or it won&apos;t be paid or shown.</p>
+            )}
           </div>
         ))}
       </div>

@@ -9,13 +9,16 @@ import {
   useBonusEntries,
 } from '@/hooks/use-admin-time';
 import {
+  BONUS_COUNT_KEYS,
+  COUNTED_BONUS_FIELDS,
   DATED_BONUS_CATEGORIES,
   PERIOD_BONUS_FIELDS,
+  type CountedBonusField,
   type DatedBonusCategory,
   type PeriodBonusField,
 } from '@/lib/payroll/constants';
 import { payPeriodOptions } from '@/lib/time';
-import { computeReportTotals } from './totals';
+import { computeReportTotals, parseCount } from './totals';
 import { nextSeed, type SeedKey } from './seed';
 
 /** State, data and save handlers behind the Payment Report tab. */
@@ -31,6 +34,10 @@ export function usePaymentReport() {
   const [otPayRateInput, setOtPayRateInput] = useState('');
   const [bonusInputs, setBonusInputs] = useState<Record<PeriodBonusField, string>>(
     () => Object.fromEntries(PERIOD_BONUS_FIELDS.map((key) => [key, ''])) as Record<PeriodBonusField, string>,
+  );
+  // How many accounts / verified leads (the # box next to their amount).
+  const [countInputs, setCountInputs] = useState<Record<CountedBonusField, string>>(
+    () => Object.fromEntries(COUNTED_BONUS_FIELDS.map((key) => [key, ''])) as Record<CountedBonusField, string>,
   );
 
   const weekOptions = useMemo(() => payPeriodOptions(24), []);
@@ -77,6 +84,14 @@ export function usePaymentReport() {
         PERIOD_BONUS_FIELDS.map((key) => [key, next.from?.[key] != null ? String(next.from[key]) : '']),
       ) as Record<PeriodBonusField, string>,
     );
+    setCountInputs(
+      Object.fromEntries(
+        COUNTED_BONUS_FIELDS.map((key) => {
+          const saved = next.from?.[BONUS_COUNT_KEYS[key]];
+          return [key, saved != null ? String(saved) : ''];
+        }),
+      ) as Record<CountedBonusField, string>,
+    );
   }, [userId, selectedWeek, bonus]);
 
   const filteredEmployees = useMemo(() => {
@@ -106,11 +121,12 @@ export function usePaymentReport() {
     ]),
   ) as Record<DatedBonusCategory, number>;
 
-  const { payRate, otPayRate, regularPay, otRateMissing, otPay, bonusAmounts, totalPay } = computeReportTotals({
+  const { payRate, otPayRate, regularPay, otRateMissing, otPay, bonusAmounts, bonusCounts, totalPay } = computeReportTotals({
     totals,
     payRateInput,
     otPayRateInput,
     bonusInputs,
+    countInputs,
     datedTotals,
   });
   const periodLabel = weekOptions.find((w) => w.value === selectedWeek)?.label ?? '';
@@ -118,7 +134,12 @@ export function usePaymentReport() {
   const rateIsDirty =
     employee != null &&
     (payRate !== (employee.payRate ?? null) || otPayRate !== (employee.otPayRate ?? null));
-  const bonusIsDirty = PERIOD_BONUS_FIELDS.some((key) => bonusAmounts[key] !== (bonus?.[key] ?? 0));
+  const typedCounts = Object.fromEntries(
+    COUNTED_BONUS_FIELDS.map((key) => [BONUS_COUNT_KEYS[key], parseCount(countInputs[key])]),
+  ) as Record<(typeof BONUS_COUNT_KEYS)[CountedBonusField], number | null>;
+  const bonusIsDirty =
+    PERIOD_BONUS_FIELDS.some((key) => bonusAmounts[key] !== (bonus?.[key] ?? 0)) ||
+    COUNTED_BONUS_FIELDS.some((key) => typedCounts[BONUS_COUNT_KEYS[key]] !== (bonus?.[BONUS_COUNT_KEYS[key]] ?? null));
 
   // Errors (e.g. a locked period) are shown next to each Save button from the
   // mutation's own error state.
@@ -137,7 +158,7 @@ export function usePaymentReport() {
     if (!userId || !selectedWeek) return;
     try {
       const typed = Object.fromEntries(PERIOD_BONUS_FIELDS.map((key) => [key, bonusAmounts[key]])) as Record<PeriodBonusField, number>;
-      await saveBonus.mutateAsync({ userId, week: selectedWeek, ...typed });
+      await saveBonus.mutateAsync({ userId, week: selectedWeek, ...typed, ...typedCounts });
     } catch {
       /* shown from saveBonus.error */
     }
@@ -148,7 +169,7 @@ export function usePaymentReport() {
     empLoading, filteredEmployees, weekOptions, navigateWeek,
     isLoading, timesheet, dayLogs, totals, disconnections, employee, periodLabel,
     payRateInput, setPayRateInput, otPayRateInput, setOtPayRateInput, rateIsDirty, handleSaveRate, updatePayRate,
-    bonusInputs, setBonusInputs, bonusIsDirty, bonusLoading, handleSaveBonus, saveBonus, bonusEntries: entries,
-    payRate, otPayRate, regularPay, otPay, otRateMissing, bonusAmounts, totalPay,
+    bonusInputs, setBonusInputs, countInputs, setCountInputs, bonusIsDirty, bonusLoading, handleSaveBonus, saveBonus, bonusEntries: entries,
+    payRate, otPayRate, regularPay, otPay, otRateMissing, bonusAmounts, bonusCounts, totalPay,
   };
 }

@@ -104,6 +104,18 @@ describe('POST /api/admin/payroll/runs (approve)', () => {
     expect(tx.payRun.update).not.toHaveBeenCalled();
   });
 
+  it('snapshots how many accounts / verified leads a bonus is for as its quantity', async () => {
+    computePayStatement.mockResolvedValue({
+      ...amounts,
+      bonusAmounts: { ...amounts.bonusAmounts, accounts: 15, verifiedLeads: 20, reloads: 5 },
+      bonusCounts: { accounts: 4, verifiedLeads: 1 },
+    });
+    await approve();
+    const lines: { category: string | null; quantity: number | null }[] = tx.payStatementLine.createMany.mock.calls[0][0].data;
+    const byCategory = Object.fromEntries(lines.map((l) => [l.category, l.quantity]));
+    expect(byCategory).toMatchObject({ accounts: 4, verifiedLeads: 1, reloads: null });
+  });
+
   it('writes everything inside one transaction', async () => {
     await approve();
     expect(transaction).toHaveBeenCalledTimes(1);

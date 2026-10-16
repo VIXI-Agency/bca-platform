@@ -270,6 +270,9 @@ model PayrollBonus {
   accounts           Decimal? @map("Accounts") @db.Decimal(10, 2)
   reloads            Decimal? @map("Reloads") @db.Decimal(10, 2)
   verifiedLeads      Decimal? @map("VerifiedLeads") @db.Decimal(10, 2)
+  // How many accounts / verified leads the amount above is for ("Accounts (4)").
+  accountsCount      Int?     @map("AccountsCount")
+  verifiedLeadsCount Int?     @map("VerifiedLeadsCount")
   modifiedBy         String?  @map("ModifiedBy")
   modifiedAt         DateTime @default(now()) @map("ModifiedAt")
 

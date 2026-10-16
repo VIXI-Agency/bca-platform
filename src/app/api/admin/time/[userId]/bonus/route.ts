@@ -4,11 +4,27 @@ import { prisma } from '@/lib/prisma';
 import { clockWeekSchema, payrollBonusSchema } from '@/lib/validators';
 import { getPayPeriodStart, parseDateParam, resolvePayPeriodStart } from '@/lib/time';
 import { isPeriodLocked } from '@/lib/payroll/compute';
-import { PERIOD_BONUS_FIELDS, type PeriodBonusField } from '@/lib/payroll/constants';
+import {
+  BONUS_COUNT_KEYS,
+  COUNTED_BONUS_FIELDS,
+  PERIOD_BONUS_FIELDS,
+  type BonusCountKey,
+  type PeriodBonusField,
+} from '@/lib/payroll/constants';
 
 // One typed amount per period. Wheel Spins and CCF Spiffs are dated entries
 // (see ./bonus-entries); the legacy WheelSpins column is no longer read.
-type BonusAmounts = Record<PeriodBonusField, number | null>;
+type BonusAmounts = Record<PeriodBonusField, number | null> & Record<BonusCountKey, number | null>;
+
+const COUNT_KEYS = COUNTED_BONUS_FIELDS.map((key) => BONUS_COUNT_KEYS[key]);
+
+/** Amounts per category, plus how many accounts / verified leads they're for. */
+function toResponse(bonus: Record<string, unknown> | null): BonusAmounts {
+  return Object.fromEntries([
+    ...PERIOD_BONUS_FIELDS.map((key) => [key, bonus?.[key] != null ? Number(bonus[key]) : null]),
+    ...COUNT_KEYS.map((key) => [key, bonus?.[key] != null ? Number(bonus[key]) : null]),
+  ]) as BonusAmounts;
+}
 
 export async function GET(
   request: Request,
@@ -46,11 +62,7 @@ export async function GET(
       where: { idUser_periodStart: { idUser: targetUserId, periodStart } },
     });
 
-    const amounts: BonusAmounts = Object.fromEntries(
-      PERIOD_BONUS_FIELDS.map((key) => [key, bonus?.[key] != null ? Number(bonus[key]) : null]),
-    ) as BonusAmounts;
-
-    return NextResponse.json(amounts);
+    return NextResponse.json(toResponse(bonus));
   } catch (error) {
     console.error('Admin time bonus GET error:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
@@ -98,9 +110,10 @@ export async function PUT(
       );
     }
 
-    const fieldData = Object.fromEntries(
-      PERIOD_BONUS_FIELDS.map((key) => [key, fields[key] ?? null]),
-    );
+    const fieldData = Object.fromEntries([
+      ...PERIOD_BONUS_FIELDS.map((key) => [key, fields[key] ?? null]),
+      ...COUNT_KEYS.map((key) => [key, fields[key] ?? null]),
+    ]);
 
     const bonus = await prisma.payrollBonus.upsert({
       where: { idUser_periodStart: { idUser: targetUserId, periodStart } },
@@ -117,11 +130,7 @@ export async function PUT(
       },
     });
 
-    const amounts: BonusAmounts = Object.fromEntries(
-      PERIOD_BONUS_FIELDS.map((key) => [key, bonus[key] != null ? Number(bonus[key]) : null]),
-    ) as BonusAmounts;
-
-    return NextResponse.json(amounts);
+    return NextResponse.json(toResponse(bonus));
   } catch (error) {
     console.error('Admin time bonus PUT error:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });

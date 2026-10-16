@@ -11,7 +11,7 @@ import {
   resolvePayPeriodStart,
 } from '@/lib/time';
 import { computePayStatement, type PayStatementAmounts } from '@/lib/payroll/compute';
-import { BONUS_FIELDS, BONUS_FIELD_LABELS } from '@/lib/payroll/constants';
+import { BONUS_FIELDS, BONUS_FIELD_LABELS, isCountedBonus } from '@/lib/payroll/constants';
 
 const isoDate = (d: Date) => d.toISOString().split('T')[0];
 
@@ -159,7 +159,8 @@ function statementLines(amounts: PayStatementAmounts) {
   for (const key of BONUS_FIELDS) {
     const amount = amounts.bonusAmounts[key];
     if (amount > 0) {
-      lines.push({ kind: 'bonus', category: key, label: BONUS_FIELD_LABELS[key], quantity: null, rate: null, amount });
+      const quantity = isCountedBonus(key) ? (amounts.bonusCounts?.[key] ?? null) : null;
+      lines.push({ kind: 'bonus', category: key, label: BONUS_FIELD_LABELS[key], quantity, rate: null, amount });
     }
   }
   return lines;

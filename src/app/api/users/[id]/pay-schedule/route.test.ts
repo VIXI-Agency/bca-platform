@@ -83,7 +83,7 @@ describe('POST /api/users/[id]/pay-schedule', () => {
     expect(res.status).toBe(409);
     expect(tx.payRun.count.mock.calls[0][0].where).toEqual({
       status: { in: ['approved', 'paid'] },
-      periodStart: { gte: D('2026-10-05') },
+      periodStart: { gt: D('2026-10-05') },
     });
     expect(tx.userPaySchedule.upsert).not.toHaveBeenCalled();
   });
@@ -105,6 +105,14 @@ describe('POST /api/users/[id]/pay-schedule', () => {
     expect(res.status).toBe(409);
     expect((await res.json()).error).toMatch(/week of Oct 23/);
     expect(tx.userPaySchedule.upsert).not.toHaveBeenCalled();
+  });
+
+  it('asks to try again when a simultaneous change wins (deadlock victim)', async () => {
+    const { Prisma } = await import('@prisma/client');
+    tx.payRun.count.mockRejectedValue(new Prisma.PrismaClientKnownRequestError('conflict', { code: 'P2034', clientVersion: 'test' }));
+    const res = await post({ schedule: 'inhouse', effectiveFrom: '2026-10-19' });
+    expect(res.status).toBe(409);
+    expect((await res.json()).error).toMatch(/try again/);
   });
 
   it('is for Administrators only', async () => {

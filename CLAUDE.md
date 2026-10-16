@@ -206,6 +206,8 @@ for pay: use `src/lib/payroll/pay-schedule-db.ts` (`resolveUserPeriod`,
 `userPeriodContaining`, `isDayLocked`). Payroll runs one group at a time: a
 Friday PayRun is the remote payroll, a Monday one the In House payroll.
 Time History and the Audit Log's "All Employees" view stay on Friday weeks.
+The table comes from `prisma/migrations/20261016_user_pay_schedule.sql`
+(hand-applied like every migration here; safe to re-run).
 
 ## Lead pool: how a lead becomes uncallable
 

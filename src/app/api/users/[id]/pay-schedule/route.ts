@@ -23,6 +23,11 @@ const changeSchema = z.object({ schedule: z.enum(PAY_SCHEDULES), effectiveFrom: 
 
 type Params = { params: Promise<{ id: string }> };
 
+/** Two changes at once: SQL Server picked this one as the deadlock victim. */
+const isWriteConflict = (error: unknown) =>
+  error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2034';
+const CONFLICT = 'Someone else changed this at the same moment. Please try again.';
+
 /** A refusal raised inside the transaction, returned as-is. */
 class Refusal extends Error {
   constructor(message: string, readonly status: number) {
@@ -60,8 +65,11 @@ async function applyChange(
   const from = affectedFrom(effectiveFrom);
   await prisma.$transaction(
     async (tx) => {
+      // A run starting exactly a week before the change is the other group's
+      // and keeps the same days either way (e.g. last week's In House run,
+      // approved the Monday a switch starts), so only later runs count.
       const lockedRuns = await tx.payRun.count({
-        where: { status: { in: ['approved', 'paid'] }, periodStart: { gte: from } },
+        where: { status: { in: ['approved', 'paid'] }, periodStart: { gt: from } },
       });
       if (lockedRuns > 0) throw new Refusal(LOCKED, 409);
 
@@ -154,6 +162,7 @@ export async function POST(request: NextRequest, { params }: Params) {
     return NextResponse.json({ ok: true });
   } catch (error) {
     if (error instanceof Refusal) return NextResponse.json({ error: error.message }, { status: error.status });
+    if (isWriteConflict(error)) return NextResponse.json({ error: CONFLICT }, { status: 409 });
     console.error('POST pay-schedule error:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
@@ -179,6 +188,7 @@ export async function DELETE(request: NextRequest, { params }: Params) {
     return NextResponse.json({ ok: true });
   } catch (error) {
     if (error instanceof Refusal) return NextResponse.json({ error: error.message }, { status: error.status });
+    if (isWriteConflict(error)) return NextResponse.json({ error: CONFLICT }, { status: 409 });
     console.error('DELETE pay-schedule error:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }

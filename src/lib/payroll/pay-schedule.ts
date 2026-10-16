@@ -108,6 +108,14 @@ export function groupWeekOptions(group: PaySchedule, count: number, today: Date)
   return periodOptions(always, count, today);
 }
 
+/** Which payroll a PayRun is, from its start: Monday = In House, otherwise remote. */
+export const runGroup = (periodStart: Date): PaySchedule =>
+  midnight(periodStart).getUTCDay() === PERIOD_START_DAY.inhouse ? 'inhouse' : 'remote';
+
+/** A full week's last workday: Thursday for remote, Friday for In House. */
+export const lastWorkDay = (group: PaySchedule, periodStart: Date): Date =>
+  addDaysUTC(midnight(periodStart), group === 'inhouse' ? 4 : 6);
+
 /** The first day a switch to `schedule` can start on, from `today` on (its Monday or Friday). */
 export function nextStartDay(schedule: PaySchedule, today: Date): Date {
   const day = midnight(today);

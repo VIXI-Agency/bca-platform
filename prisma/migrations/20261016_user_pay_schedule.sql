@@ -17,6 +17,13 @@ BEGIN
     EffectiveFrom     DATE NOT NULL,
     ChangedBy         NVARCHAR(50) NULL,
     ChangedAt         DATETIME2 NOT NULL CONSTRAINT DF_UserPaySchedule_ChangedAt DEFAULT SYSUTCDATETIME(),
-    CONSTRAINT UQ_UserPaySchedule_User_Date UNIQUE (IdUser, EffectiveFrom)
+    CONSTRAINT UQ_UserPaySchedule_User_Date UNIQUE (IdUser, EffectiveFrom),
+    -- A change must start on its week's first day, or the days until the next
+    -- start day belong to no payroll. 1900-01-01 was a Monday, so the day count
+    -- mod 7 is 0 on Mondays and 4 on Fridays, whatever DATEFIRST is set to.
+    CONSTRAINT CK_UserPaySchedule_StartDay CHECK (
+      (Schedule = 'inhouse' AND DATEDIFF(day, '19000101', EffectiveFrom) % 7 = 0) OR
+      (Schedule = 'remote'  AND DATEDIFF(day, '19000101', EffectiveFrom) % 7 = 4)
+    )
   );
 END

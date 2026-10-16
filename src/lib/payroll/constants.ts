@@ -59,7 +59,7 @@ export function bonusCount(count: number | null | undefined, amount: number): nu
 }
 
 /**
- * Caps per pay period (Friday–Thursday). Wheel Spins can land on the same
+ * Caps per pay period (Friday–Thursday remote, Monday–Friday In House). Wheel Spins can land on the same
  * day; a CCF Spiff is daily, so at most one per day.
  */
 export const DATED_BONUS_RULES: Record<DatedBonusCategory, { maxPerPeriod: number; onePerDay: boolean }> = {

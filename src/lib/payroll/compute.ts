@@ -225,7 +225,13 @@ export interface PeriodHours {
  * short by a switch between them).
  */
 export async function computePeriodHours(userId: number, day: Date): Promise<PeriodHours> {
-  const { start: periodStart, end: periodEnd } = await userPeriodContaining(userId, day);
+  return hoursInPeriod(userId, await userPeriodContaining(userId, day));
+}
+
+async function hoursInPeriod(
+  userId: number,
+  { start: periodStart, end: periodEnd }: { start: Date; end: Date },
+): Promise<PeriodHours> {
 
   const [logs, disconnections] = await Promise.all([
     prisma.employeeTimeLog.findMany({
@@ -273,9 +279,10 @@ export interface PayStatementAmounts {
  */
 export async function computePayStatement(userId: number, day: Date): Promise<PayStatementAmounts> {
   // Bonuses are stored under the start of the employee's own period.
-  const { start: periodStart } = await userPeriodContaining(userId, day);
+  const period = await userPeriodContaining(userId, day);
+  const periodStart = period.start;
   const [hours, user, bonus, entries] = await Promise.all([
-    computePeriodHours(userId, periodStart),
+    hoursInPeriod(userId, period),
     prisma.user.findUnique({
       where: { idUser: userId },
       select: { payRate: true, otPayRate: true },

@@ -3,10 +3,10 @@ import { Prisma } from '@prisma/client';
 import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { clockWeekSchema, payRunApproveSchema } from '@/lib/validators';
-import { addDaysUTC, getPayPeriodEnd, getTodayRangePST, parseDateParam } from '@/lib/time';
+import { getPayPeriodEnd, getTodayRangePST, parseDateParam } from '@/lib/time';
 import { computePayStatement, type PayStatementAmounts } from '@/lib/payroll/compute';
 import { payScheduleHistories } from '@/lib/payroll/pay-schedule-db';
-import { PAY_SCHEDULES, scheduleOn, weekStart, type PaySchedule } from '@/lib/payroll/pay-schedule';
+import { PAY_SCHEDULES, lastWorkDay, scheduleOn, weekStart, type PaySchedule } from '@/lib/payroll/pay-schedule';
 import { BONUS_FIELDS, BONUS_FIELD_LABELS, isCountedBonus } from '@/lib/payroll/constants';
 
 const isoDate = (d: Date) => d.toISOString().split('T')[0];
@@ -42,7 +42,7 @@ async function payrollEmployees(periodStart: Date, periodEnd: Date, group: PaySc
 const groupParam = (value: string | null): PaySchedule | null =>
   value == null ? 'remote' : (PAY_SCHEDULES as readonly string[]).includes(value) ? (value as PaySchedule) : null;
 
-/** A period can be approved once it is over: on its closing Friday or later (Pacific). */
+/** A period can be approved once it is over: from the next week's first day (Pacific). */
 function periodHasEnded(periodEnd: Date): boolean {
   return getTodayRangePST().todayStart.getTime() >= periodEnd.getTime();
 }
@@ -77,7 +77,7 @@ export async function GET(request: Request) {
       group,
       periodStart: isoDate(periodStart),
       // Last workday: Thursday for remote, Friday for In House.
-      periodEnd: isoDate(addDaysUTC(periodStart, group === 'inhouse' ? 4 : 6)),
+      periodEnd: isoDate(lastWorkDay(group, periodStart)),
       periodEnded: periodHasEnded(periodEnd),
     };
 
@@ -209,7 +209,7 @@ export async function POST(request: Request) {
     // people are still working.
     if (!periodHasEnded(periodEnd)) {
       return NextResponse.json(
-        { error: `This pay period runs through ${isoDate(new Date(periodEnd.getTime() - 1))}. It can be approved starting ${isoDate(periodEnd)}.` },
+        { error: `This pay period runs through ${isoDate(lastWorkDay(group, periodStart))}. It can be approved starting ${isoDate(periodEnd)}.` },
         { status: 409 }
       );
     }

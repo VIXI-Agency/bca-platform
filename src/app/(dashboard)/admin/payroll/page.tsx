@@ -151,6 +151,8 @@ function PayRunTab({ canManage }: { canManage: boolean }) {
   }, [group]);
   // Switching groups keeps the same calendar week (its Friday or Monday).
   const selectedWeek = weekForOptions(weekOptions, pickedWeek);
+  // The day the next week of this payroll starts, when this one can be approved.
+  const nextWeekDay = group === 'inhouse' ? 'Monday' : 'Friday';
 
   const { data, isLoading, isError, error: loadError } = usePayRun(selectedWeek, group);
   const approve = useApprovePayRun();
@@ -307,7 +309,7 @@ function PayRunTab({ canManage }: { canManage: boolean }) {
                     setApproveDialogOpen(true);
                   }}
                   disabled={approve.isPending || !data?.run.periodEnded}
-                  title={data?.run.periodEnded ? undefined : 'This period is still running — it can be approved starting Friday.'}
+                  title={data?.run.periodEnded ? undefined : `This period is still running — it can be approved starting ${nextWeekDay}.`}
                   className="gap-1.5"
                 >
                   <CheckCircle2 className="h-4 w-4" />
@@ -338,7 +340,7 @@ function PayRunTab({ canManage }: { canManage: boolean }) {
 
       {canManage && data && !data.run.periodEnded && (
         <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>
-          This period runs through {data.run.periodEnd} and is still open — these are live numbers. It can be approved starting the following Friday.
+          This period runs through {data.run.periodEnd} and is still open — these are live numbers. It can be approved starting the following {nextWeekDay}.
         </p>
       )}
 

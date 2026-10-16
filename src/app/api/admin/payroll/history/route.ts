@@ -3,6 +3,7 @@ import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { payrollHistoryFilterSchema } from '@/lib/validators';
 import type { Prisma } from '@prisma/client';
+import { lastWorkDay, runGroup } from '@/lib/payroll/pay-schedule';
 
 /** Lists saved pay statements (not live calculator output) — the permanent
  *  record of what was approved/paid, independent of current employee status
@@ -60,7 +61,8 @@ export async function GET(request: Request) {
       userId: s.idUser,
       employeeName: s.employeeName,
       periodStart: s.payRun.periodStart.toISOString().split('T')[0],
-      periodEnd: s.payRun.periodEnd.toISOString().split('T')[0],
+      // Last workday (Thursday remote, Friday In House), not the exclusive end.
+      periodEnd: lastWorkDay(runGroup(s.payRun.periodStart), s.payRun.periodStart).toISOString().split('T')[0],
       regularHours: Number(s.regularHours),
       overtimeHours: Number(s.overtimeHours),
       regularPay: Number(s.regularPay),

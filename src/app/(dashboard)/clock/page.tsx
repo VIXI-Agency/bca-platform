@@ -371,7 +371,11 @@ function MiniTimeline({ steps }: { steps: TimelineStep[] }) {
 /*  Weekly Timesheet Component                         */
 /* -------------------------------------------------- */
 
-const ORDERED_DAYS = ['Friday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday'];
+/** Workdays in pay-week order: remote weeks start Friday, In House weeks Monday. */
+const REMOTE_DAYS = ['Friday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday'];
+const IN_HOUSE_DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
+const orderedDays = (weekStart: string) =>
+  new Date(`${weekStart}T00:00:00.000Z`).getUTCDay() === 1 ? IN_HOUSE_DAYS : REMOTE_DAYS;
 
 const TABLE_COLUMNS = [
   'Day',
@@ -406,11 +410,11 @@ function WeeklyTimesheet() {
   const sortedDays = useMemo(() => {
     if (!timesheet?.data) return [];
     const dayMap = new Map(timesheet.data.map((d) => [d.dayOfWeek, d]));
-    return ORDERED_DAYS.map((day) => ({
+    return orderedDays(selectedWeek).map((day) => ({
       day,
       log: dayMap.get(day) || null,
     }));
-  }, [timesheet]);
+  }, [timesheet, selectedWeek]);
 
   /** Check if a break duration exceeds 10 min */
   function isBreakOver(

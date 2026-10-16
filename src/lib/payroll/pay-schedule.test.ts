@@ -2,6 +2,8 @@ import { describe, it, expect } from 'vitest';
 import {
   effectiveFromError,
   groupWeekOptions,
+  lastWorkDay,
+  runGroup,
   nextStartDay,
   periodContaining,
   periodLabel,
@@ -97,6 +99,15 @@ describe('periodOptions', () => {
   });
   it('is the plain Friday list for remote employees', () => {
     expect(periodOptions([], 2, d('2026-10-21')).map((o) => o.value)).toEqual(['2026-10-16', '2026-10-09']);
+  });
+});
+
+describe('runGroup / lastWorkDay', () => {
+  it('tells the payroll from the run start and ends it on its last workday', () => {
+    expect(runGroup(d('2026-10-19'))).toBe('inhouse');
+    expect(runGroup(d('2026-10-16'))).toBe('remote');
+    expect(iso(lastWorkDay('inhouse', d('2026-10-19')))).toBe('2026-10-23');
+    expect(iso(lastWorkDay('remote', d('2026-10-16')))).toBe('2026-10-22');
   });
 });
 

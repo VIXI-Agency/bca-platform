@@ -271,6 +271,8 @@ export async function POST(request: Request) {
               overtimePay: amounts.overtimePay,
               bonusTotal: amounts.bonusTotal,
               grossPay: amounts.grossPay,
+              // The week's note as it was when approved.
+              snapshotJson: JSON.stringify({ notes: amounts.notes ?? null }),
               status: 'pending',
             };
 

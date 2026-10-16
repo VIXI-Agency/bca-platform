@@ -56,3 +56,28 @@ describe('/api/admin/time/[userId]/bonus — counts', () => {
     expect(await res.json()).toMatchObject({ accounts: 13, accountsCount: null, verifiedLeads: 20, verifiedLeadsCount: 10 });
   });
 });
+
+describe('/api/admin/time/[userId]/bonus — notes', () => {
+  it('saves the week’s note with the bonuses, trimmed', async () => {
+    const res = await put({ period: '2026-10-09', accounts: 15, notes: '  Covered two extra shifts.\nGreat week!  ' });
+    expect(res.status).toBe(200);
+    expect(upsert.mock.calls[0][0].update.notes).toBe('Covered two extra shifts.\nGreat week!');
+    expect((await res.json()).notes).toBe('Covered two extra shifts.\nGreat week!');
+  });
+
+  it('clears a note left blank', async () => {
+    await put({ period: '2026-10-09', notes: '   ' });
+    expect(upsert.mock.calls[0][0].update.notes).toBeNull();
+  });
+
+  it('refuses a note over 500 characters', async () => {
+    expect((await put({ period: '2026-10-09', notes: 'x'.repeat(501) })).status).toBe(400);
+    expect(upsert).not.toHaveBeenCalled();
+  });
+
+  it('returns the saved note', async () => {
+    findUnique.mockResolvedValue({ accounts: null, notes: 'See me about Friday.' });
+    const res = await GET(new Request('http://localhost/api/admin/time/40/bonus?week=2026-10-09'), params);
+    expect((await res.json()).notes).toBe('See me about Friday.');
+  });
+});

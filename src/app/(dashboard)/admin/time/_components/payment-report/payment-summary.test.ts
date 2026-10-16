@@ -69,6 +69,19 @@ describe('PaymentSummary', () => {
     expect(html).not.toContain('Reloads Spiffs (');
   });
 
+  it('prints the week’s note under the total, keeping its line breaks', () => {
+    const html = render({ notes: 'Covered two extra shifts.\nGreat week!' });
+    expect(html).toContain('Notes');
+    expect(html).toContain('Covered two extra shifts.\nGreat week!');
+    expect(html).toContain('whitespace-pre-line');
+    expect(html.indexOf('Total Payment')).toBeLessThan(html.indexOf('Covered two extra shifts.'));
+  });
+
+  it('has no notes block without a note', () => {
+    expect(render({ notes: null })).not.toContain('Notes');
+    expect(render({ notes: '' })).not.toContain('Notes');
+  });
+
   it('shows unpaid overtime in decimal hours too', () => {
     const html = render({ totals: totals(8, 1.25), otRateMissing: true, regularPay: 56, totalPay: 56 });
     expect(html).toContain('Overtime (1.25 h) — not paid: no OT rate set');

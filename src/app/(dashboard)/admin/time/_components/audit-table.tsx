@@ -18,7 +18,7 @@ export function AuditTable({
 }) {
   return (
     <div className="overflow-x-auto">
-      <table className="w-full text-sm print:text-[8.5px]">
+      <table className="w-full text-sm print:text-[8.5px] print:leading-tight">
         <thead>
           <tr
             className="border-b text-left text-xs font-medium uppercase tracking-wider print:text-[7.5px]"
@@ -75,7 +75,7 @@ export function AuditTable({
                 </td>
               )}
               <td className="px-3 py-3 print:px-[6px] print:py-[2px]">
-                <Badge variant="outline" className="print:px-[5px] print:py-0 print:text-[7.5px]">{fieldLabel(audit.field)}</Badge>
+                <Badge variant="outline" className="print:px-[5px] print:py-0 print:text-[7.5px] print:leading-none">{fieldLabel(audit.field)}</Badge>
                 {audit.disconnection && (
                   <div className="mt-0.5 whitespace-nowrap text-xs text-[var(--text-muted)] print:mt-0 print:text-[7px]">
                     for{' '}

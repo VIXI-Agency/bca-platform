@@ -276,6 +276,8 @@ model PayrollBonus {
   // How many accounts / verified leads the amount above is for ("Accounts (4)").
   accountsCount      Int?     @map("AccountsCount")
   verifiedLeadsCount Int?     @map("VerifiedLeadsCount")
+  // The week's note, printed on the employee's Payment Report (max 500 chars).
+  notes              String?  @map("Notes") @db.NVarChar(500)
   modifiedBy         String?  @map("ModifiedBy")
   modifiedAt         DateTime @default(now()) @map("ModifiedAt")
 

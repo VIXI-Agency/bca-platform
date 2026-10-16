@@ -163,6 +163,13 @@ describe('POST /api/admin/payroll/runs (approve)', () => {
     expect(byCategory).toMatchObject({ accounts: 4, verifiedLeads: 1, reloads: null });
   });
 
+  it('keeps the week’s note in the approved statement', async () => {
+    computePayStatement.mockResolvedValue({ ...amounts, notes: 'Covered two extra shifts.' });
+    await approve();
+    const data = tx.payStatement.create.mock.calls[0][0].data;
+    expect(JSON.parse(data.snapshotJson)).toEqual({ notes: 'Covered two extra shifts.' });
+  });
+
   it('writes everything inside one transaction', async () => {
     await approve();
     expect(transaction).toHaveBeenCalledTimes(1);

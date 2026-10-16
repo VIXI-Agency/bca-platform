@@ -37,6 +37,8 @@ export function usePaymentReport() {
   const [bonusInputs, setBonusInputs] = useState<Record<PeriodBonusField, string>>(
     () => Object.fromEntries(PERIOD_BONUS_FIELDS.map((key) => [key, ''])) as Record<PeriodBonusField, string>,
   );
+  // The week's note, printed on the employee's PDF.
+  const [notesInput, setNotesInput] = useState('');
   // How many accounts / verified leads (the # box next to their amount).
   const [countInputs, setCountInputs] = useState<Record<CountedBonusField, string>>(
     () => Object.fromEntries(COUNTED_BONUS_FIELDS.map((key) => [key, ''])) as Record<CountedBonusField, string>,
@@ -89,6 +91,7 @@ export function usePaymentReport() {
         }),
       ) as Record<CountedBonusField, string>,
     );
+    setNotesInput(next.from?.notes ?? '');
   }, [userId, selectedWeek, bonus]);
 
   const filteredEmployees = useMemo(() => {
@@ -136,7 +139,8 @@ export function usePaymentReport() {
   ) as Record<(typeof BONUS_COUNT_KEYS)[CountedBonusField], number | null>;
   const bonusIsDirty =
     PERIOD_BONUS_FIELDS.some((key) => bonusAmounts[key] !== (bonus?.[key] ?? 0)) ||
-    COUNTED_BONUS_FIELDS.some((key) => typedCounts[BONUS_COUNT_KEYS[key]] !== (bonus?.[BONUS_COUNT_KEYS[key]] ?? null));
+    COUNTED_BONUS_FIELDS.some((key) => typedCounts[BONUS_COUNT_KEYS[key]] !== (bonus?.[BONUS_COUNT_KEYS[key]] ?? null)) ||
+    (notesInput.trim() || null) !== (bonus?.notes ?? null);
 
   // Errors (e.g. a locked period) are shown next to each Save button from the
   // mutation's own error state.
@@ -155,7 +159,7 @@ export function usePaymentReport() {
     if (!userId || !selectedWeek) return;
     try {
       const typed = Object.fromEntries(PERIOD_BONUS_FIELDS.map((key) => [key, bonusAmounts[key]])) as Record<PeriodBonusField, number>;
-      await saveBonus.mutateAsync({ userId, week: selectedWeek, ...typed, ...typedCounts });
+      await saveBonus.mutateAsync({ userId, week: selectedWeek, ...typed, ...typedCounts, notes: notesInput.trim() || null });
     } catch {
       /* shown from saveBonus.error */
     }
@@ -166,7 +170,7 @@ export function usePaymentReport() {
     empLoading, filteredEmployees, weekOptions, navigateWeek,
     isLoading, timesheet, dayLogs, totals, disconnections, employee, periodLabel,
     payRateInput, setPayRateInput, otPayRateInput, setOtPayRateInput, rateIsDirty, handleSaveRate, updatePayRate,
-    bonusInputs, setBonusInputs, countInputs, setCountInputs, bonusIsDirty, bonusLoading, handleSaveBonus, saveBonus, bonusEntries: entries,
+    bonusInputs, setBonusInputs, countInputs, setCountInputs, notesInput, setNotesInput, bonusIsDirty, bonusLoading, handleSaveBonus, saveBonus, bonusEntries: entries,
     payRate, otPayRate, regularPay, otPay, otRateMissing, bonusAmounts, bonusCounts, totalPay,
   };
 }

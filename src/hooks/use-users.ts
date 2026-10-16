@@ -1,6 +1,7 @@
 'use client';
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import type { BreakKind } from '@/lib/clock/break-order';
 
 /* -------------------------------------------------- */
 /*  Types                                              */
@@ -15,6 +16,8 @@ export interface User {
   sendEmail: boolean;
   isActive: boolean;
   isPartTime: boolean;
+  /** Breaks taken, in order; null while on the full/part-time default. */
+  breakOrder: BreakKind[] | null;
   smsAccess: boolean;
   timezone: string;
   city: string;
@@ -35,6 +38,7 @@ export interface CreateUserPayload {
   state: string;
   country: string;
   isPartTime: boolean;
+  breakOrder: BreakKind[] | null;
   sendEmail: boolean;
   payRate?: number;
   otPayRate?: number;
@@ -52,6 +56,7 @@ export interface UpdateUserPayload {
   state: string;
   country: string;
   isPartTime: boolean;
+  breakOrder: BreakKind[] | null;
   smsAccess: boolean;
   sendEmail: boolean;
   payRate?: number;

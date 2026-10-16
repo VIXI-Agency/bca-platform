@@ -24,6 +24,9 @@ model User {
   sendEmail   Int?     @default(0) @map("SendEmail")
   status      Boolean? @default(true) @map("Status")
   isPartTime  Boolean? @default(false) @map("IsPartTime")
+  // Breaks taken and their order, e.g. "lunch,firstBreak,secondBreak".
+  // NULL = default for full/part time, "" = none. See src/lib/clock/break-order.ts.
+  breakOrder  String?  @map("BreakOrder") @db.NVarChar(40)
   smsAccess   Boolean? @default(false) @map("SmsAccess")
   photo       String?  @map("Photo") @db.NVarChar(Max)
   resetToken  String?  @map("ResetToken") @db.NVarChar(200)

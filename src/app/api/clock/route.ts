@@ -3,6 +3,7 @@ import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { getTodayRangePST } from '@/lib/time';
 import { computeDayMetrics, disconnectionKey, fetchDisconnectionWindows } from '@/lib/payroll/compute';
+import { breakOrderFor, nextClockAction } from '@/lib/clock/break-order';
 import type { ClockStatus } from '@/types';
 
 function getStatus(log: {
@@ -23,27 +24,6 @@ function getStatus(log: {
   return 'working';
 }
 
-function getNextAction(log: {
-  clockIn: Date | null;
-  firstBreakOut: Date | null;
-  firstBreakIn: Date | null;
-  lunchOut: Date | null;
-  lunchIn: Date | null;
-  secondBreakOut: Date | null;
-  secondBreakIn: Date | null;
-  clockOut: Date | null;
-} | null): string | null {
-  if (!log || !log.clockIn) return 'clockIn';
-  if (log.clockOut) return null;
-  if (!log.firstBreakOut) return 'firstBreakOut';
-  if (!log.firstBreakIn) return 'firstBreakIn';
-  if (!log.lunchOut) return 'lunchOut';
-  if (!log.lunchIn) return 'lunchIn';
-  if (!log.secondBreakOut) return 'secondBreakOut';
-  if (!log.secondBreakIn) return 'secondBreakIn';
-  return 'clockOut';
-}
-
 export async function GET() {
   try {
     const session = await auth();
@@ -54,13 +34,14 @@ export async function GET() {
     const userId = (session.user as { userId: number }).userId;
     const { todayStart, todayEnd } = getTodayRangePST();
 
-    // Whether this employee is part-time controls who may skip breaks
-    // (lunch can be skipped by anyone — see /api/clock/skip).
+    // Which breaks this employee takes, in order (part-timers: one break, no
+    // lunch; Janice: lunch first). Drives the next step and the page's timeline.
     const dbUser = await prisma.user.findUnique({
       where: { idUser: userId },
-      select: { isPartTime: true },
+      select: { isPartTime: true, breakOrder: true },
     });
     const isPartTime = dbUser?.isPartTime ?? false;
+    const breakOrder = breakOrderFor(dbUser?.breakOrder, isPartTime);
 
     const log = await prisma.employeeTimeLog.findFirst({
       where: {
@@ -78,6 +59,7 @@ export async function GET() {
         status: 'not_clocked_in' as ClockStatus,
         nextAction: 'clockIn',
         isPartTime,
+        breakOrder,
       });
     }
 
@@ -92,6 +74,7 @@ export async function GET() {
 
     return NextResponse.json({
       isPartTime,
+      breakOrder,
       data: {
         clockIn: log.clockIn?.toISOString() ?? null,
         firstBreakOut: log.firstBreakOut?.toISOString() ?? null,
@@ -104,7 +87,7 @@ export async function GET() {
         totalHours,
       },
       status: getStatus(log),
-      nextAction: getNextAction(log),
+      nextAction: nextClockAction(log, breakOrder),
     });
   } catch (error) {
     console.error('Clock GET error:', error);

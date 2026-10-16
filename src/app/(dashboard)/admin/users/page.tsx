@@ -47,6 +47,8 @@ import {
   type User,
   type ScheduleDay,
 } from '@/hooks/use-users';
+import type { BreakKind } from '@/lib/clock/break-order';
+import { BreakOrderEditor } from './_components/break-order-editor';
 
 const ROLES: { value: number; label: string }[] = [
   { value: 1, label: 'Admin' },
@@ -84,6 +86,7 @@ interface UserFormState {
   state: string;
   country: string;
   isPartTime: boolean;
+  breakOrder: BreakKind[] | null;
   smsAccess: boolean;
   sendEmail: boolean;
   payRate: string;
@@ -101,6 +104,7 @@ const INITIAL_FORM: UserFormState = {
   state: '',
   country: 'US',
   isPartTime: false,
+  breakOrder: null,
   smsAccess: false,
   sendEmail: false,
   payRate: '',
@@ -186,6 +190,7 @@ export default function UsersPage() {
       state: user.state,
       country: user.country,
       isPartTime: user.isPartTime,
+      breakOrder: user.breakOrder ?? null,
       smsAccess: user.smsAccess,
       sendEmail: user.sendEmail,
       payRate: user.payRate != null ? String(user.payRate) : '',
@@ -247,6 +252,7 @@ export default function UsersPage() {
           state: form.state.trim(),
           country: form.country.trim(),
           isPartTime: form.isPartTime,
+          breakOrder: form.breakOrder,
           smsAccess: form.smsAccess,
           sendEmail: form.sendEmail,
           payRate,
@@ -265,6 +271,7 @@ export default function UsersPage() {
           state: form.state.trim(),
           country: form.country.trim(),
           isPartTime: form.isPartTime,
+          breakOrder: form.breakOrder,
           sendEmail: form.sendEmail,
           payRate,
           otPayRate,
@@ -653,6 +660,12 @@ export default function UsersPage() {
                 onCheckedChange={(checked) => updateForm('isPartTime', checked)}
               />
             </div>
+
+            <BreakOrderEditor
+              value={form.breakOrder}
+              isPartTime={form.isPartTime}
+              onChange={(breakOrder) => setForm((prev) => ({ ...prev, breakOrder }))}
+            />
 
             <div className="flex items-center justify-between rounded-lg border border-[var(--border)] p-4">
               <div>

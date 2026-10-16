@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { BREAK_KINDS } from '@/lib/clock/break-order';
 
 // A real YYYY-MM-DD calendar date. The shape check alone let "2026-99-99"
 // through, and Date.UTC silently rolled it over to some other day.
@@ -90,6 +91,14 @@ export const createUserSchema = z.object({
   sendEmail: z.boolean().default(false),
   isPartTime: z.boolean().default(false),
   smsAccess: z.boolean().default(false),
+  // Breaks taken, in order; null = the default for full/part time. See
+  // src/lib/clock/break-order.ts.
+  breakOrder: z
+    .array(z.enum(BREAK_KINDS))
+    .max(BREAK_KINDS.length)
+    .refine((kinds) => new Set(kinds).size === kinds.length, 'Each break can appear only once')
+    .nullable()
+    .optional(),
   // null clears a rate (e.g. emptied in the Payment Report rate box).
   payRate: z.number().nonnegative().max(9999999.99).nullable().optional(),
   otPayRate: z.number().nonnegative().max(9999999.99).nullable().optional(),

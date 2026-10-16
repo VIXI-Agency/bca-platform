@@ -2,18 +2,12 @@ import { NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { nowPstAsUtc, getTodayRangePST } from '@/lib/time';
+import { BREAK_PUNCHES, breakOrderFor, nextClockAction } from '@/lib/clock/break-order';
 import { z } from 'zod';
 
 const skipBreakSchema = z.object({
   breakType: z.enum(['firstBreak', 'lunch', 'secondBreak']),
 });
-
-// Maps break type to the out/in field names
-const BREAK_FIELDS: Record<string, { out: string; in: string; previousRequired: string }> = {
-  firstBreak: { out: 'firstBreakOut', in: 'firstBreakIn', previousRequired: 'clockIn' },
-  lunch: { out: 'lunchOut', in: 'lunchIn', previousRequired: 'firstBreakIn' },
-  secondBreak: { out: 'secondBreakOut', in: 'secondBreakIn', previousRequired: 'lunchIn' },
-};
 
 export async function POST(request: Request) {
   try {
@@ -24,11 +18,11 @@ export async function POST(request: Request) {
 
     const userId = (session.user as { userId: number }).userId;
 
-    // Check if user is part-time; the session outlives a deactivation, so
-    // check the account is still active too.
+    // The session outlives a deactivation, so check the account is still
+    // active, and read which breaks this employee takes and in what order.
     const user = await prisma.user.findUnique({
       where: { idUser: userId },
-      select: { isPartTime: true, status: true },
+      select: { isPartTime: true, status: true, breakOrder: true },
     });
     if (!user || user.status === true) {
       return NextResponse.json({ error: 'Your account is inactive.' }, { status: 403 });
@@ -45,14 +39,12 @@ export async function POST(request: Request) {
 
     const { breakType } = parsed.data;
 
-    // Breaks (first/second) can only be skipped by part-time employees; lunch can be skipped by anyone
-    if (breakType !== 'lunch' && !user?.isPartTime) {
-      return NextResponse.json(
-        { error: 'Only part-time employees can skip breaks' },
-        { status: 403 }
-      );
+    // Only lunch can be skipped. Breaks are always taken — part-timers
+    // included, now that their one break replaces lunch.
+    if (breakType !== 'lunch') {
+      return NextResponse.json({ error: 'Breaks cannot be skipped.' }, { status: 403 });
     }
-    const fields = BREAK_FIELDS[breakType];
+    const fields = BREAK_PUNCHES[breakType];
     const now = nowPstAsUtc();
     const { todayStart, todayEnd } = getTodayRangePST();
 
@@ -75,20 +67,12 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Already clocked out for the day' }, { status: 400 });
     }
 
-    // Check if the previous required field is filled
-    const previousValue = log[fields.previousRequired as keyof typeof log];
-    if (!previousValue) {
+    // Lunch can only be skipped when it's this employee's next step (after a
+    // first break normally; right after clock-in for a lunch-first order).
+    const next = nextClockAction(log, breakOrderFor(user.breakOrder, user.isPartTime === true));
+    if (next !== fields.out) {
       return NextResponse.json(
-        { error: `Cannot skip ${breakType}. Must complete ${fields.previousRequired} first.` },
-        { status: 400 }
-      );
-    }
-
-    // Check if break is already recorded
-    const outValue = log[fields.out as keyof typeof log];
-    if (outValue) {
-      return NextResponse.json(
-        { error: `${breakType} already recorded` },
+        { error: `Cannot skip ${breakType} now. Next step: ${next}.` },
         { status: 400 }
       );
     }

@@ -3,18 +3,8 @@ import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { clockActionSchema } from '@/lib/validators';
 import { nowPstAsUtc, getTodayRangePST, minutesSinceStored } from '@/lib/time';
-
-// Sequential order of clock actions
-const ACTION_ORDER = [
-  'clockIn',
-  'firstBreakOut',
-  'firstBreakIn',
-  'lunchOut',
-  'lunchIn',
-  'secondBreakOut',
-  'secondBreakIn',
-  'clockOut',
-] as const;
+import { breakOrderFor, punchOrder } from '@/lib/clock/break-order';
+import type { ClockAction } from '@/types';
 
 // Administrator (1) and Closer (2) may clock in up to 15 minutes before their
 // 6:00 AM shift and have that real time count toward pay. Everyone else
@@ -40,9 +30,14 @@ function applyEarlyClockInRule(time: Date, role: number | undefined): Date {
   return new Date(Date.UTC(1970, 0, 1, 6, 0, 0));
 }
 
-async function isAccountBlocked(userId: number): Promise<boolean> {
-  const account = await prisma.user.findUnique({ where: { idUser: userId }, select: { status: true } });
-  return !account || account.status === true;
+/** The account's punch order, or null when it can't record time (deactivated). */
+async function activePunchOrder(userId: number): Promise<ClockAction[] | null> {
+  const account = await prisma.user.findUnique({
+    where: { idUser: userId },
+    select: { status: true, isPartTime: true, breakOrder: true },
+  });
+  if (!account || account.status === true) return null;
+  return punchOrder(breakOrderFor(account.breakOrder, account.isPartTime === true));
 }
 
 export async function POST(request: Request) {
@@ -66,7 +61,8 @@ export async function POST(request: Request) {
 
     // The session outlives a deactivation, so check the account itself before
     // recording paid time.
-    if (await isAccountBlocked(userId)) {
+    const order = await activePunchOrder(userId);
+    if (!order) {
       return NextResponse.json({ error: 'Your account is inactive.' }, { status: 403 });
     }
 
@@ -98,10 +94,17 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: 'Already clocked out for the day' }, { status: 400 });
       }
 
-      // Verify the previous action in sequence is completed
-      const actionIndex = ACTION_ORDER.indexOf(action as typeof ACTION_ORDER[number]);
+      // Verify the previous action in this employee's sequence is completed
+      // (Janice takes lunch first; part-timers take one break and no lunch).
+      const actionIndex = order.indexOf(action);
+      if (actionIndex < 0) {
+        return NextResponse.json(
+          { error: `${action} is not part of your breaks.` },
+          { status: 400 }
+        );
+      }
       if (actionIndex > 0) {
-        const previousAction = ACTION_ORDER[actionIndex - 1];
+        const previousAction = order[actionIndex - 1];
         const previousValue = log[previousAction as keyof typeof log];
         if (!previousValue) {
           return NextResponse.json(

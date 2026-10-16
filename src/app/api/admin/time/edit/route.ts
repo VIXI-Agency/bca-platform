@@ -4,6 +4,8 @@ import { prisma } from '@/lib/prisma';
 import { timeEditSchema } from '@/lib/validators';
 import { timeStringToUtcDate, getPayPeriodStart, addDaysUTC } from '@/lib/time';
 import { isPeriodLocked } from '@/lib/payroll/compute';
+import { breakOrderFor, punchOrderError } from '@/lib/clock/break-order';
+import type { ClockAction } from '@/types';
 
 const VALID_FIELDS = [
   'clockIn',
@@ -131,23 +133,17 @@ export async function POST(request: Request) {
     // or null when clearing the entry.
     const newDateTime = isClearing ? null : timeStringToUtcDate(value);
 
-    // Chronological validation: ensure time fields are in order
-    // (null entries are ignored, so clearing a field never breaks the order)
-    const TIME_ORDER = [
-      'clockIn', 'firstBreakOut', 'firstBreakIn',
-      'lunchOut', 'lunchIn',
-      'secondBreakOut', 'secondBreakIn', 'clockOut',
-    ];
-    const proposed = { ...log, [field]: newDateTime } as unknown as Record<string, Date | null>;
-    for (let i = 0; i < TIME_ORDER.length - 1; i++) {
-      const a = proposed[TIME_ORDER[i]] as Date | null;
-      const b = proposed[TIME_ORDER[i + 1]] as Date | null;
-      if (a && b && a.getTime() > b.getTime()) {
-        return NextResponse.json(
-          { error: `${TIME_ORDER[i]} cannot be after ${TIME_ORDER[i + 1]}` },
-          { status: 400 },
-        );
-      }
+    // Chronological validation in this employee's own break order (Janice
+    // takes lunch first). Blank entries are ignored, so clearing a field
+    // never breaks the order.
+    const employee = await prisma.user.findUnique({
+      where: { idUser: userId },
+      select: { isPartTime: true, breakOrder: true },
+    });
+    const proposed = { ...log, [field]: newDateTime } as unknown as Record<ClockAction, Date | null>;
+    const orderError = punchOrderError(proposed, breakOrderFor(employee?.breakOrder, employee?.isPartTime === true));
+    if (orderError) {
+      return NextResponse.json({ error: orderError }, { status: 400 });
     }
 
     // There are no overnight shifts, so a day whose clock-out isn't after its

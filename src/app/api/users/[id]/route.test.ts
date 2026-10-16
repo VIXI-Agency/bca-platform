@@ -67,3 +67,39 @@ describe('PUT /api/users/[id] as a Closer', () => {
     expect(json).not.toHaveProperty('password');
   });
 });
+
+describe('PUT /api/users/[id] — break order', () => {
+  beforeEach(() => {
+    sessionRole = 1;
+    findUnique.mockReset().mockResolvedValue(agent);
+    update.mockReset().mockResolvedValue({ ...agent, name: 'Janice', lastname: 'D' });
+  });
+
+  it('saves the breaks in the order the admin set', async () => {
+    expect((await put({ breakOrder: ['lunch', 'firstBreak', 'secondBreak'] })).status).toBe(200);
+    expect(update.mock.calls[0][0].data.breakOrder).toBe('lunch,firstBreak,secondBreak');
+  });
+
+  it('saves "no breaks" as an empty order', async () => {
+    await put({ breakOrder: [] });
+    expect(update.mock.calls[0][0].data.breakOrder).toBe('');
+  });
+
+  it('goes back to the default with null', async () => {
+    await put({ breakOrder: null });
+    expect(update.mock.calls[0][0].data.breakOrder).toBeNull();
+  });
+
+  it('leaves the order alone when it is not sent', async () => {
+    await put({ name: 'Janice' });
+    expect(update.mock.calls[0][0].data).not.toHaveProperty('breakOrder');
+  });
+
+  it.each([[['lunch', 'lunch']], [['coffee']], [['firstBreak', 'lunch', 'secondBreak', 'lunch']]])(
+    'rejects %j',
+    async (breakOrder) => {
+      expect((await put({ breakOrder })).status).toBe(400);
+      expect(update).not.toHaveBeenCalled();
+    },
+  );
+});

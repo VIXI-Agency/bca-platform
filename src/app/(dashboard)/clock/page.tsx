@@ -34,6 +34,7 @@ import {
   useAvailableWeeks,
 } from '@/hooks/use-clock';
 import type { ClockAction, ClockStatus } from '@/types';
+import { BREAK_LABELS, BREAK_PUNCHES, DEFAULT_BREAK_ORDER, type BreakKind } from '@/lib/clock/break-order';
 import { cn } from '@/lib/utils';
 
 /* -------------------------------------------------- */
@@ -216,13 +217,12 @@ function getCurrentWeekDate(): string {
   return friday.toISOString().split('T')[0];
 }
 
-/** Determine which break can be skipped based on nextAction */
-function getSkippableBreak(nextAction: ClockAction | null): string | null {
-  if (nextAction === 'firstBreakOut') return 'firstBreak';
-  if (nextAction === 'lunchOut') return 'lunch';
-  if (nextAction === 'secondBreakOut') return 'secondBreak';
-  return null;
-}
+/** The status shown while each break is in progress. */
+const BREAK_STATUS: Record<BreakKind, ClockStatus> = {
+  firstBreak: 'first_break',
+  lunch: 'lunch',
+  secondBreak: 'second_break',
+};
 
 /* -------------------------------------------------- */
 /*  Live Clock Hook                                    */
@@ -615,10 +615,10 @@ export default function ClockPage() {
   const timeLog = clockData?.data ?? null;
   const statusConfig = STATUS_CONFIG[status];
 
-  // Part-time status comes from the user's DB flag (returned by the status API),
-  // matching the authorization in /api/clock/skip. Falls back to false.
-  const isPartTime = clockData?.isPartTime ?? false;
-  const skippableBreak = getSkippableBreak(nextAction);
+  // Only lunch can be skipped (see /api/clock/skip), and only when it's next.
+  const skippableBreak = nextAction === 'lunchOut' ? 'lunch' : null;
+  // This employee's breaks, in order (part-time: one break; some take lunch first).
+  const breakOrder = clockData?.breakOrder ?? DEFAULT_BREAK_ORDER;
 
   // Live elapsed timer: time since clock in (comparing PST times)
   const elapsedSinceClockIn = useMemo(() => {
@@ -664,18 +664,22 @@ export default function ClockPage() {
   const timelineSteps: TimelineStep[] = useMemo(() => {
     if (!timeLog) return [];
 
-    const firstBreakDone =
-      (timeLog.firstBreakOut && timeLog.firstBreakIn) || false;
-    const firstBreakOver =
-      firstBreakDone &&
-      durationMs(timeLog.firstBreakOut!, timeLog.firstBreakIn!) > BREAK_LIMIT_MS;
-
-    const secondBreakDone =
-      (timeLog.secondBreakOut && timeLog.secondBreakIn) || false;
-    const secondBreakOver =
-      secondBreakDone &&
-      durationMs(timeLog.secondBreakOut!, timeLog.secondBreakIn!) >
-        BREAK_LIMIT_MS;
+    // One step per break, in this employee's order; only breaks (not lunch)
+    // have the 10-minute limit.
+    const breakSteps: TimelineStep[] = breakOrder.map((kind) => {
+      const out = timeLog[BREAK_PUNCHES[kind].out];
+      const back = timeLog[BREAK_PUNCHES[kind].in];
+      const active = status === BREAK_STATUS[kind];
+      const over = kind !== 'lunch' && !!out && !!back && durationMs(out, back) > BREAK_LIMIT_MS;
+      return {
+        label: BREAK_LABELS[kind],
+        startTime: out,
+        endTime: back,
+        isRange: true,
+        isActive: active,
+        ...(kind !== 'lunch' && { isOverLimit: over || (active && breakExceeded) }),
+      };
+    });
 
     return [
       {
@@ -684,30 +688,7 @@ export default function ClockPage() {
         isRange: false,
         isActive: false,
       },
-      {
-        label: '1st Break',
-        startTime: timeLog.firstBreakOut,
-        endTime: timeLog.firstBreakIn,
-        isRange: true,
-        isActive: status === 'first_break',
-        isOverLimit: firstBreakOver || (status === 'first_break' && breakExceeded),
-      },
-      {
-        label: 'Lunch',
-        startTime: timeLog.lunchOut,
-        endTime: timeLog.lunchIn,
-        isRange: true,
-        isActive: status === 'lunch',
-      },
-      {
-        label: '2nd Break',
-        startTime: timeLog.secondBreakOut,
-        endTime: timeLog.secondBreakIn,
-        isRange: true,
-        isActive: status === 'second_break',
-        isOverLimit:
-          secondBreakOver || (status === 'second_break' && breakExceeded),
-      },
+      ...breakSteps,
       {
         label: 'Clock Out',
         startTime: timeLog.clockOut,
@@ -715,7 +696,7 @@ export default function ClockPage() {
         isActive: false,
       },
     ];
-  }, [timeLog, status, breakExceeded]);
+  }, [timeLog, status, breakExceeded, breakOrder]);
 
   // Handle main action
   async function handleAction() {
@@ -745,8 +726,7 @@ export default function ClockPage() {
     if (!skippableBreak) return;
     try {
       await skipBreak.mutateAsync({ breakType: skippableBreak });
-      const label = skippableBreak === 'firstBreak' ? '1st break' : skippableBreak === 'lunch' ? 'Lunch' : '2nd break';
-      addToast('info', `${label} skipped`);
+      addToast('info', 'Lunch skipped');
     } catch (err: any) {
       addToast('error', err?.message || 'Could not skip break');
     }
@@ -924,8 +904,8 @@ export default function ClockPage() {
                           )}
                         </Button>
 
-                        {/* Skip button: lunch for all users, breaks for part-time only */}
-                        {skippableBreak && (skippableBreak === 'lunch' || isPartTime) && (
+                        {/* Skip button: lunch only — breaks are always taken */}
+                        {skippableBreak && (
                           <Button
                             variant="ghost"
                             size="lg"

@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import type { TimeLogEntry, ClockAction, ClockStatus } from '@/types';
+import type { BreakKind } from '@/lib/clock/break-order';
 
 /* -------------------------------------------------- */
 /*  Types                                              */
@@ -9,8 +10,10 @@ export interface ClockStatusResponse {
   data: TimeLogEntry | null;
   nextAction: ClockAction | null;
   status: ClockStatus;
-  /** True when the signed-in employee is flagged part-time (may skip breaks). */
+  /** True when the signed-in employee is flagged part-time. */
   isPartTime?: boolean;
+  /** The breaks this employee takes today, in order. */
+  breakOrder?: BreakKind[];
 }
 
 export interface ClockActionResponse {

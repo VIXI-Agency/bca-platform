@@ -191,3 +191,51 @@ describe('POST /api/clock/action — guards on paid time', () => {
     expect(create).not.toHaveBeenCalled();
   });
 });
+
+describe('POST /api/clock/action — each employee\'s break order', () => {
+  const clockedIn = {
+    timeLogId: 1, clockIn: t('06:00:00'), firstBreakOut: null, firstBreakIn: null, lunchOut: null,
+    lunchIn: null, secondBreakOut: null, secondBreakIn: null, clockOut: null,
+  };
+  beforeEach(() => {
+    auth.mockResolvedValue({ user: { userId: 9, role: REMOTE_AGENT } });
+    nowPstAsUtc.mockReturnValue(t('09:00:00'));
+  });
+
+  it('lets Janice start lunch before her first break', async () => {
+    userFindUnique.mockResolvedValue({ status: false, isPartTime: false, breakOrder: 'lunch,firstBreak,secondBreak' });
+    findFirst.mockResolvedValue(clockedIn);
+    const res = await post('lunchOut');
+    expect(res.status).toBe(200);
+    expect(update.mock.calls[0][0].data).toEqual({ lunchOut: t('09:00:00') });
+  });
+
+  it('still makes everyone else take their first break before lunch', async () => {
+    userFindUnique.mockResolvedValue({ status: false, isPartTime: false, breakOrder: null });
+    findFirst.mockResolvedValue(clockedIn);
+    expect((await post('lunchOut')).status).toBe(400);
+    expect(update).not.toHaveBeenCalled();
+  });
+
+  it('refuses a lunch for a part-timer', async () => {
+    userFindUnique.mockResolvedValue({ status: false, isPartTime: true, breakOrder: null });
+    findFirst.mockResolvedValue({ ...clockedIn, firstBreakOut: t('08:00:00'), firstBreakIn: t('08:10:00') });
+    const res = await post('lunchOut');
+    expect(res.status).toBe(400);
+    expect((await res.json()).error).toMatch(/not part of your breaks/);
+    expect(update).not.toHaveBeenCalled();
+  });
+
+  it('lets a part-timer clock out right after their one break', async () => {
+    userFindUnique.mockResolvedValue({ status: false, isPartTime: true, breakOrder: null });
+    findFirst.mockResolvedValue({ ...clockedIn, firstBreakOut: t('08:00:00'), firstBreakIn: t('08:10:00') });
+    nowPstAsUtc.mockReturnValue(t('10:00:00'));
+    expect((await post('clockOut')).status).toBe(200);
+  });
+
+  it('does not let a part-timer clock out before taking their break', async () => {
+    userFindUnique.mockResolvedValue({ status: false, isPartTime: true, breakOrder: null });
+    findFirst.mockResolvedValue(clockedIn);
+    expect((await post('clockOut')).status).toBe(400);
+  });
+});

@@ -34,6 +34,8 @@ interface PaymentSummaryProps {
   bonusEntries?: BonusEntry[];
   /** How many accounts / verified leads: printed as "Accounts (4)". */
   bonusCounts?: Partial<Record<CountedBonusField, number | null>>;
+  /** The week's note, printed under the total. */
+  notes?: string | null;
   totalPay: number;
 }
 
@@ -48,10 +50,18 @@ export function PaymentSummary({
   bonusAmounts,
   bonusEntries = [],
   bonusCounts = {},
+  notes,
   totalPay,
 }: PaymentSummaryProps) {
+  const note = notes?.trim();
+  // On paper the note sits beside the totals, in the width their short lines
+  // leave free, so it never adds height to the one-page report.
   return (
-    <div className="space-y-1 border-t pt-4 print:space-y-0 print:pt-[6px]" style={{ borderColor: 'var(--border)' }}>
+    <div
+      className={`border-t pt-4 print:pt-[6px] ${note ? 'print:grid print:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)] print:items-start print:gap-5' : ''}`}
+      style={{ borderColor: 'var(--border)' }}
+    >
+    <div className="space-y-1 print:space-y-0">
       <div className="flex justify-between text-sm print:text-[9.5px]" style={{ color: 'var(--text-secondary)' }}>
         <span>Regular ({hours(totals?.totalHours ?? 0)} × {formatCurrency(payRate!)})</span>
         <span>{formatCurrency(regularPay!)}</span>
@@ -95,6 +105,17 @@ export function PaymentSummary({
         <span>Total Payment</span>
         <span>{formatCurrency(totalPay)}</span>
       </div>
+    </div>
+      {note && (
+        <div className="mt-3 rounded-md border p-3 print:mt-0 print:border-0 print:p-0 print:text-[8px] print:leading-tight" style={{ borderColor: 'var(--border)' }}>
+          <p className="text-xs font-semibold uppercase tracking-wide print:mr-1 print:inline print:text-[7.5px]" style={{ color: 'var(--text-muted)' }}>
+            Notes
+          </p>
+          <p className="mt-1 whitespace-pre-line break-words text-sm print:mt-0 print:inline print:text-[8px] print:leading-tight" style={{ color: 'var(--text-primary)' }}>
+            {note}
+          </p>
+        </div>
+      )}
     </div>
   );
 }

@@ -115,7 +115,8 @@ export interface DisconnectionsResponse {
 export { BONUS_FIELDS, type BonusFieldKey };
 
 /** The bonuses typed as one amount per period (Wheel Spins / CCF Spiffs are dated entries). */
-export type BonusResponse = Record<PeriodBonusField, number | null> & Record<BonusCountKey, number | null>;
+export type BonusResponse = Record<PeriodBonusField, number | null> &
+  Record<BonusCountKey, number | null> & { notes?: string | null };
 
 /** One dated bonus (Wheel Spins, CCF Spiffs). */
 export interface BonusEntry {
@@ -442,7 +443,9 @@ export function useSaveBonus() {
   return useMutation<
     BonusResponse,
     Error,
-    { userId: number; week: string } & Partial<Record<PeriodBonusField | BonusCountKey, number | null>>
+    { userId: number; week: string } & Partial<Record<PeriodBonusField | BonusCountKey, number | null>> & {
+      notes?: string | null;
+    }
   >({
     mutationFn: ({ userId, week, ...fields }) =>
       fetchJson(`/api/admin/time/${userId}/bonus`, {

@@ -8,6 +8,7 @@ import { Loading } from '@/components/ui/loading';
 import type { BonusEntry } from '@/hooks/use-admin-time';
 import {
   BONUS_FIELD_LABELS,
+  BONUS_NOTES_MAX,
   DATED_BONUS_CATEGORIES,
   PERIOD_BONUS_FIELDS,
   isCountedBonus,
@@ -22,6 +23,9 @@ interface BonusEditorProps {
   /** How many accounts / verified leads (printed as "Accounts (4)"). */
   countInputs: Record<CountedBonusField, string>;
   setCountInputs: Dispatch<SetStateAction<Record<CountedBonusField, string>>>;
+  /** The week's note (saved with Save Bonuses, printed on the PDF). */
+  notesInput: string;
+  setNotesInput: (notes: string) => void;
   bonusIsDirty: boolean;
   bonusLoading: boolean;
   handleSaveBonus: () => void;
@@ -44,6 +48,8 @@ export function BonusEditor({
   setBonusInputs,
   countInputs,
   setCountInputs,
+  notesInput,
+  setNotesInput,
   bonusIsDirty,
   bonusLoading,
   handleSaveBonus,
@@ -130,6 +136,27 @@ export function BonusEditor({
             locked={locked}
           />
         ))}
+      </div>
+
+      <div className="space-y-1">
+        <div className="flex items-baseline justify-between gap-2">
+          <Label htmlFor="report-notes" className="text-xs" style={{ color: 'var(--text-secondary)' }}>
+            Notes · printed on the employee&apos;s report
+          </Label>
+          <span className="text-[11px] tabular-nums" style={{ color: 'var(--text-muted)' }}>
+            {notesInput.length} / {BONUS_NOTES_MAX}
+          </span>
+        </div>
+        <textarea
+          id="report-notes"
+          rows={3}
+          maxLength={BONUS_NOTES_MAX}
+          value={notesInput}
+          onChange={(e) => setNotesInput(e.target.value)}
+          placeholder="Anything the employee should know about this week's pay"
+          disabled={bonusLoading}
+          className="w-full resize-y rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--bg-card)] px-3 py-2 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:border-[var(--accent)] focus:outline-none"
+        />
       </div>
     </div>
   );

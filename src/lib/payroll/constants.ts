@@ -46,6 +46,9 @@ export const BONUS_COUNT_KEYS = {
 } as const satisfies Record<CountedBonusField, string>;
 export type BonusCountKey = (typeof BONUS_COUNT_KEYS)[CountedBonusField];
 
+/** Longest note per employee per week (it prints on the one-page PDF). */
+export const BONUS_NOTES_MAX = 500;
+
 export const isCountedBonus = (key: string): key is CountedBonusField =>
   (COUNTED_BONUS_FIELDS as readonly string[]).includes(key);
 

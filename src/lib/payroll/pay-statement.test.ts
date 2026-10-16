@@ -305,6 +305,13 @@ describe('computePayStatement', () => {
     expect(s.bonusTotal).toBe(35); // counts are informational: the amounts are paid
   });
 
+  it('carries the week’s note', async () => {
+    bonusFindUnique.mockResolvedValue({ notes: 'Covered two extra shifts.' });
+    expect((await computePayStatement(USER, PERIOD)).notes).toBe('Covered two extra shifts.');
+    bonusFindUnique.mockResolvedValue(null);
+    expect((await computePayStatement(USER, PERIOD)).notes).toBeNull();
+  });
+
   it('has no count for a counted bonus with no amount', async () => {
     bonusFindUnique.mockResolvedValue({ accounts: null, accountsCount: 4 });
     const s = await computePayStatement(USER, PERIOD);

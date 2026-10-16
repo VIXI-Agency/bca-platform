@@ -268,6 +268,8 @@ export interface PayStatementAmounts {
   bonusAmounts: Record<BonusFieldKey, number>;
   /** How many accounts / verified leads (null when that bonus isn't paid). */
   bonusCounts: Record<CountedBonusField, number | null>;
+  /** The week's note from the Payment Report (printed on the employee's PDF). */
+  notes: string | null;
   bonusTotal: number;
   grossPay: number;
 }
@@ -333,6 +335,7 @@ export async function computePayStatement(userId: number, day: Date): Promise<Pa
     overtimePay,
     bonusAmounts,
     bonusCounts,
+    notes: bonus?.notes ?? null,
     bonusTotal,
     grossPay: round2(regularPay + overtimePay + bonusTotal),
   };

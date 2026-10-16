@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { BREAK_KINDS } from '@/lib/clock/break-order';
 import { PAY_SCHEDULES } from '@/lib/payroll/pay-schedule';
+import { BONUS_NOTES_MAX } from '@/lib/payroll/constants';
 
 // A real YYYY-MM-DD calendar date. The shape check alone let "2026-99-99"
 // through, and Date.UTC silently rolled it over to some other day.
@@ -158,6 +159,14 @@ export const payrollBonusSchema = z.object({
   // How many accounts / verified leads the amount is for ("Accounts (4)").
   accountsCount: bonusCountField,
   verifiedLeadsCount: bonusCountField,
+  // The week's note, printed on the employee's PDF; blank clears it.
+  notes: z
+    .string()
+    .trim()
+    .max(BONUS_NOTES_MAX, `Notes can be up to ${BONUS_NOTES_MAX} characters`)
+    .transform((s) => s || null)
+    .nullable()
+    .optional(),
 });
 
 // Payroll — pay run workflow (approve a period's statements, mark paid, void)

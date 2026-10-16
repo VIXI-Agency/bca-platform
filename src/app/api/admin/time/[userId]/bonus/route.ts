@@ -15,15 +15,17 @@ import {
 
 // One typed amount per period. Wheel Spins and CCF Spiffs are dated entries
 // (see ./bonus-entries); the legacy WheelSpins column is no longer read.
-type BonusAmounts = Record<PeriodBonusField, number | null> & Record<BonusCountKey, number | null>;
+type BonusAmounts = Record<PeriodBonusField, number | null> &
+  Record<BonusCountKey, number | null> & { notes: string | null };
 
 const COUNT_KEYS = COUNTED_BONUS_FIELDS.map((key) => BONUS_COUNT_KEYS[key]);
 
-/** Amounts per category, plus how many accounts / verified leads they're for. */
+/** Amounts per category, how many accounts / verified leads they're for, and the week's note. */
 function toResponse(bonus: Record<string, unknown> | null): BonusAmounts {
   return Object.fromEntries([
     ...PERIOD_BONUS_FIELDS.map((key) => [key, bonus?.[key] != null ? Number(bonus[key]) : null]),
     ...COUNT_KEYS.map((key) => [key, bonus?.[key] != null ? Number(bonus[key]) : null]),
+    ['notes', typeof bonus?.notes === 'string' ? bonus.notes : null],
   ]) as BonusAmounts;
 }
 
@@ -115,6 +117,7 @@ export async function PUT(
     const fieldData = Object.fromEntries([
       ...PERIOD_BONUS_FIELDS.map((key) => [key, fields[key] ?? null]),
       ...COUNT_KEYS.map((key) => [key, fields[key] ?? null]),
+      ['notes', fields.notes ?? null],
     ]);
 
     const bonus = await prisma.payrollBonus.upsert({

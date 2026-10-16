@@ -11,8 +11,10 @@ const entryDelete = vi.fn();
 const userFindUnique = vi.fn();
 
 vi.mock('@/lib/auth', () => ({ auth: async () => session.value }));
+const scheduleFindMany = vi.fn<(...a: unknown[]) => Promise<unknown[]>>(async () => []);
 vi.mock('@/lib/prisma', () => ({
   prisma: {
+    userPaySchedule: { findMany: (...a: unknown[]) => scheduleFindMany(...a) },
     $transaction: (fn: (t: typeof tx) => unknown) => fn(tx),
     payrollBonusEntry: {
       findMany: (...a: unknown[]) => entryFindMany(...a),
@@ -47,6 +49,7 @@ beforeEach(() => {
   tx.payrollBonusEntry.findMany.mockResolvedValue([]);
   tx.payrollBonusEntry.create.mockImplementation(async ({ data }: { data: Record<string, unknown> }) => ({ idEntry: 9, ...data }));
   entryFindMany.mockResolvedValue([]);
+  scheduleFindMany.mockResolvedValue([]);
 });
 
 describe('GET /api/admin/time/[userId]/bonus-entries', () => {
@@ -93,6 +96,14 @@ describe('POST /api/admin/time/[userId]/bonus-entries', () => {
     const res = await post({ category: 'ccfSpiffs', date: '2026-10-13', amount: 5 });
     expect(res.status).toBe(409);
     expect((await res.json()).error).toBe('CCF Spiffs: only one per day.');
+  });
+
+  it('files an In House employee’s bonus under their Monday week', async () => {
+    scheduleFindMany.mockResolvedValue([{ schedule: 'inhouse', effectiveFrom: D('2026-10-12') }]);
+    await post({ category: 'ccfSpiffs', date: '2026-10-15', amount: 5 });
+    const monday = D('2026-10-12');
+    expect(tx.payrollBonusEntry.findMany.mock.calls[0][0].where).toEqual({ idUser: 40, periodStart: monday });
+    expect(tx.payrollBonusEntry.create.mock.calls[0][0].data).toMatchObject({ periodStart: monday });
   });
 
   it('checks the caps against this employee’s entries in this period', async () => {

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useMemo } from 'react';
 import { Clock, ClipboardList, FileText } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Loading } from '@/components/ui/loading';
@@ -10,7 +10,7 @@ import {
   useEditTime,
   type DayLog,
 } from '@/hooks/use-admin-time';
-import { payPeriodOptions } from '@/lib/time';
+import { employeeWeekOptions, weekForOptions } from '../../_lib/week-options';
 import { LockedPeriodNotice } from '../locked-period-notice';
 import { AuditTable } from '../audit-table';
 import { EditTimeSelectors } from './edit-time-selectors';
@@ -27,7 +27,9 @@ export function EditTimeTab() {
   const editMutation = useEditTime();
 
   const [selectedUserId, setSelectedUserId] = useState<string>('');
-  const [selectedWeek, setSelectedWeek] = useState<string>('');
+  // The week as picked; selectedWeek below is that week in this employee's own
+  // pay weeks (Fri–Thu remote, Mon–Fri In House).
+  const [pickedWeek, setSelectedWeek] = useState<string>('');
   const [empSearch, setEmpSearch] = useState('');
 
   // Edit dialog state
@@ -37,16 +39,10 @@ export function EditTimeTab() {
   const [editNewValue, setEditNewValue] = useState('');
   const [editReason, setEditReason] = useState('');
 
-  const weekOptions = useMemo(() => payPeriodOptions(12), []);
-
-  // Default to current week
-  useEffect(() => {
-    if (!selectedWeek && weekOptions.length > 0) {
-      setSelectedWeek(weekOptions[0].value);
-    }
-  }, [weekOptions, selectedWeek]);
-
   const userId = selectedUserId ? parseInt(selectedUserId, 10) : 0;
+  const payScheduleChanges = employees?.find((e) => e.userId === userId)?.payScheduleChanges;
+  const weekOptions = useMemo(() => employeeWeekOptions(payScheduleChanges, 12), [payScheduleChanges]);
+  const selectedWeek = weekForOptions(weekOptions, pickedWeek);
   const {
     data: timesheetData,
     isLoading: timesheetLoading,

@@ -17,7 +17,7 @@ import {
   type DatedBonusCategory,
   type PeriodBonusField,
 } from '@/lib/payroll/constants';
-import { payPeriodOptions } from '@/lib/time';
+import { employeeWeekOptions, weekForOptions } from '../../_lib/week-options';
 import { computeReportTotals, parseCount } from './totals';
 import { nextSeed, type SeedKey } from './seed';
 
@@ -28,7 +28,9 @@ export function usePaymentReport() {
   const saveBonus = useSaveBonus();
 
   const [selectedUserId, setSelectedUserId] = useState<string>('');
-  const [selectedWeek, setSelectedWeek] = useState<string>('');
+  // The week as picked; selectedWeek below is that week in this employee's own
+  // pay weeks (Fri–Thu remote, Mon–Fri In House).
+  const [pickedWeek, setSelectedWeek] = useState<string>('');
   const [empSearch, setEmpSearch] = useState('');
   const [payRateInput, setPayRateInput] = useState('');
   const [otPayRateInput, setOtPayRateInput] = useState('');
@@ -40,24 +42,19 @@ export function usePaymentReport() {
     () => Object.fromEntries(COUNTED_BONUS_FIELDS.map((key) => [key, ''])) as Record<CountedBonusField, string>,
   );
 
-  const weekOptions = useMemo(() => payPeriodOptions(24), []);
-
-  useEffect(() => {
-    if (!selectedWeek && weekOptions.length > 0) {
-      setSelectedWeek(weekOptions[0].value);
-    }
-  }, [weekOptions, selectedWeek]);
-
   const userId = selectedUserId ? parseInt(selectedUserId, 10) : 0;
-  const { data: timesheet, isLoading: timesheetLoading } = useEmployeeTimesheet(userId, selectedWeek);
-  const { data: disconnections, isLoading: disconnectionsLoading } = useDisconnections(userId, selectedWeek);
-  const { data: bonus, isLoading: bonusLoading } = useBonus(userId, selectedWeek);
-  const { data: bonusEntries } = useBonusEntries(userId, selectedWeek);
-
   const employee = useMemo(
     () => employees?.find((e) => e.userId === userId),
     [employees, userId],
   );
+  const payScheduleChanges = employee?.payScheduleChanges;
+  const weekOptions = useMemo(() => employeeWeekOptions(payScheduleChanges, 24), [payScheduleChanges]);
+  const selectedWeek = weekForOptions(weekOptions, pickedWeek);
+
+  const { data: timesheet, isLoading: timesheetLoading } = useEmployeeTimesheet(userId, selectedWeek);
+  const { data: disconnections, isLoading: disconnectionsLoading } = useDisconnections(userId, selectedWeek);
+  const { data: bonus, isLoading: bonusLoading } = useBonus(userId, selectedWeek);
+  const { data: bonusEntries } = useBonusEntries(userId, selectedWeek);
 
   // Fill the editors from saved values once per selection — never again on a
   // refetch of the same selection (after Save, for one), which used to

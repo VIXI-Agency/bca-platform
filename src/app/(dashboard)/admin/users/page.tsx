@@ -49,6 +49,7 @@ import {
 } from '@/hooks/use-users';
 import type { BreakKind } from '@/lib/clock/break-order';
 import { BreakOrderEditor } from './_components/break-order-editor';
+import { PayWeekSection } from './_components/pay-week-section';
 
 const ROLES: { value: number; label: string }[] = [
   { value: 1, label: 'Admin' },
@@ -666,6 +667,8 @@ export default function UsersPage() {
               isPartTime={form.isPartTime}
               onChange={(breakOrder) => setForm((prev) => ({ ...prev, breakOrder }))}
             />
+
+            {editingUser && <PayWeekSection userId={editingUser.userId} />}
 
             <div className="flex items-center justify-between rounded-lg border border-[var(--border)] p-4">
               <div>

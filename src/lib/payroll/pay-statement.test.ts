@@ -6,6 +6,7 @@ const userFindUnique = vi.fn();
 const bonusFindUnique = vi.fn();
 const payRunFindUnique = vi.fn();
 const bonusEntryFindMany = vi.fn();
+const scheduleFindMany = vi.fn();
 
 vi.mock('@/lib/prisma', () => ({
   prisma: {
@@ -15,6 +16,7 @@ vi.mock('@/lib/prisma', () => ({
     payrollBonus: { findUnique: (...a: unknown[]) => bonusFindUnique(...a) },
     payRun: { findUnique: (...a: unknown[]) => payRunFindUnique(...a) },
     payrollBonusEntry: { findMany: (...a: unknown[]) => bonusEntryFindMany(...a) },
+    userPaySchedule: { findMany: (...a: unknown[]) => scheduleFindMany(...a) },
   },
 }));
 
@@ -68,6 +70,37 @@ beforeEach(() => {
   userFindUnique.mockResolvedValue({ payRate: '15.00', otPayRate: '22.50' });
   bonusFindUnique.mockResolvedValue(null);
   bonusEntryFindMany.mockResolvedValue([]);
+  scheduleFindMany.mockResolvedValue([]);
+});
+
+describe('In House pay week', () => {
+  // Trini: remote until In House starts Mon 10/19. She works Fri 10/16 and Mon–Fri 10/19–10/23.
+  const TRINI_DAYS = ['2026-10-16', '2026-10-19', '2026-10-20', '2026-10-21', '2026-10-22', '2026-10-23'];
+  beforeEach(() => {
+    scheduleFindMany.mockResolvedValue([{ schedule: 'inhouse', effectiveFrom: day('2026-10-19') }]);
+    setLogs(TRINI_DAYS.map((d) => log(d)));
+  });
+
+  it('pays Fri 10/16 on its own in the last remote week', async () => {
+    const s = await computePayStatement(USER, day('2026-10-16'));
+    expect(s.regularHours).toBe(8);
+  });
+
+  it('pays Mon–Fri 10/19–10/23 in the first In House week, Friday included', async () => {
+    const s = await computePayStatement(USER, day('2026-10-19'));
+    expect(s.regularHours).toBe(40);
+  });
+
+  it('never pays a day twice across the switch', async () => {
+    const before = await computePeriodHours(USER, day('2026-10-16'));
+    const after = await computePeriodHours(USER, day('2026-10-19'));
+    expect(before.totalHours + after.totalHours).toBe(TRINI_DAYS.length * 8);
+  });
+
+  it('reads bonuses stored under the Monday the In House week starts on', async () => {
+    await computePayStatement(USER, day('2026-10-21'));
+    expect(bonusFindUnique.mock.calls[0][0].where.idUser_periodStart.periodStart).toEqual(day('2026-10-19'));
+  });
 });
 
 describe('computePeriodHours', () => {

@@ -2,7 +2,8 @@ import { NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { clockWeekSchema } from '@/lib/validators';
-import { getPayPeriodEnd, getPayPeriodWorkDates, resolvePayPeriodStart } from '@/lib/time';
+import { resolveUserPeriod } from '@/lib/payroll/pay-schedule-db';
+import { periodLabel, periodWorkDates } from '@/lib/payroll/pay-schedule';
 import { computeDayMetrics, disconnectionKey, fetchDisconnectionWindows } from '@/lib/payroll/compute';
 import { toAuditDtos, fetchDisconnectionAudits } from '@/lib/admin-time/audit-dto';
 
@@ -36,9 +37,9 @@ export async function GET(
       );
     }
 
-    // Pay period Friday, and the next Friday (exclusive) → covers Fri–Thu
-    const periodStart = resolvePayPeriodStart(parsed.data.week);
-    const weekEnd = getPayPeriodEnd(periodStart);
+    // This employee's own pay period: Fri–Thu remote, Mon–Fri In House.
+    const period = await resolveUserPeriod(targetUserId, parsed.data.week);
+    const { start: periodStart, end: weekEnd } = period;
 
     // Fetch time logs, audit trail and disconnections in parallel
     const [logs, audits, user, disconnections, payRun] = await Promise.all([
@@ -142,7 +143,7 @@ export async function GET(
     // never clocked (e.g. forgot to clock in entirely); the edit endpoint
     // creates the log on first save.
     const byDate = new Map(transformedDays.map((d) => [d.date, d]));
-    const fullWeek = getPayPeriodWorkDates(periodStart).map((date) => {
+    const fullWeek = periodWorkDates(period).map((date) => {
       return (
         byDate.get(date) ?? {
           date,
@@ -178,6 +179,8 @@ export async function GET(
       audits: transformedAudits,
       employee: user,
       weekStart: periodStart.toISOString().split('T')[0],
+      paySchedule: period.schedule,
+      periodLabel: periodLabel(period),
       weekEnd: new Date(weekEnd.getTime() - 1).toISOString().split('T')[0],
       weekTotals,
       payRunStatus: payRun?.status ?? null,

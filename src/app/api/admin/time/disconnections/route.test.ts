@@ -19,7 +19,7 @@ vi.mock('@/lib/prisma', () => ({
     employeeDisconnection: { findUnique: (...a: unknown[]) => disconnectionFindUnique(...a) },
   },
 }));
-vi.mock('@/lib/payroll/compute', () => ({ isPeriodLocked: async () => locked.value }));
+vi.mock('@/lib/payroll/compute', () => ({ isPeriodLocked: async () => locked.value, isDayLocked: async () => locked.value }));
 vi.mock('@/lib/time', async () => ({
   ...(await vi.importActual<typeof import('@/lib/time')>('@/lib/time')),
   getTodayRangePST: () => ({ todayStart: today, todayEnd: new Date(today.getTime() + 86_400_000) }),

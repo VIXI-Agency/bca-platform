@@ -195,6 +195,20 @@ node prisma/seed-scrape-catalog.mjs --source ../Scraper --apply
 
 Without it `/admin/find-leads` renders no industries or states.
 
+## Pay weeks: Remote vs In House
+
+Remote employees are paid **Friday–Thursday**; In House employees
+**Monday–Friday**. `UserPaySchedule` holds each employee's changes (no rows =
+remote). A switch starts on its week's first day and cuts the previous week
+short (switching on Mon 10/19 leaves Fri 10/16 as a one-day remote week), so no
+day is ever in two pay periods. Never compute a period with `getPayPeriodStart`
+for pay: use `src/lib/payroll/pay-schedule-db.ts` (`resolveUserPeriod`,
+`userPeriodContaining`, `isDayLocked`). Payroll runs one group at a time: a
+Friday PayRun is the remote payroll, a Monday one the In House payroll.
+Time History and the Audit Log's "All Employees" view stay on Friday weeks.
+The table comes from `prisma/migrations/20261016_user_pay_schedule.sql`
+(hand-applied like every migration here; safe to re-run).
+
 ## Lead pool: how a lead becomes uncallable
 
 `CallStatus` is the lookup: 1 On Call, 2 Done, 3 Available, 4 Disabled,

@@ -25,6 +25,7 @@ vi.mock('@/lib/prisma', () => ({
     user: { findUnique: (...a: unknown[]) => userFindUnique(...a) },
     payrollBonus: { findUnique: (...a: unknown[]) => bonusFindUnique(...a) },
     payrollBonusEntry: { findMany: (...a: unknown[]) => bonusEntryFindMany(...a) },
+    userPaySchedule: { findMany: () => Promise.resolve([]) },
   },
 }));
 

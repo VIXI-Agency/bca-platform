@@ -3,7 +3,8 @@ import { z } from 'zod';
 import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { clockWeekSchema } from '@/lib/validators';
-import { getPayPeriodStart, getTodayRangePST, resolvePayPeriodStart } from '@/lib/time';
+import { getTodayRangePST } from '@/lib/time';
+import { resolveUserPeriod, userPeriodContaining } from '@/lib/payroll/pay-schedule-db';
 import { isPeriodLocked } from '@/lib/payroll/compute';
 import { DATED_BONUS_CATEGORIES, datedBonusRuleError } from '@/lib/payroll/constants';
 import { dayFromString } from '@/lib/admin-time/disconnections';
@@ -49,7 +50,7 @@ export async function GET(request: Request, { params }: Params) {
     if (!parsed.success) {
       return NextResponse.json({ error: 'Invalid week parameter' }, { status: 400 });
     }
-    const periodStart = resolvePayPeriodStart(parsed.data.week);
+    const { start: periodStart } = await resolveUserPeriod(g.userId, parsed.data.week);
 
     const rows = await prisma.payrollBonusEntry.findMany({
       where: { idUser: g.userId, periodStart },
@@ -96,7 +97,8 @@ export async function POST(request: Request, { params }: Params) {
       return NextResponse.json({ error: 'A bonus can’t be added for a future day.' }, { status: 400 });
     }
 
-    const periodStart = getPayPeriodStart(day);
+    // Caps (2 Wheel Spins, 5 CCF Spiffs) count within this employee's own pay period.
+    const { start: periodStart } = await userPeriodContaining(g.userId, day);
     if (await isPeriodLocked(periodStart)) {
       return NextResponse.json(
         { error: 'This pay period has been approved or paid and can no longer be edited.' },

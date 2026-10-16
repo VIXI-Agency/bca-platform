@@ -390,6 +390,21 @@ model PayRateHistory {
   @@schema("benjaise_sqluser2")
 }
 
+// Which pay week an employee is on from EffectiveFrom on: 'remote' (Fri–Thu)
+// or 'inhouse' (Mon–Fri). No rows = remote. See src/lib/payroll/pay-schedule.ts.
+model UserPaySchedule {
+  idUserPaySchedule Int      @id @default(autoincrement()) @map("IdUserPaySchedule")
+  idUser            Int      @map("IdUser")
+  schedule          String   @map("Schedule") @db.NVarChar(10)
+  effectiveFrom     DateTime @map("EffectiveFrom") @db.Date
+  changedBy         String?  @map("ChangedBy") @db.NVarChar(50)
+  changedAt         DateTime @default(now()) @map("ChangedAt")
+
+  @@unique([idUser, effectiveFrom], map: "UQ_UserPaySchedule_User_Date")
+  @@map("UserPaySchedule")
+  @@schema("benjaise_sqluser2")
+}
+
 model Video {
   videoId       Int     @id @map("VideoId")
   videoTitle    String  @map("VideoTitle")

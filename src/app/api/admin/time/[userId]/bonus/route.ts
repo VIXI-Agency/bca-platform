@@ -2,7 +2,8 @@ import { NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { clockWeekSchema, payrollBonusSchema } from '@/lib/validators';
-import { getPayPeriodStart, parseDateParam, resolvePayPeriodStart } from '@/lib/time';
+import { parseDateParam } from '@/lib/time';
+import { resolveUserPeriod, userPeriodContaining } from '@/lib/payroll/pay-schedule-db';
 import { isPeriodLocked } from '@/lib/payroll/compute';
 import {
   BONUS_COUNT_KEYS,
@@ -56,7 +57,8 @@ export async function GET(
       );
     }
 
-    const periodStart = resolvePayPeriodStart(parsed.data.week);
+    // Stored under the start of this employee's own pay period.
+    const { start: periodStart } = await resolveUserPeriod(targetUserId, parsed.data.week);
 
     const bonus = await prisma.payrollBonus.findUnique({
       where: { idUser_periodStart: { idUser: targetUserId, periodStart } },
@@ -101,7 +103,7 @@ export async function PUT(
     }
 
     const { period, ...fields } = parsed.data;
-    const periodStart = getPayPeriodStart(parseDateParam(period));
+    const { start: periodStart } = await userPeriodContaining(targetUserId, parseDateParam(period));
 
     if (await isPeriodLocked(periodStart)) {
       return NextResponse.json(

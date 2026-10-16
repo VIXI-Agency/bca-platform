@@ -2,6 +2,7 @@
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import type { PaymentMethod } from '@/lib/payroll/constants';
+import type { PaySchedule } from '@/lib/payroll/pay-schedule';
 import { invalidatePayData } from './invalidate-pay-data';
 
 export interface PayStatementRow {
@@ -74,10 +75,11 @@ async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
   return res.json();
 }
 
-export function usePayRun(week: string) {
+/** One week's payroll for one group: remote (Fri–Thu) or In House (Mon–Fri). */
+export function usePayRun(week: string, group: PaySchedule = 'remote') {
   return useQuery<PayRunResponse>({
-    queryKey: ['payroll-run', week],
-    queryFn: () => fetchJson<PayRunResponse>(`/api/admin/payroll/runs?week=${week}`),
+    queryKey: ['payroll-run', week, group],
+    queryFn: () => fetchJson<PayRunResponse>(`/api/admin/payroll/runs?week=${week}&group=${group}`),
     enabled: !!week,
   });
 }
@@ -87,7 +89,7 @@ export function useApprovePayRun() {
   return useMutation<
     { success: boolean; runId: number },
     Error,
-    { period: string; scheduledPayDate?: string; notes?: string }
+    { period: string; group: PaySchedule; scheduledPayDate?: string; notes?: string }
   >({
     mutationFn: (payload) =>
       fetchJson('/api/admin/payroll/runs', {

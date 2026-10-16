@@ -1,5 +1,5 @@
 import { prisma } from '@/lib/prisma';
-import { getPayPeriodEnd } from '@/lib/time';
+import { userPeriodContaining } from './pay-schedule-db';
 import {
   BONUS_COUNT_KEYS,
   BONUS_FIELDS,
@@ -219,9 +219,19 @@ export interface PeriodHours {
   disconnectedMinutes: number;
 }
 
-/** Sums computeDayMetrics across every weekday log in [periodStart, periodStart+7). */
-export async function computePeriodHours(userId: number, periodStart: Date): Promise<PeriodHours> {
-  const periodEnd = getPayPeriodEnd(periodStart);
+/**
+ * Sums computeDayMetrics across every weekday log in the employee's own pay
+ * period containing `day` (Fri–Thu remote, Mon–Fri In House, or a week cut
+ * short by a switch between them).
+ */
+export async function computePeriodHours(userId: number, day: Date): Promise<PeriodHours> {
+  return hoursInPeriod(userId, await userPeriodContaining(userId, day));
+}
+
+async function hoursInPeriod(
+  userId: number,
+  { start: periodStart, end: periodEnd }: { start: Date; end: Date },
+): Promise<PeriodHours> {
 
   const [logs, disconnections] = await Promise.all([
     prisma.employeeTimeLog.findMany({
@@ -267,9 +277,12 @@ export interface PayStatementAmounts {
  * OT, and each bonus category. This is what the live Payment Report preview
  * shows, and what gets snapshotted into a PayStatement on approval.
  */
-export async function computePayStatement(userId: number, periodStart: Date): Promise<PayStatementAmounts> {
+export async function computePayStatement(userId: number, day: Date): Promise<PayStatementAmounts> {
+  // Bonuses are stored under the start of the employee's own period.
+  const period = await userPeriodContaining(userId, day);
+  const periodStart = period.start;
   const [hours, user, bonus, entries] = await Promise.all([
-    computePeriodHours(userId, periodStart),
+    hoursInPeriod(userId, period),
     prisma.user.findUnique({
       where: { idUser: userId },
       select: { payRate: true, otPayRate: true },
@@ -335,4 +348,9 @@ export async function isPeriodLocked(periodStart: Date): Promise<boolean> {
     select: { status: true },
   });
   return run?.status === 'approved' || run?.status === 'paid';
+}
+
+/** True when the employee's own pay period containing `day` is locked. */
+export async function isDayLocked(userId: number, day: Date): Promise<boolean> {
+  return isPeriodLocked((await userPeriodContaining(userId, day)).start);
 }

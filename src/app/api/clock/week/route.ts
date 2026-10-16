@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { clockWeekSchema } from '@/lib/validators';
-import { getPayPeriodEnd, resolvePayPeriodStart } from '@/lib/time';
+import { resolveUserPeriod } from '@/lib/payroll/pay-schedule-db';
 import { computeDayMetrics, disconnectionKey, fetchDisconnectionWindows } from '@/lib/payroll/compute';
 
 export async function GET(request: Request) {
@@ -23,9 +23,8 @@ export async function GET(request: Request) {
       );
     }
 
-    // Pay period Friday, and the next Friday (exclusive) → covers Fri–Thu
-    const periodStart = resolvePayPeriodStart(parsed.data.week);
-    const weekEnd = getPayPeriodEnd(periodStart);
+    // The employee's own pay period: Fri–Thu remote, Mon–Fri In House.
+    const { start: periodStart, end: weekEnd } = await resolveUserPeriod(userId, parsed.data.week);
 
     // Fetch all logs and disconnections for this pay period
     const [logs, disconnections] = await Promise.all([

@@ -2,8 +2,8 @@ import { NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { timeEditSchema } from '@/lib/validators';
-import { timeStringToUtcDate, getPayPeriodStart, addDaysUTC } from '@/lib/time';
-import { isPeriodLocked } from '@/lib/payroll/compute';
+import { timeStringToUtcDate, addDaysUTC } from '@/lib/time';
+import { isDayLocked } from '@/lib/payroll/compute';
 import { breakOrderFor, punchOrderError } from '@/lib/clock/break-order';
 import type { ClockAction } from '@/types';
 
@@ -68,7 +68,7 @@ export async function POST(request: Request) {
     const targetDate = new Date(Date.UTC(dateParts[0], dateParts[1] - 1, dateParts[2]));
     const targetDateEnd = addDaysUTC(targetDate, 1);
 
-    if (await isPeriodLocked(getPayPeriodStart(targetDate))) {
+    if (await isDayLocked(userId, targetDate)) {
       return NextResponse.json(
         { error: 'This pay period has been approved or paid and can no longer be edited.' },
         { status: 409 }

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
+import { payScheduleHistories } from '@/lib/payroll/pay-schedule-db';
 
 export async function GET() {
   try {
@@ -32,6 +33,9 @@ export async function GET() {
       orderBy: [{ name: 'asc' }, { lastname: 'asc' }],
     });
 
+    // Pay-week changes, so the pickers can list each employee's own weeks.
+    const histories = await payScheduleHistories(employees.map((e) => e.idUser));
+
     const data = employees.map((emp) => ({
       userId: emp.idUser,
       name: `${emp.name ?? ''} ${emp.lastname ?? ''}`.trim(),
@@ -40,6 +44,10 @@ export async function GET() {
       isPartTime: emp.isPartTime,
       payRate: emp.payRate ? Number(emp.payRate) : null,
       otPayRate: emp.otPayRate ? Number(emp.otPayRate) : null,
+      payScheduleChanges: (histories.get(emp.idUser) ?? []).map((c) => ({
+        schedule: c.schedule,
+        effectiveFrom: c.effectiveFrom.toISOString().slice(0, 10),
+      })),
     }));
 
     return NextResponse.json({ data });

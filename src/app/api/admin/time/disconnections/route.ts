@@ -1,8 +1,8 @@
 import { NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
-import { getPayPeriodStart, getTodayRangePST, timeStringToUtcDate } from '@/lib/time';
-import { isPeriodLocked } from '@/lib/payroll/compute';
+import { getTodayRangePST, timeStringToUtcDate } from '@/lib/time';
+import { isDayLocked } from '@/lib/payroll/compute';
 import {
   addDisconnectionSchema,
   dayFromString,
@@ -45,7 +45,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'A disconnection can’t be recorded for a future day.' }, { status: 400 });
     }
 
-    if (await isPeriodLocked(getPayPeriodStart(day))) {
+    if (await isDayLocked(userId, day)) {
       return NextResponse.json(
         { error: 'This pay period has been approved or paid and can no longer be edited.' },
         { status: 409 },

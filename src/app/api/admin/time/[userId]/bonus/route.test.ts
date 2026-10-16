@@ -5,8 +5,10 @@ const findUnique = vi.fn();
 const upsert = vi.fn();
 
 vi.mock('@/lib/auth', () => ({ auth: async () => session.value }));
+const scheduleFindMany = vi.fn<(...a: unknown[]) => Promise<unknown[]>>(async () => []);
 vi.mock('@/lib/prisma', () => ({
   prisma: {
+    userPaySchedule: { findMany: (...a: unknown[]) => scheduleFindMany(...a) },
     payrollBonus: {
       findUnique: (...a: unknown[]) => findUnique(...a),
       upsert: (...a: unknown[]) => upsert(...a),

@@ -3,14 +3,10 @@ import { Prisma } from '@prisma/client';
 import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { clockWeekSchema, payRunApproveSchema } from '@/lib/validators';
-import {
-  getPayPeriodStart,
-  getPayPeriodEnd,
-  getTodayRangePST,
-  parseDateParam,
-  resolvePayPeriodStart,
-} from '@/lib/time';
+import { addDaysUTC, getPayPeriodEnd, getTodayRangePST, parseDateParam } from '@/lib/time';
 import { computePayStatement, type PayStatementAmounts } from '@/lib/payroll/compute';
+import { payScheduleHistories } from '@/lib/payroll/pay-schedule-db';
+import { PAY_SCHEDULES, scheduleOn, weekStart, type PaySchedule } from '@/lib/payroll/pay-schedule';
 import { BONUS_FIELDS, BONUS_FIELD_LABELS, isCountedBonus } from '@/lib/payroll/constants';
 
 const isoDate = (d: Date) => d.toISOString().split('T')[0];
@@ -18,15 +14,17 @@ const isoDate = (d: Date) => d.toISOString().split('T')[0];
 /**
  * Everyone on this period's payroll: active employees, plus anyone who
  * logged time in the period and has since been deactivated — they are
- * still owed for the days they worked (e.g. a final paycheck).
+ * still owed for the days they worked (e.g. a final paycheck). Only those
+ * on this group's pay week when it starts: remote employees are on the
+ * Friday payroll, In House employees on the Monday one.
  */
-async function payrollEmployees(periodStart: Date, periodEnd: Date) {
+async function payrollEmployees(periodStart: Date, periodEnd: Date, group: PaySchedule) {
   const worked = await prisma.employeeTimeLog.findMany({
     where: { logDate: { gte: periodStart, lt: periodEnd } },
     select: { idUser: true },
     distinct: ['idUser'],
   });
-  return prisma.user.findMany({
+  const users = await prisma.user.findMany({
     where: {
       OR: [
         { OR: [{ status: null }, { status: false }], idRole: { in: [1, 2, 3] } },
@@ -36,7 +34,13 @@ async function payrollEmployees(periodStart: Date, periodEnd: Date) {
     select: { idUser: true, name: true, lastname: true },
     orderBy: [{ name: 'asc' }, { lastname: 'asc' }],
   });
+  const histories = await payScheduleHistories(users.map((u) => u.idUser));
+  return users.filter((u) => scheduleOn(histories.get(u.idUser) ?? [], periodStart) === group);
 }
+
+/** The `group` query param: which payroll (remote unless asked for In House). */
+const groupParam = (value: string | null): PaySchedule | null =>
+  value == null ? 'remote' : (PAY_SCHEDULES as readonly string[]).includes(value) ? (value as PaySchedule) : null;
 
 /** A period can be approved once it is over: on its closing Friday or later (Pacific). */
 function periodHasEnded(periodEnd: Date): boolean {
@@ -62,12 +66,18 @@ export async function GET(request: Request) {
         { status: 400 }
       );
     }
-    const periodStart = resolvePayPeriodStart(parsed.data.week);
+    const group = groupParam(searchParams.get('group'));
+    if (!group) {
+      return NextResponse.json({ error: 'Invalid group' }, { status: 400 });
+    }
+    const day = parsed.data.week ? parseDateParam(parsed.data.week) : getTodayRangePST().todayStart;
+    const periodStart = weekStart(group, day);
     const periodEnd = getPayPeriodEnd(periodStart);
     const periodInfo = {
+      group,
       periodStart: isoDate(periodStart),
-      // Stored/computed end is exclusive (next Friday); show Thursday.
-      periodEnd: isoDate(new Date(periodEnd.getTime() - 1)),
+      // Last workday: Thursday for remote, Friday for In House.
+      periodEnd: isoDate(addDaysUTC(periodStart, group === 'inhouse' ? 4 : 6)),
       periodEnded: periodHasEnded(periodEnd),
     };
 
@@ -108,7 +118,7 @@ export async function GET(request: Request) {
       });
     }
 
-    const employees = await payrollEmployees(periodStart, periodEnd);
+    const employees = await payrollEmployees(periodStart, periodEnd, group);
     const statements = await Promise.all(
       employees.map(async (emp) => {
         const amounts = await computePayStatement(emp.idUser, periodStart);
@@ -190,8 +200,8 @@ export async function POST(request: Request) {
       );
     }
 
-    const { period, scheduledPayDate, notes } = parsed.data;
-    const periodStart = getPayPeriodStart(parseDateParam(period));
+    const { period, group, scheduledPayDate, notes } = parsed.data;
+    const periodStart = weekStart(group, parseDateParam(period));
     const periodEnd = getPayPeriodEnd(periodStart);
 
     // Approving locks the period. Done mid-week, the snapshot would miss the
@@ -209,7 +219,7 @@ export async function POST(request: Request) {
     // Compute every statement first (reads only), then write everything in
     // one transaction, so a failure part-way can't leave an approved — and
     // therefore locked — period with only some employees snapshotted.
-    const employees = await payrollEmployees(periodStart, periodEnd);
+    const employees = await payrollEmployees(periodStart, periodEnd, group);
     const computed = await Promise.all(
       employees.map(async (emp) => ({ emp, amounts: await computePayStatement(emp.idUser, periodStart) })),
     );

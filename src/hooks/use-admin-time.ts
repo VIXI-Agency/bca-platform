@@ -9,6 +9,7 @@ import {
   type PeriodBonusField,
 } from '@/lib/payroll/constants';
 import { invalidatePayData } from './invalidate-pay-data';
+import type { PayScheduleChangeDto } from '@/app/(dashboard)/admin/time/_lib/week-options';
 
 /* -------------------------------------------------- */
 /*  Types                                              */
@@ -46,6 +47,8 @@ export interface Employee {
   isPartTime: boolean;
   payRate: number | null;
   otPayRate: number | null;
+  /** Pay-week changes: none = remote (Fri–Thu); see src/lib/payroll/pay-schedule.ts. */
+  payScheduleChanges?: PayScheduleChangeDto[];
 }
 
 export interface DayLog {

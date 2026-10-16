@@ -44,7 +44,8 @@ import {
   type PayStatementRow,
 } from '@/hooks/use-payroll';
 import { PAYMENT_METHODS, PAYMENT_METHOD_LABELS, type PaymentMethod } from '@/lib/payroll/constants';
-import { payPeriodOptions } from '@/lib/time';
+import { PAY_SCHEDULES, PAY_SCHEDULE_LABELS, groupWeekOptions, type PaySchedule } from '@/lib/payroll/pay-schedule';
+import { weekForOptions } from '../time/_lib/week-options';
 import { formatCurrency } from '@/lib/utils';
 
 /* -------------------------------------------------- */
@@ -132,7 +133,9 @@ export default function AdminPayrollPage() {
 /* -------------------------------------------------- */
 
 function PayRunTab({ canManage }: { canManage: boolean }) {
-  const [selectedWeek, setSelectedWeek] = useState('');
+  // Remote employees are paid Fri–Thu, In House Mon–Fri: each is its own payroll.
+  const [group, setGroup] = useState<PaySchedule>('remote');
+  const [pickedWeek, setSelectedWeek] = useState('');
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [payDialogOpen, setPayDialogOpen] = useState(false);
   const [voidDialogOpen, setVoidDialogOpen] = useState(false);
@@ -142,18 +145,20 @@ function PayRunTab({ canManage }: { canManage: boolean }) {
   const [paidDate, setPaidDate] = useState(() => localDateISO(new Date()));
   const [voidReason, setVoidReason] = useState('');
 
-  const weekOptions = useMemo(() => payPeriodOptions(24), []);
-  useEffect(() => {
-    if (!selectedWeek && weekOptions.length > 0) setSelectedWeek(weekOptions[0].value);
-  }, [weekOptions, selectedWeek]);
+  const weekOptions = useMemo(() => {
+    const today = new Date();
+    return groupWeekOptions(group, 24, new Date(Date.UTC(today.getFullYear(), today.getMonth(), today.getDate())));
+  }, [group]);
+  // Switching groups keeps the same calendar week (its Friday or Monday).
+  const selectedWeek = weekForOptions(weekOptions, pickedWeek);
 
-  const { data, isLoading, isError, error: loadError } = usePayRun(selectedWeek);
+  const { data, isLoading, isError, error: loadError } = usePayRun(selectedWeek, group);
   const approve = useApprovePayRun();
   const markPaid = useMarkStatementsPaid();
   const voidRun = useVoidPayRun();
 
   // Selection doesn't carry over across periods or re-fetches.
-  useEffect(() => setSelected(new Set()), [selectedWeek, data?.run.status]);
+  useEffect(() => setSelected(new Set()), [selectedWeek, group, data?.run.status]);
 
   function navigateWeek(direction: -1 | 1) {
     const idx = weekOptions.findIndex((w) => w.value === selectedWeek);
@@ -192,7 +197,7 @@ function PayRunTab({ canManage }: { canManage: boolean }) {
   // mutation's own error state.
   async function handleApprove() {
     try {
-      await approve.mutateAsync({ period: selectedWeek });
+      await approve.mutateAsync({ period: selectedWeek, group });
       setApproveDialogOpen(false);
     } catch {
       /* shown from approve.error */
@@ -238,6 +243,22 @@ function PayRunTab({ canManage }: { canManage: boolean }) {
       <Card>
         <CardContent className="py-4">
           <div className="flex flex-wrap items-end justify-between gap-4">
+            <div className="space-y-2">
+              <Label>Payroll</Label>
+              <div className="flex gap-1" role="group" aria-label="Payroll group">
+                {PAY_SCHEDULES.map((g) => (
+                  <Button
+                    key={g}
+                    variant={group === g ? 'default' : 'outline'}
+                    className="h-10"
+                    aria-pressed={group === g}
+                    onClick={() => setGroup(g)}
+                  >
+                    {PAY_SCHEDULE_LABELS[g]}
+                  </Button>
+                ))}
+              </div>
+            </div>
             <div className="min-w-[280px] space-y-2">
               <Label>Pay Period</Label>
               <div className="flex items-center gap-1">

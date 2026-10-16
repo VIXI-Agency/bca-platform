@@ -1,8 +1,8 @@
 import { NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
-import { getPayPeriodStart, timeStringToUtcDate } from '@/lib/time';
-import { isPeriodLocked } from '@/lib/payroll/compute';
+import { timeStringToUtcDate } from '@/lib/time';
+import { isDayLocked } from '@/lib/payroll/compute';
 import {
   editDisconnectionSchema,
   removeDisconnectionSchema,
@@ -34,7 +34,7 @@ async function load(params: Params['params']) {
     return { error: NextResponse.json({ error: 'Disconnection not found' }, { status: 404 }) };
   }
 
-  if (await isPeriodLocked(getPayPeriodStart(row.disconnectionDate))) {
+  if (await isDayLocked(row.idUser, row.disconnectionDate)) {
     return { error: NextResponse.json({ error: LOCKED }, { status: 409 }) };
   }
 

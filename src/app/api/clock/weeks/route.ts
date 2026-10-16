@@ -1,6 +1,11 @@
 import { NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
-import { getTodayRangePST, getPayPeriodStart } from '@/lib/time';
+import { getTodayRangePST } from '@/lib/time';
+import { payScheduleHistory } from '@/lib/payroll/pay-schedule-db';
+import { periodOptions } from '@/lib/payroll/pay-schedule';
+
+/** About 24 months of weekly pay periods. */
+const WEEKS_SHOWN = 104;
 
 export async function GET() {
   try {
@@ -9,26 +14,14 @@ export async function GET() {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
+    // The signed-in employee's own pay periods, newest first: Fri–Thu for
+    // remote, Mon–Fri for In House (see src/lib/payroll/pay-schedule.ts).
+    const userId = (session.user as { userId: number }).userId;
     const { todayStart } = getTodayRangePST();
-    const currentPeriodStart = getPayPeriodStart(todayStart);
-
-    // Generate pay period start dates (Fridays) for the last ~24 months.
-    // periodStart/endDate are UTC-midnight instants — use the UTC getters/setters
-    // and format with timeZone: 'UTC' throughout, so the label doesn't shift by a
-    // day on a server whose local timezone isn't UTC (a UTC-midnight timestamp
-    // falls in the *previous* local calendar day west of Greenwich).
-    const weeks: { date: string; label: string }[] = [];
-    const maxWeeks = 24 * 4.33; // Approximately 24 months of weeks (~104 weeks)
-    const tempDate = new Date(currentPeriodStart);
-
-    for (let i = 0; i < Math.ceil(maxWeeks); i++) {
-      const dateStr = tempDate.toISOString().split('T')[0];
-      const endDate = new Date(tempDate);
-      endDate.setUTCDate(endDate.getUTCDate() + 6); // Friday + 6 = Thursday
-      const label = `${tempDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' })} - ${endDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' })}`;
-      weeks.push({ date: dateStr, label });
-      tempDate.setUTCDate(tempDate.getUTCDate() - 7);
-    }
+    const weeks = periodOptions(await payScheduleHistory(userId), WEEKS_SHOWN, todayStart).map((o) => ({
+      date: o.value,
+      label: o.label,
+    }));
 
     return NextResponse.json({ data: weeks });
   } catch (error) {

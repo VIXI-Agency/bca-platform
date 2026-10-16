@@ -11,6 +11,8 @@ const transaction = vi.fn(async (fn: (t: typeof tx) => unknown) => fn(tx));
 const workedFindMany = vi.fn();
 const usersFindMany = vi.fn();
 const computePayStatement = vi.fn();
+const scheduleFindMany = vi.fn();
+const runFindUnique = vi.fn<(...a: unknown[]) => Promise<unknown>>(async () => null);
 
 vi.mock('@/lib/auth', () => ({ auth: async () => ({ user: { role: 1, userId: 1 } }) }));
 vi.mock('@/lib/prisma', () => ({
@@ -18,6 +20,8 @@ vi.mock('@/lib/prisma', () => ({
     $transaction: (fn: (t: typeof tx) => unknown) => transaction(fn),
     employeeTimeLog: { findMany: (...a: unknown[]) => workedFindMany(...a) },
     user: { findMany: (...a: unknown[]) => usersFindMany(...a) },
+    userPaySchedule: { findMany: (...a: unknown[]) => scheduleFindMany(...a) },
+    payRun: { findUnique: (...a: unknown[]) => runFindUnique(...a) },
   },
 }));
 vi.mock('@/lib/payroll/compute', () => ({
@@ -28,10 +32,11 @@ vi.mock('@/lib/time', async () => ({
   getTodayRangePST: () => ({ todayStart: today.value, todayEnd: new Date(today.value.getTime() + 86_400_000) }),
 }));
 
-const { POST } = await import('./route');
+const { GET, POST } = await import('./route');
 
-const approve = () =>
-  POST(new Request('http://localhost/api/admin/payroll/runs', { method: 'POST', body: JSON.stringify({ period: '2026-10-09' }) }));
+const approve = (body: object = { period: '2026-10-09' }) =>
+  POST(new Request('http://localhost/api/admin/payroll/runs', { method: 'POST', body: JSON.stringify(body) }));
+const D = (iso: string) => new Date(`${iso}T00:00:00.000Z`);
 
 const amounts = {
   regularHours: 40, overtimeHours: 2, payRate: 10, otPayRate: 15,
@@ -51,6 +56,7 @@ beforeEach(() => {
     { idUser: 20, name: 'New', lastname: 'Person' },
   ]);
   computePayStatement.mockResolvedValue(amounts);
+  scheduleFindMany.mockResolvedValue([]);
   tx.payRun.findUnique.mockResolvedValue(null);
   tx.payRun.create.mockResolvedValue({ idPayRun: 7 });
   tx.payStatement.updateMany.mockResolvedValue({ count: 0 });
@@ -58,6 +64,47 @@ beforeEach(() => {
     args.where.idPayRun_idUser.idUser === 10 ? { idStatement: 100 } : null,
   );
   tx.payStatement.create.mockResolvedValue({ idStatement: 200 });
+});
+
+describe('Remote and In House payroll', () => {
+  // Employee 20 (New Person) is In House from Mon 10/12; 10 (Paid Already) stays remote.
+  beforeEach(() => {
+    scheduleFindMany.mockResolvedValue([{ idUser: 20, schedule: 'inhouse', effectiveFrom: D('2026-10-12') }]);
+    tx.payRun.findUnique.mockResolvedValue(null);
+  });
+  const get = (query: string) => GET(new Request(`http://localhost/api/admin/payroll/runs?${query}`));
+
+  it('lists only remote employees on the Friday payroll', async () => {
+    const body = await (await get('week=2026-10-20')).json();
+    expect(body.run.periodStart).toBe('2026-10-16');
+    expect(body.statements.map((s: { userId: number }) => s.userId)).toEqual([10]);
+  });
+
+  it('keeps the switching employee on the Friday payroll for their cut-short last remote week', async () => {
+    const body = await (await get('week=2026-10-09')).json();
+    expect(body.statements.map((s: { userId: number }) => s.userId)).toEqual([10, 20]);
+  });
+
+  it('lists only In House employees on the Monday payroll', async () => {
+    const body = await (await get('week=2026-10-14&group=inhouse')).json();
+    expect(body.run.periodStart).toBe('2026-10-12');
+    expect(body.run.periodEnd).toBe('2026-10-16');
+    expect(body.statements.map((s: { userId: number }) => s.userId)).toEqual([20]);
+    expect(computePayStatement).toHaveBeenCalledWith(20, D('2026-10-12'));
+  });
+
+  it('refuses the In House week until it is over (it runs through Sunday)', async () => {
+    expect((await approve({ period: '2026-10-12', group: 'inhouse' })).status).toBe(409);
+  });
+
+  it('approves the In House week as its own run, starting Monday', async () => {
+    today.value = new Date('2026-10-19T00:00:00.000Z');
+    const res = await approve({ period: '2026-10-12', group: 'inhouse' });
+    expect(res.status).toBe(200);
+    expect(tx.payRun.create.mock.calls[0][0].data).toMatchObject({ periodStart: D('2026-10-12'), periodEnd: D('2026-10-19') });
+    expect(tx.payStatement.create).toHaveBeenCalledTimes(1);
+    expect(tx.payStatement.create.mock.calls[0][0].data.idUser).toBe(20);
+  });
 });
 
 describe('POST /api/admin/payroll/runs (approve)', () => {

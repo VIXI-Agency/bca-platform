@@ -18,7 +18,7 @@ vi.mock('@/lib/prisma', () => ({
     user: { findUnique: (...a: unknown[]) => userFindUnique(...a) },
   },
 }));
-vi.mock('@/lib/payroll/compute', () => ({ isPeriodLocked: async () => false }));
+vi.mock('@/lib/payroll/compute', () => ({ isPeriodLocked: async () => false, isDayLocked: async () => false }));
 
 const { POST } = await import('./route');
 

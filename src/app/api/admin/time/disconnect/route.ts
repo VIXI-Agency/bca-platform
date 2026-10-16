@@ -2,8 +2,8 @@ import { NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { z } from 'zod';
-import { nowPstAsUtc, getTodayRangePST, getPayPeriodStart } from '@/lib/time';
-import { isPeriodLocked } from '@/lib/payroll/compute';
+import { nowPstAsUtc, getTodayRangePST } from '@/lib/time';
+import { isDayLocked } from '@/lib/payroll/compute';
 import { DISCONNECTION_TYPES } from '@/lib/admin-time/disconnections';
 
 const disconnectSchema = z.object({
@@ -45,7 +45,7 @@ export async function POST(request: Request) {
 
     // Disconnected time reduces pay, so it can't change once the period's
     // pay run is approved or paid — same rule as editing hours or bonuses.
-    if (await isPeriodLocked(getPayPeriodStart(todayStart))) {
+    if (await isDayLocked(userId, todayStart)) {
       return NextResponse.json(
         { error: 'This pay period has been approved or paid and can no longer be edited.' },
         { status: 409 }

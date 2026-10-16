@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { BREAK_KINDS } from '@/lib/clock/break-order';
+import { PAY_SCHEDULES } from '@/lib/payroll/pay-schedule';
 
 // A real YYYY-MM-DD calendar date. The shape check alone let "2026-99-99"
 // through, and Date.UTC silently rolled it over to some other day.
@@ -164,6 +165,8 @@ const periodDateString = calendarDate;
 
 export const payRunApproveSchema = z.object({
   period: periodDateString,
+  // Remote (Fri–Thu) or In House (Mon–Fri) payroll; each is its own run.
+  group: z.enum(PAY_SCHEDULES).default('remote'),
   scheduledPayDate: periodDateString.optional(),
   notes: z.string().max(1000).optional(),
 });

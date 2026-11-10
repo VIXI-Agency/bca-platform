@@ -2,6 +2,7 @@
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import type { BreakKind } from '@/lib/clock/break-order';
+import type { ClockInStart } from '@/lib/clock/clock-in-start';
 
 /* -------------------------------------------------- */
 /*  Types                                              */
@@ -18,6 +19,8 @@ export interface User {
   isPartTime: boolean;
   /** Breaks taken, in order; null while on the full/part-time default. */
   breakOrder: BreakKind[] | null;
+  /** Shift start, minutes after midnight Pacific; null while on the 6:00 AM default. */
+  clockInStart: ClockInStart | null;
   smsAccess: boolean;
   timezone: string;
   city: string;
@@ -39,6 +42,7 @@ export interface CreateUserPayload {
   country: string;
   isPartTime: boolean;
   breakOrder: BreakKind[] | null;
+  clockInStart: ClockInStart | null;
   sendEmail: boolean;
   payRate?: number;
   otPayRate?: number;
@@ -57,6 +61,7 @@ export interface UpdateUserPayload {
   country: string;
   isPartTime: boolean;
   breakOrder: BreakKind[] | null;
+  clockInStart: ClockInStart | null;
   smsAccess: boolean;
   sendEmail: boolean;
   payRate?: number;

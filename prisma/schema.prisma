@@ -27,6 +27,10 @@ model User {
   // Breaks taken and their order, e.g. "lunch,firstBreak,secondBreak".
   // NULL = default for full/part time, "" = none. See src/lib/clock/break-order.ts.
   breakOrder  String?  @map("BreakOrder") @db.NVarChar(40)
+  // Shift start as minutes after midnight Pacific (300 = 5:00 AM); earlier
+  // clock-ins are recorded as this time. NULL = 6:00 AM. See
+  // src/lib/clock/clock-in-start.ts.
+  clockInStartMinutes Int? @map("ClockInStartMinutes") @db.SmallInt
   smsAccess   Boolean? @default(false) @map("SmsAccess")
   photo       String?  @map("Photo") @db.NVarChar(Max)
   resetToken  String?  @map("ResetToken") @db.NVarChar(200)

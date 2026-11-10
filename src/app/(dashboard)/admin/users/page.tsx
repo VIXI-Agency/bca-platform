@@ -48,7 +48,9 @@ import {
   type ScheduleDay,
 } from '@/hooks/use-users';
 import type { BreakKind } from '@/lib/clock/break-order';
+import { formatClockInStart, type ClockInStart } from '@/lib/clock/clock-in-start';
 import { BreakOrderEditor } from './_components/break-order-editor';
+import { ClockInStartSelect } from './_components/clock-in-start-select';
 import { PayWeekSection } from './_components/pay-week-section';
 
 const ROLES: { value: number; label: string }[] = [
@@ -88,6 +90,7 @@ interface UserFormState {
   country: string;
   isPartTime: boolean;
   breakOrder: BreakKind[] | null;
+  clockInStart: ClockInStart | null;
   smsAccess: boolean;
   sendEmail: boolean;
   payRate: string;
@@ -106,6 +109,7 @@ const INITIAL_FORM: UserFormState = {
   country: 'US',
   isPartTime: false,
   breakOrder: null,
+  clockInStart: null,
   smsAccess: false,
   sendEmail: false,
   payRate: '',
@@ -192,6 +196,7 @@ export default function UsersPage() {
       country: user.country,
       isPartTime: user.isPartTime,
       breakOrder: user.breakOrder ?? null,
+      clockInStart: user.clockInStart ?? null,
       smsAccess: user.smsAccess,
       sendEmail: user.sendEmail,
       payRate: user.payRate != null ? String(user.payRate) : '',
@@ -254,6 +259,7 @@ export default function UsersPage() {
           country: form.country.trim(),
           isPartTime: form.isPartTime,
           breakOrder: form.breakOrder,
+          clockInStart: form.clockInStart,
           smsAccess: form.smsAccess,
           sendEmail: form.sendEmail,
           payRate,
@@ -273,6 +279,7 @@ export default function UsersPage() {
           country: form.country.trim(),
           isPartTime: form.isPartTime,
           breakOrder: form.breakOrder,
+          clockInStart: form.clockInStart,
           sendEmail: form.sendEmail,
           payRate,
           otPayRate,
@@ -433,6 +440,9 @@ export default function UsersPage() {
                         </Badge>
                         {user.isPartTime && (
                           <Badge variant="warning">Part-time</Badge>
+                        )}
+                        {user.clockInStart != null && (
+                          <Badge variant="outline">Starts {formatClockInStart(user.clockInStart)}</Badge>
                         )}
                       </div>
                     </div>
@@ -666,6 +676,11 @@ export default function UsersPage() {
               value={form.breakOrder}
               isPartTime={form.isPartTime}
               onChange={(breakOrder) => setForm((prev) => ({ ...prev, breakOrder }))}
+            />
+
+            <ClockInStartSelect
+              value={form.clockInStart}
+              onChange={(clockInStart) => setForm((prev) => ({ ...prev, clockInStart }))}
             />
 
             {editingUser && <PayWeekSection userId={editingUser.userId} />}

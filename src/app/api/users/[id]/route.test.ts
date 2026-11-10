@@ -103,3 +103,48 @@ describe('PUT /api/users/[id] — break order', () => {
     },
   );
 });
+
+describe('PUT /api/users/[id] — clock-in start', () => {
+  beforeEach(() => {
+    sessionRole = 1;
+    findUnique.mockReset().mockResolvedValue(agent);
+    update.mockReset().mockResolvedValue({ ...agent, name: 'Lauren', lastname: 'F' });
+  });
+
+  it('saves the shift start the admin picked', async () => {
+    expect((await put({ clockInStart: 300 })).status).toBe(200);
+    expect(update.mock.calls[0][0].data.clockInStartMinutes).toBe(300);
+  });
+
+  it('goes back to the default with null', async () => {
+    await put({ clockInStart: null });
+    expect(update.mock.calls[0][0].data.clockInStartMinutes).toBeNull();
+  });
+
+  it('stores 6:00 AM as the default, not as a saved start', async () => {
+    await put({ clockInStart: 360 });
+    expect(update.mock.calls[0][0].data.clockInStartMinutes).toBeNull();
+  });
+
+  it('leaves the start alone when it is not sent', async () => {
+    await put({ name: 'Lauren' });
+    expect(update.mock.calls[0][0].data).not.toHaveProperty('clockInStartMinutes');
+    expect(update.mock.calls[0][0].data).not.toHaveProperty('clockInStart');
+  });
+
+  it.each([[315], [600], [0], [-300], [300.5], ['300']])('rejects %j', async (clockInStart) => {
+    const res = await put({ clockInStart });
+    expect(res.status).toBe(400);
+    expect(update).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['on its own', { clockInStart: 300 }],
+    ['slipped into the activation a Closer is allowed to send', { isActive: true, roleId: 3, clockInStart: 300 }],
+  ])('cannot be changed by a Closer, %s', async (_label, body) => {
+    sessionRole = 2;
+    const res = await put(body);
+    expect(res.status).toBe(403);
+    expect(update).not.toHaveBeenCalled();
+  });
+});

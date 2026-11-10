@@ -113,6 +113,56 @@ describe('POST /api/clock/action — early clock-in rule', () => {
     });
   });
 
+  describe('with a shift start saved on the account', () => {
+    /** Clock in at `punch` as `role`, on an account whose shift starts at `start`. */
+    const clockInWithStart = (punch: string, role: number, start: number | null) => {
+      userFindUnique.mockResolvedValue({ status: false, clockInStartMinutes: start });
+      return clockIn(punch, role);
+    };
+
+    it.each([
+      [300, '04:30:00', '05:00:00'],
+      [300, '05:10:00', '05:10:00'],
+      [420, '06:30:00', '07:00:00'],
+      [420, '07:05:00', '07:05:00'],
+    ])('start %i: records a Remote Agent %s punch as %s', async (start, punch, stored) => {
+      expect(await clockInWithStart(punch, REMOTE_AGENT, start)).toBe(stored);
+    });
+
+    it.each([
+      [300, '04:30:00', '04:45:00'],
+      [300, '04:50:00', '04:50:00'],
+      [420, '06:00:00', '06:45:00'],
+    ])('start %i: records a Closer %s punch as %s', async (start, punch, stored) => {
+      expect(await clockInWithStart(punch, CLOSER, start)).toBe(stored);
+    });
+
+    it('uses 06:00 when the saved start is NULL', async () => {
+      expect(await clockInWithStart('05:30:00', REMOTE_AGENT, null)).toBe('06:00:00');
+    });
+
+    it('uses 06:00 when the saved start is not one the Users page offers', async () => {
+      expect(await clockInWithStart('05:30:00', REMOTE_AGENT, 30)).toBe('06:00:00');
+    });
+
+    it('reads the account once per punch, shift start included', async () => {
+      await clockInWithStart('04:30:00', REMOTE_AGENT, 300);
+      expect(userFindUnique).toHaveBeenCalledTimes(1);
+      // Without the column in the select every account would silently fall
+      // back to 06:00.
+      expect(userFindUnique.mock.calls[0][0].select).toMatchObject({ clockInStartMinutes: true });
+    });
+
+    it.each([
+      [240, '03:44:59', '03:45:00'],
+      [240, '03:45:00', '03:45:00'],
+      [540, '08:44:59', '08:45:00'],
+      [540, '08:45:00', '08:45:00'],
+    ])('start %i: records an Administrator %s punch as %s', async (start, punch, stored) => {
+      expect(await clockInWithStart(punch, ADMIN, start)).toBe(stored);
+    });
+  });
+
   it('writes the adjusted time onto an existing log created by a skip', async () => {
     findFirst.mockResolvedValue({ timeLogId: 5, clockIn: null, clockOut: null });
     auth.mockResolvedValue({ user: { userId: 9, role: REMOTE_AGENT } });

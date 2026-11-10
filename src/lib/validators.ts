@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { BREAK_KINDS } from '@/lib/clock/break-order';
+import { isClockInStart } from '@/lib/clock/clock-in-start';
 import { PAY_SCHEDULES } from '@/lib/payroll/pay-schedule';
 import { BONUS_NOTES_MAX } from '@/lib/payroll/constants';
 
@@ -99,6 +100,14 @@ export const createUserSchema = z.object({
     .array(z.enum(BREAK_KINDS))
     .max(BREAK_KINDS.length)
     .refine((kinds) => new Set(kinds).size === kinds.length, 'Each break can appear only once')
+    .nullable()
+    .optional(),
+  // Shift start, minutes after midnight Pacific; null = the 6:00 AM default.
+  // Only the starts the Users page offers: a mistyped one would move paid time.
+  // See src/lib/clock/clock-in-start.ts.
+  clockInStart: z
+    .number()
+    .refine(isClockInStart, 'Not a clock-in start the Users page offers')
     .nullable()
     .optional(),
   // null clears a rate (e.g. emptied in the Payment Report rate box).

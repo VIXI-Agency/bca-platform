@@ -3,6 +3,7 @@ import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { createUserSchema, userSearchSchema } from '@/lib/validators';
 import { savedBreakOrder, serializeBreakOrder } from '@/lib/clock/break-order';
+import { savedClockInStart } from '@/lib/clock/clock-in-start';
 import bcrypt from 'bcryptjs';
 
 export async function GET(request: NextRequest) {
@@ -76,6 +77,7 @@ export async function GET(request: NextRequest) {
       isActive: user.status !== true,
       isPartTime: user.isPartTime === true,
       breakOrder: savedBreakOrder(user.breakOrder),
+      clockInStart: savedClockInStart(user.clockInStartMinutes),
       smsAccess: user.smsAccess === true,
       sendEmail: user.sendEmail === 1,
       timezone: user.timeZone ?? '',
@@ -114,7 +116,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { password, roleId, timezone, sendEmail, breakOrder, ...rest } = parsed.data;
+    const { password, roleId, timezone, sendEmail, breakOrder, clockInStart, ...rest } = parsed.data;
 
     // Check for duplicate email
     const existing = await prisma.user.findUnique({
@@ -137,6 +139,7 @@ export async function POST(request: NextRequest) {
         country: rest.country || '',
         sendEmail: sendEmail ? 1 : 0,
         breakOrder: breakOrder == null ? null : serializeBreakOrder(breakOrder),
+        clockInStartMinutes: savedClockInStart(clockInStart),
         status: false,
       },
       include: {

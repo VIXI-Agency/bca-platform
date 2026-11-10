@@ -3,6 +3,7 @@ import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { updateUserSchema } from '@/lib/validators';
 import { savedBreakOrder, serializeBreakOrder } from '@/lib/clock/break-order';
+import { savedClockInStart } from '@/lib/clock/clock-in-start';
 import bcrypt from 'bcryptjs';
 
 function decimalEq(a: unknown, b: number | null | undefined): boolean {
@@ -56,6 +57,7 @@ export async function GET(
       isActive: user.status !== true,
       isPartTime: user.isPartTime === true,
       breakOrder: savedBreakOrder(user.breakOrder),
+      clockInStart: savedClockInStart(user.clockInStartMinutes),
       smsAccess: user.smsAccess === true,
       sendEmail: user.sendEmail === 1,
       timezone: user.timeZone ?? '',
@@ -133,7 +135,7 @@ export async function PUT(
       return NextResponse.json({ error: 'Only an administrator can change pay rates' }, { status: 403 });
     }
 
-    const { password, roleId, timezone, sendEmail, smsAccess, breakOrder, ...rest } = parsed.data;
+    const { password, roleId, timezone, sendEmail, smsAccess, breakOrder, clockInStart, ...rest } = parsed.data;
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const data: Record<string, any> = {
@@ -150,6 +152,11 @@ export async function PUT(
 
     if (breakOrder !== undefined) {
       data.breakOrder = breakOrder === null ? null : serializeBreakOrder(breakOrder);
+    }
+
+    // The clock reads this on every clock-in, so it applies from the next one.
+    if (clockInStart !== undefined) {
+      data.clockInStartMinutes = savedClockInStart(clockInStart);
     }
 
     if (roleId !== undefined) {

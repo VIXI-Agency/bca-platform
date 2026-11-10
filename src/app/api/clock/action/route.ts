@@ -4,40 +4,27 @@ import { prisma } from '@/lib/prisma';
 import { clockActionSchema } from '@/lib/validators';
 import { nowPstAsUtc, getTodayRangePST, minutesSinceStored } from '@/lib/time';
 import { breakOrderFor, punchOrder } from '@/lib/clock/break-order';
+import { clockInStartFor, recordedClockIn } from '@/lib/clock/clock-in-start';
 import type { ClockAction } from '@/types';
 
-// Administrator (1) and Closer (2) may clock in up to 15 minutes before their
-// 6:00 AM shift and have that real time count toward pay. Everyone else
-// (Remote Agent, etc.) keeps the original rule: any clock-in before 6:00 AM
-// is snapped to exactly 6:00, no matter how early they actually punched in.
-const EARLY_CLOCK_IN_ROLES = [1, 2];
+type PunchRules = {
+  /** The punches this employee makes, in order. */
+  order: ClockAction[];
+  /** Shift start, minutes after midnight Pacific. */
+  clockInStart: number;
+};
 
-function applyEarlyClockInRule(time: Date, role: number | undefined): Date {
-  const minutesOfDay = time.getUTCHours() * 60 + time.getUTCMinutes();
-  const sixAm = 6 * 60;
-  if (minutesOfDay >= sixAm) {
-    return time;
-  }
-
-  if (role != null && EARLY_CLOCK_IN_ROLES.includes(role)) {
-    const fiveFortyFive = sixAm - 15;
-    if (minutesOfDay >= fiveFortyFive) {
-      return time;
-    }
-    return new Date(Date.UTC(1970, 0, 1, 5, 45, 0));
-  }
-
-  return new Date(Date.UTC(1970, 0, 1, 6, 0, 0));
-}
-
-/** The account's punch order, or null when it can't record time (deactivated). */
-async function activePunchOrder(userId: number): Promise<ClockAction[] | null> {
+/** The account's punch rules, or null when it can't record time (deactivated). */
+async function activePunchRules(userId: number): Promise<PunchRules | null> {
   const account = await prisma.user.findUnique({
     where: { idUser: userId },
-    select: { status: true, isPartTime: true, breakOrder: true },
+    select: { status: true, isPartTime: true, breakOrder: true, clockInStartMinutes: true },
   });
   if (!account || account.status === true) return null;
-  return punchOrder(breakOrderFor(account.breakOrder, account.isPartTime === true));
+  return {
+    order: punchOrder(breakOrderFor(account.breakOrder, account.isPartTime === true)),
+    clockInStart: clockInStartFor(account.clockInStartMinutes),
+  };
 }
 
 export async function POST(request: Request) {
@@ -61,11 +48,12 @@ export async function POST(request: Request) {
 
     // The session outlives a deactivation, so check the account itself before
     // recording paid time.
-    const order = await activePunchOrder(userId);
-    if (!order) {
+    const rules = await activePunchRules(userId);
+    if (!rules) {
       return NextResponse.json({ error: 'Your account is inactive.' }, { status: 403 });
     }
 
+    const { order, clockInStart } = rules;
     const { action } = parsed.data;
     const now = nowPstAsUtc();
     const { todayStart, todayEnd } = getTodayRangePST();
@@ -123,7 +111,7 @@ export async function POST(request: Request) {
         );
       }
 
-      // An early clock-in is recorded as 5:45/6:00, so clocking out before
+      // An early clock-in is recorded as the shift start, so clocking out before
       // that recorded time (or in the same instant) would describe a shift
       // that ends before it starts. Such a day pays nothing, so refuse it.
       if (action === 'clockOut' && log.clockIn && now.getTime() <= log.clockIn.getTime()) {
@@ -151,11 +139,10 @@ export async function POST(request: Request) {
     // want (the 10-minute figure is only a soft limit shown in the UI). Lunch
     // keeps its 30-minute minimum above.
 
-    // Determine the time to record (PST as UTC-epoch)
-    let recordTime = now;
-    if (action === 'clockIn') {
-      recordTime = applyEarlyClockInRule(now, role);
-    }
+    // The time to record (PST as UTC-epoch). Only a clock-in is adjusted: one
+    // before the employee's shift start is recorded as the start. The start is
+    // read from the account, so a change applies to the next clock-in.
+    const recordTime = action === 'clockIn' ? recordedClockIn(now, clockInStart, role) : now;
 
     // Perform the action
     if (action === 'clockIn') {

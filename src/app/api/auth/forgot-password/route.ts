@@ -5,6 +5,8 @@ import { sendEmail } from '@/lib/email';
 import crypto from 'crypto';
 import { rateLimit, getClientIp } from '@/lib/rate-limit';
 
+const DEFAULT_APP_URL = 'https://yourdebtcollectors.com';
+
 export async function POST(request: NextRequest) {
   try {
     // Rate limit: 3 attempts per 15 minutes per IP
@@ -46,7 +48,7 @@ export async function POST(request: NextRequest) {
       });
 
       // Build reset link
-      const baseUrl = process.env.NEXTAUTH_URL || 'https://yourdebtcollectors.com';
+      const baseUrl = (process.env.AUTH_URL || DEFAULT_APP_URL).replace(/\/+$/, '');
       const resetLink = `${baseUrl}/reset-password?token=${resetToken}`;
 
       // Send email

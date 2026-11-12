@@ -112,22 +112,6 @@ export interface MyTicket {
   updatedAt: string;
 }
 
-export interface DashboardData {
-  totalComputers: number;
-  overdueCount: number;
-  dueSoonCount: number;
-  openTicketsCount: number;
-  urgentTicketsCount: number;
-  recentLogs: {
-    id: number;
-    computerName: string;
-    maintenanceType: MaintenanceType;
-    performedDate: string;
-    technicianName: string;
-  }[];
-  upcomingMaintenance: { id: number; computerName: string; nextDueDate: string }[];
-}
-
 export interface PaginatedResponse<T> {
   data: T[];
   meta: { total: number; page: number; pageSize: number; totalPages: number };
@@ -358,7 +342,6 @@ export function useCreateLog() {
       qc.invalidateQueries({ queryKey: ['maintenance-logs'] });
       qc.invalidateQueries({ queryKey: ['maintenance-computers'] });
       qc.invalidateQueries({ queryKey: ['maintenance-admin-tickets'] });
-      qc.invalidateQueries({ queryKey: ['maintenance-dashboard'] });
     },
   });
 }
@@ -400,20 +383,7 @@ export function useUpdateTicket() {
       }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['maintenance-admin-tickets'] });
-      qc.invalidateQueries({ queryKey: ['maintenance-dashboard'] });
     },
-  });
-}
-
-/* -------------------------------------------------- */
-/*  Admin — Dashboard                                  */
-/* -------------------------------------------------- */
-
-export function useMaintenanceDashboard() {
-  return useQuery<DashboardData>({
-    queryKey: ['maintenance-dashboard'],
-    queryFn: () => fetchJson('/api/admin/maintenance/dashboard'),
-    staleTime: 2 * 60 * 1000,
   });
 }
 

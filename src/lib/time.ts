@@ -34,19 +34,6 @@ export function nowPstAsUtc(): Date {
 }
 
 /**
- * Get the current PST hour (0-23).
- */
-export function getPstHour(): number {
-  return parseInt(
-    new Intl.DateTimeFormat('en-US', {
-      timeZone: TZ,
-      hourCycle: 'h23',
-      hour: 'numeric',
-    }).format(new Date())
-  );
-}
-
-/**
  * Get today's PST date boundaries as UTC midnight dates.
  * logDate in the database is stored as midnight UTC representing the PST calendar date.
  */

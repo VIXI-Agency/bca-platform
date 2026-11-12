@@ -135,14 +135,6 @@ export function useUsers(search?: string, status?: string) {
   });
 }
 
-export function useUser(id: number) {
-  return useQuery<User>({
-    queryKey: ['user', id],
-    queryFn: () => fetchJson(`/api/users/${id}`),
-    enabled: !!id,
-  });
-}
-
 export function useUserSchedule(id: number) {
   return useQuery<UserSchedule>({
     queryKey: ['user-schedule', id],

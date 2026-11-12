@@ -103,12 +103,6 @@ export function datedBonusRuleError(
   return null;
 }
 
-export const PAY_RUN_STATUSES = ['approved', 'paid', 'void'] as const;
-export type PayRunStatus = (typeof PAY_RUN_STATUSES)[number];
-
-export const PAY_STATEMENT_STATUSES = ['pending', 'paid', 'void'] as const;
-export type PayStatementStatus = (typeof PAY_STATEMENT_STATUSES)[number];
-
 // Starter list — the business can tell us if more are needed; this isn't
 // validated against an external payment processor, just a label on the record.
 export const PAYMENT_METHODS = ['direct_deposit', 'wire', 'zelle', 'cash', 'other'] as const;

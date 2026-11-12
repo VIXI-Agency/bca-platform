@@ -61,7 +61,6 @@ export function getPermissionKeyForApiRoute(pathname: string): string | null {
   if (pathname.startsWith('/api/admin/blacklist')) return 'admin_import';
   // Only /api/scrape/worker/* is exempt from auth, by exact path in middleware.
   if (pathname.startsWith('/api/scrape')) return 'admin_import';
-  if (pathname.startsWith('/api/settings')) return 'admin_users';
   if (pathname.startsWith('/api/admin/payroll')) return 'admin_payroll';
   if (pathname.startsWith('/api/admin/time')) return 'admin_time';
   if (pathname.startsWith('/api/admin/permissions')) return 'admin_permissions';

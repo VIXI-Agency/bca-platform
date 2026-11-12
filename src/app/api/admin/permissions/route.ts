@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
-import { getAllPermissions, clearPermissionCache } from '@/lib/permissions';
+import { getAllPermissions } from '@/lib/permissions';
 import { ALL_PERMISSION_KEYS, PERMISSION_LABELS } from '@/config/permission-keys';
 
 export async function GET() {
@@ -76,9 +76,6 @@ export async function PUT(request: NextRequest) {
         });
       }
     }
-
-    // Clear server-side cache
-    clearPermissionCache();
 
     return NextResponse.json({ success: true, message: 'Permissions updated. Users must re-login for changes to take effect.' });
   } catch (error) {

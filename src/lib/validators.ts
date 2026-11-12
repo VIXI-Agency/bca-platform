@@ -237,12 +237,6 @@ export const importValidateSchema = z.object({
   }).optional(),
 });
 
-// Settings
-export const settingSchema = z.object({
-  key: z.string().min(1).max(100),
-  value: z.string().max(5000),
-});
-
 // Registration (self-service, no auth)
 export const registerSchema = z.object({
   name: z.string().min(1, 'First name is required').max(100),
@@ -386,7 +380,6 @@ export type PayRunVoidInput = z.infer<typeof payRunVoidSchema>;
 export type QuoteInput = z.infer<typeof quoteSchema>;
 export type RebuttalInput = z.infer<typeof rebuttalSchema>;
 export type SendSmsInput = z.infer<typeof sendSmsSchema>;
-export type SettingInput = z.infer<typeof settingSchema>;
 export type RegisterInput = z.infer<typeof registerSchema>;
 export type ForgotPasswordInput = z.infer<typeof forgotPasswordSchema>;
 export type ResetPasswordInput = z.infer<typeof resetPasswordSchema>;

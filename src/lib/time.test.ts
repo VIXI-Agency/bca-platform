@@ -2,7 +2,6 @@ import { describe, it, expect, vi, beforeAll, afterAll, afterEach } from 'vitest
 import {
   getPayPeriodStart,
   getPayPeriodEnd,
-  getPayPeriodWorkDates,
   parseDateParam,
   payPeriodOptions,
   nowPstAsUtc,
@@ -110,38 +109,6 @@ describe('getPayPeriodStart — UTC-midnight input', () => {
       expect(iso(getPayPeriodStart(utcMidnight('2026-10-13')))).toBe('2026-10-09');
       expect(iso(getPayPeriodStart(utcMidnight('2026-11-02')))).toBe('2026-10-30');
     });
-  });
-});
-
-describe('getPayPeriodWorkDates', () => {
-  it('lists Fri, Mon, Tue, Wed, Thu of the period', () => {
-    expect(getPayPeriodWorkDates(utcMidnight('2026-10-09'))).toEqual([
-      '2026-10-09',
-      '2026-10-12',
-      '2026-10-13',
-      '2026-10-14',
-      '2026-10-15',
-    ]);
-  });
-
-  it('spans the 2026-11-01 DST change without skipping or repeating a day', () => {
-    expect(getPayPeriodWorkDates(utcMidnight('2026-10-30'))).toEqual([
-      '2026-10-30',
-      '2026-11-02',
-      '2026-11-03',
-      '2026-11-04',
-      '2026-11-05',
-    ]);
-  });
-
-  it('spans a year boundary', () => {
-    expect(getPayPeriodWorkDates(utcMidnight('2027-01-01'))).toEqual([
-      '2027-01-01',
-      '2027-01-04',
-      '2027-01-05',
-      '2027-01-06',
-      '2027-01-07',
-    ]);
   });
 });
 

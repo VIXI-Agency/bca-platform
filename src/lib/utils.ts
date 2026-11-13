@@ -13,17 +13,6 @@ export function formatPhone(phone: string): string {
   return phone;
 }
 
-export function escapeHtml(str: string): string {
-  const map: Record<string, string> = {
-    '&': '&amp;',
-    '<': '&lt;',
-    '>': '&gt;',
-    '"': '&quot;',
-    "'": '&#039;',
-  };
-  return str.replace(/[&<>"']/g, (m) => map[m]);
-}
-
 export function formatDate(date: Date | string): string {
   return new Date(date).toLocaleDateString('en-US', {
     year: 'numeric',

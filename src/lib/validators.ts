@@ -366,26 +366,4 @@ export const updateTicketSchema = z.object({
 
 // Type exports for use in components
 export type LoginInput = z.infer<typeof loginSchema>;
-export type LogCallInput = z.infer<typeof logCallSchema>;
-export type BusinessSearchInput = z.infer<typeof businessSearchSchema>;
-export type ClockActionInput = z.infer<typeof clockActionSchema>;
-export type ReportFilterInput = z.infer<typeof reportFilterSchema>;
-export type CreateUserInput = z.infer<typeof createUserSchema>;
-export type UpdateUserInput = z.infer<typeof updateUserSchema>;
-export type TimeEditInput = z.infer<typeof timeEditSchema>;
-export type PayrollBonusInput = z.infer<typeof payrollBonusSchema>;
-export type PayRunApproveInput = z.infer<typeof payRunApproveSchema>;
-export type PayStatementPayInput = z.infer<typeof payStatementPaySchema>;
-export type PayRunVoidInput = z.infer<typeof payRunVoidSchema>;
-export type QuoteInput = z.infer<typeof quoteSchema>;
-export type RebuttalInput = z.infer<typeof rebuttalSchema>;
-export type SendSmsInput = z.infer<typeof sendSmsSchema>;
 export type RegisterInput = z.infer<typeof registerSchema>;
-export type ForgotPasswordInput = z.infer<typeof forgotPasswordSchema>;
-export type ResetPasswordInput = z.infer<typeof resetPasswordSchema>;
-export type UpdateProfileInput = z.infer<typeof updateProfileSchema>;
-export type CreateComputerInput = z.infer<typeof createComputerSchema>;
-export type UpdateComputerInput = z.infer<typeof updateComputerSchema>;
-export type CreateMaintenanceLogInput = z.infer<typeof createMaintenanceLogSchema>;
-export type CreateTicketInput = z.infer<typeof createTicketSchema>;
-export type UpdateTicketInput = z.infer<typeof updateTicketSchema>;

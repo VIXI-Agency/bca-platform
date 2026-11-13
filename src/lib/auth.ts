@@ -52,26 +52,8 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
 
         if (!user.password) return null;
 
-        // Support both bcrypt hashes and legacy plaintext passwords
-        const isHashed = user.password.startsWith('$2a$') || user.password.startsWith('$2b$');
-        const passwordValid = isHashed
-          ? await bcrypt.compare(password, user.password)
-          : user.password === password;
-
+        const passwordValid = await bcrypt.compare(password, user.password);
         if (!passwordValid) return null;
-
-        // Opportunistic re-hash: upgrade plaintext passwords to bcrypt 12
-        if (!isHashed) {
-          try {
-            const hashed = await bcrypt.hash(password, 12);
-            await prisma.user.update({
-              where: { idUser: user.idUser },
-              data: { password: hashed },
-            });
-          } catch {
-            // Non-fatal: login still succeeds even if re-hash fails
-          }
-        }
 
         // Load permissions for this role from DB
         const rolePerms = await prisma.rolePermission.findMany({

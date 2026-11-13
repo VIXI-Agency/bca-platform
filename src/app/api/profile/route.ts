@@ -82,23 +82,9 @@ export async function PUT(request: NextRequest) {
         return NextResponse.json({ error: 'Unable to verify current password' }, { status: 400 });
       }
 
-      // Support both bcrypt hashes and legacy plaintext passwords
-      const isHashed = user.password.startsWith('$2a$') || user.password.startsWith('$2b$');
-      const passwordValid = isHashed
-        ? await bcrypt.compare(currentPassword!, user.password)
-        : user.password === currentPassword;
-
+      const passwordValid = await bcrypt.compare(currentPassword!, user.password);
       if (!passwordValid) {
         return NextResponse.json({ error: 'Current password is incorrect' }, { status: 400 });
-      }
-
-      // Opportunistic re-hash: upgrade plaintext passwords to bcrypt 12
-      if (!isHashed) {
-        const hashed = await bcrypt.hash(currentPassword!, 12);
-        await prisma.user.update({
-          where: { idUser: userId },
-          data: { password: hashed },
-        });
       }
     }
 

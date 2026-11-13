@@ -1,10 +1,6 @@
 import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query';
 import type { Disposition, Rebuttal } from '@/types';
 
-/* -------------------------------------------------- */
-/*  Types                                              */
-/* -------------------------------------------------- */
-
 export interface CloserUser {
   userId: number;
   name: string;
@@ -50,10 +46,6 @@ export interface NextLeadPayload {
   industry?: string;
 }
 
-/* -------------------------------------------------- */
-/*  Helpers                                            */
-/* -------------------------------------------------- */
-
 async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
   const res = await fetch(url, init);
   if (!res.ok) {
@@ -62,10 +54,6 @@ async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
   }
   return res.json();
 }
-
-/* -------------------------------------------------- */
-/*  Queries                                            */
-/* -------------------------------------------------- */
 
 export function useDispositions() {
   return useQuery<Disposition[]>({
@@ -100,10 +88,6 @@ export function useRebuttals() {
     staleTime: 5 * 60 * 1000,
   });
 }
-
-/* -------------------------------------------------- */
-/*  Mutations                                          */
-/* -------------------------------------------------- */
 
 export function useNextLead() {
   return useMutation<LeadBusiness, Error, NextLeadPayload>({

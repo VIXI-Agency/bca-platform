@@ -33,10 +33,6 @@ import {
   type TicketPriority,
 } from '@/hooks/use-maintenance';
 
-/* -------------------------------------------------- */
-/*  Helpers                                            */
-/* -------------------------------------------------- */
-
 function priorityBadge(p: TicketPriority) {
   switch (p) {
     case 'urgent':
@@ -67,10 +63,6 @@ function fmtDate(d: string | null | undefined) {
   if (!d) return '—';
   return new Date(d).toLocaleDateString();
 }
-
-/* -------------------------------------------------- */
-/*  Page                                               */
-/* -------------------------------------------------- */
 
 export default function TicketsPage() {
   const { data: session } = useSession();

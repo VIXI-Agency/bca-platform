@@ -4,10 +4,6 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import type { BreakKind } from '@/lib/clock/break-order';
 import type { ClockInStart } from '@/lib/clock/clock-in-start';
 
-/* -------------------------------------------------- */
-/*  Types                                              */
-/* -------------------------------------------------- */
-
 export interface User {
   userId: number;
   name: string;
@@ -84,10 +80,6 @@ export interface UpdateSchedulePayload {
   schedule: ScheduleDay[];
 }
 
-/* -------------------------------------------------- */
-/*  Helpers                                            */
-/* -------------------------------------------------- */
-
 const STATUS_FALLBACKS: Partial<Record<number, string>> = {
   409: 'Email already in use',
   403: 'You do not have permission to perform this action',
@@ -115,10 +107,6 @@ async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
   return res.json();
 }
 
-/* -------------------------------------------------- */
-/*  Queries                                            */
-/* -------------------------------------------------- */
-
 export function useUsers(search?: string, status?: string) {
   return useQuery<User[]>({
     queryKey: ['users', search, status],
@@ -142,10 +130,6 @@ export function useUserSchedule(id: number) {
     enabled: !!id,
   });
 }
-
-/* -------------------------------------------------- */
-/*  Mutations                                          */
-/* -------------------------------------------------- */
 
 export function useCreateUser() {
   const qc = useQueryClient();

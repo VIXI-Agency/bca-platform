@@ -37,10 +37,6 @@ import type { ClockAction, ClockStatus } from '@/types';
 import { BREAK_LABELS, BREAK_PUNCHES, DEFAULT_BREAK_ORDER, type BreakKind } from '@/lib/clock/break-order';
 import { cn } from '@/lib/utils';
 
-/* -------------------------------------------------- */
-/*  Constants & Helpers                                */
-/* -------------------------------------------------- */
-
 const BREAK_LIMIT_MS = 10 * 60 * 1000; // 10 minutes
 const LUNCH_MIN_MS = 30 * 60 * 1000; // 30 minutes
 
@@ -224,10 +220,6 @@ const BREAK_STATUS: Record<BreakKind, ClockStatus> = {
   secondBreak: 'second_break',
 };
 
-/* -------------------------------------------------- */
-/*  Live Clock Hook                                    */
-/* -------------------------------------------------- */
-
 function useLiveClock() {
   const [now, setNow] = useState(() => new Date());
 
@@ -238,10 +230,6 @@ function useLiveClock() {
 
   return now;
 }
-
-/* -------------------------------------------------- */
-/*  Toast Alert Component                              */
-/* -------------------------------------------------- */
 
 interface AlertToast {
   id: number;
@@ -286,10 +274,6 @@ function ToastContainer({
     </div>
   );
 }
-
-/* -------------------------------------------------- */
-/*  Timeline Component                                 */
-/* -------------------------------------------------- */
 
 interface TimelineStep {
   label: string;
@@ -366,10 +350,6 @@ function MiniTimeline({ steps }: { steps: TimelineStep[] }) {
     </div>
   );
 }
-
-/* -------------------------------------------------- */
-/*  Weekly Timesheet Component                         */
-/* -------------------------------------------------- */
 
 /** Workdays in pay-week order: remote weeks start Friday, In House weeks Monday. */
 const REMOTE_DAYS = ['Friday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday'];
@@ -580,10 +560,6 @@ function WeeklyTimesheet() {
   );
 }
 
-/* -------------------------------------------------- */
-/*  Main Page Component                                */
-/* -------------------------------------------------- */
-
 export default function ClockPage() {
   const now = useLiveClock();
 
@@ -746,7 +722,6 @@ export default function ClockPage() {
       <ToastContainer toasts={toasts} onDismiss={dismissToast} />
 
       <div className="mx-auto max-w-7xl space-y-6 pt-6">
-        {/* ======== CURRENT STATUS CARD ======== */}
         <Card className="relative overflow-hidden">
           {/* Subtle gradient accent */}
           <div
@@ -964,7 +939,6 @@ export default function ClockPage() {
           </CardContent>
         </Card>
 
-        {/* ======== WEEKLY TIMESHEET ======== */}
         <WeeklyTimesheet />
       </div>
     </>

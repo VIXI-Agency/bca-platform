@@ -43,8 +43,6 @@ export function getPermissionKeyForRoute(pathname: string): string | null {
   if (pathname.startsWith('/admin/quotes')) return 'admin_quotes';
   if (pathname.startsWith('/admin/rebuttals')) return 'admin_rebuttals';
   if (pathname.startsWith('/admin/import')) return 'admin_import';
-  // The nav entry alone gates nothing: without a branch here any signed-in user
-  // who types the URL loads the page. /admin/blacklist has that hole today.
   if (pathname.startsWith('/admin/blacklist')) return 'admin_import';
   if (pathname.startsWith('/admin/find-leads')) return 'admin_import';
   if (pathname.startsWith('/admin/permissions')) return 'admin_permissions';

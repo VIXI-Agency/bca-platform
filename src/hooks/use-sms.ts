@@ -1,10 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useEffect } from 'react';
 
-/* -------------------------------------------------- */
-/*  Types                                              */
-/* -------------------------------------------------- */
-
 export interface Conversation {
   phone: string;
   lastMessage: string;
@@ -44,10 +40,6 @@ export interface SendSmsPayload {
   mediaName?: string;
 }
 
-/* -------------------------------------------------- */
-/*  Helpers                                            */
-/* -------------------------------------------------- */
-
 async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
   const res = await fetch(url, init);
   if (!res.ok) {
@@ -56,10 +48,6 @@ async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
   }
   return res.json();
 }
-
-/* -------------------------------------------------- */
-/*  Conversations                                      */
-/* -------------------------------------------------- */
 
 export function useConversations() {
   return useQuery<Conversation[]>({
@@ -72,10 +60,6 @@ export function useConversations() {
     refetchInterval: 15_000,
   });
 }
-
-/* -------------------------------------------------- */
-/*  Messages                                           */
-/* -------------------------------------------------- */
 
 export function useMessages(phone: string | null) {
   const qc = useQueryClient();
@@ -103,10 +87,6 @@ export function useMessages(phone: string | null) {
   });
 }
 
-/* -------------------------------------------------- */
-/*  Media                                              */
-/* -------------------------------------------------- */
-
 export function useMessageMedia(messageId: number | null) {
   return useQuery<{ data: string; type: string; name: string }>({
     queryKey: ['sms-media', messageId],
@@ -115,10 +95,6 @@ export function useMessageMedia(messageId: number | null) {
     staleTime: 5 * 60 * 1000, // cache 5 min — base64 data doesn't change
   });
 }
-
-/* -------------------------------------------------- */
-/*  Send SMS / MMS                                     */
-/* -------------------------------------------------- */
 
 export function useSendSms() {
   const qc = useQueryClient();
@@ -141,10 +117,6 @@ export function useSendSms() {
     },
   });
 }
-
-/* -------------------------------------------------- */
-/*  Contacts                                           */
-/* -------------------------------------------------- */
 
 export function useContacts() {
   return useQuery<Contact[]>({
@@ -179,10 +151,6 @@ export function useDeleteContact() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['sms-contacts'] }),
   });
 }
-
-/* -------------------------------------------------- */
-/*  Templates                                          */
-/* -------------------------------------------------- */
 
 export function useTemplates() {
   return useQuery<SmsTemplate[]>({

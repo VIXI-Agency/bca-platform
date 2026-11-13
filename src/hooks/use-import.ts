@@ -2,10 +2,6 @@
 
 import { useMutation } from '@tanstack/react-query';
 
-/* -------------------------------------------------- */
-/*  Types                                              */
-/* -------------------------------------------------- */
-
 export interface ImportRow {
   [key: string]: string;
 }
@@ -48,10 +44,6 @@ export interface ImportPayload {
   };
 }
 
-/* -------------------------------------------------- */
-/*  Helpers                                            */
-/* -------------------------------------------------- */
-
 function applyMapping(rows: ImportRow[], mapping: ColumnMapping): Record<string, string>[] {
   return rows.map((row) => ({
     businessName: row[mapping.businessName] ?? '',
@@ -71,10 +63,6 @@ async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
   }
   return res.json();
 }
-
-/* -------------------------------------------------- */
-/*  Mutations                                          */
-/* -------------------------------------------------- */
 
 export function useValidateImport() {
   return useMutation<ValidationResult, Error, ValidatePayload>({

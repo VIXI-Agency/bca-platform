@@ -14,10 +14,6 @@ import { ReportTable } from './report-table';
 import { DisconnectionsSummary } from './disconnections-summary';
 import { PaymentSummary } from './payment-summary';
 
-/* ================================================== */
-/*  TAB 5: Payment Report                              */
-/* ================================================== */
-
 export function PaymentReportTab() {
   const {
     selectedUserId, setSelectedUserId, selectedWeek, setSelectedWeek, empSearch, setEmpSearch,

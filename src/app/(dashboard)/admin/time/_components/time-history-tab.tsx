@@ -18,10 +18,6 @@ import { useEmployeeList, useTimeHistory, type TimeHistoryEntry } from '@/hooks/
 import { payPeriodOptions } from '@/lib/time';
 import { formatTime, formatDuration } from '../_lib/format';
 
-/* ================================================== */
-/*  TAB 3: Time History                                */
-/* ================================================== */
-
 export function TimeHistoryTab() {
   const { data: employees, isLoading: empLoading } = useEmployeeList();
 

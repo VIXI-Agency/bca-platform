@@ -11,10 +11,6 @@ import {
 import { invalidatePayData } from './invalidate-pay-data';
 import type { PayScheduleChangeDto } from '@/app/(dashboard)/admin/time/_lib/week-options';
 
-/* -------------------------------------------------- */
-/*  Types                                              */
-/* -------------------------------------------------- */
-
 export interface EmployeeStatus {
   userId: number;
   name: string;
@@ -201,10 +197,6 @@ export interface TimeHistoryEntry {
   disconnectedMinutes: number;
 }
 
-/* -------------------------------------------------- */
-/*  Helpers                                            */
-/* -------------------------------------------------- */
-
 async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
   const res = await fetch(url, init);
   if (!res.ok) {
@@ -213,10 +205,6 @@ async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
   }
   return res.json();
 }
-
-/* -------------------------------------------------- */
-/*  Queries                                            */
-/* -------------------------------------------------- */
 
 export function useEmployeeStatuses() {
   return useQuery<EmployeeStatus[]>({
@@ -296,10 +284,6 @@ export function useBonus(userId: number, week: string) {
     enabled: !!userId && !!week,
   });
 }
-
-/* -------------------------------------------------- */
-/*  Mutations                                          */
-/* -------------------------------------------------- */
 
 export function useEditTime() {
   const qc = useQueryClient();

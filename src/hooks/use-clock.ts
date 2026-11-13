@@ -2,10 +2,6 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import type { TimeLogEntry, ClockAction, ClockStatus } from '@/types';
 import type { BreakKind } from '@/lib/clock/break-order';
 
-/* -------------------------------------------------- */
-/*  Types                                              */
-/* -------------------------------------------------- */
-
 export interface ClockStatusResponse {
   data: TimeLogEntry | null;
   nextAction: ClockAction | null;
@@ -37,10 +33,6 @@ export interface AvailableWeek {
   label: string;
 }
 
-/* -------------------------------------------------- */
-/*  Helpers                                            */
-/* -------------------------------------------------- */
-
 async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
   const res = await fetch(url, init);
   if (!res.ok) {
@@ -49,10 +41,6 @@ async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
   }
   return res.json();
 }
-
-/* -------------------------------------------------- */
-/*  Queries                                            */
-/* -------------------------------------------------- */
 
 export function useClockStatus() {
   return useQuery<ClockStatusResponse>({
@@ -81,10 +69,6 @@ export function useAvailableWeeks() {
     staleTime: 5 * 60 * 1000,
   });
 }
-
-/* -------------------------------------------------- */
-/*  Mutations                                          */
-/* -------------------------------------------------- */
 
 export function useClockAction() {
   const qc = useQueryClient();

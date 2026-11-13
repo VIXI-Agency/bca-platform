@@ -17,10 +17,6 @@ import { Badge } from '@/components/ui/badge';
 import { Loading } from '@/components/ui/loading';
 import { formatDate } from '@/lib/utils';
 
-/* -------------------------------------------------- */
-/*  Types                                              */
-/* -------------------------------------------------- */
-
 interface VideoWatcher {
   userId: number;
   name: string;
@@ -50,10 +46,6 @@ interface VideoReportsData {
   userSummaries: UserVideoSummary[];
 }
 
-/* -------------------------------------------------- */
-/*  Data hook                                          */
-/* -------------------------------------------------- */
-
 async function fetchJson<T>(url: string): Promise<T> {
   const res = await fetch(url);
   if (!res.ok) {
@@ -69,10 +61,6 @@ function useVideoReports() {
     queryFn: () => fetchJson('/api/reports/videos'),
   });
 }
-
-/* -------------------------------------------------- */
-/*  Component                                          */
-/* -------------------------------------------------- */
 
 export default function VideoReportsPage() {
   const { data: session } = useSession();
@@ -338,10 +326,6 @@ export default function VideoReportsPage() {
     </>
   );
 }
-
-/* -------------------------------------------------- */
-/*  Expandable Video Row                               */
-/* -------------------------------------------------- */
 
 function ExpandableVideoRow({
   video,

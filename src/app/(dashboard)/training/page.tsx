@@ -61,7 +61,6 @@ export default function TrainingPage() {
       <Header title="Training Videos" />
 
       <div className="mx-auto max-w-[1200px] pt-6">
-        {/* ---- Progress bar ---- */}
         <Card className="mb-6">
           <CardContent className="p-5">
             <div className="flex items-center justify-between mb-3">
@@ -110,7 +109,6 @@ export default function TrainingPage() {
           </CardContent>
         </Card>
 
-        {/* ---- Admin: Add Video ---- */}
         {isAdmin && (
           <Card className="mb-6">
             <CardHeader className="pb-3">
@@ -172,7 +170,6 @@ export default function TrainingPage() {
           </Card>
         )}
 
-        {/* ---- Video Grid ---- */}
         {isLoading ? (
           <Loading className="py-16" />
         ) : !videos || videos.length === 0 ? (

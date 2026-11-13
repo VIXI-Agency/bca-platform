@@ -1,9 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 
-/* -------------------------------------------------- */
-/*  Types                                              */
-/* -------------------------------------------------- */
-
 export interface ClientBusiness {
   idBusiness: number;
   businessName: string;
@@ -23,10 +19,6 @@ export interface PaginatedResponse {
   totalPages: number;
 }
 
-/* -------------------------------------------------- */
-/*  Helpers                                            */
-/* -------------------------------------------------- */
-
 async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
   const res = await fetch(url, init);
   if (!res.ok) {
@@ -35,10 +27,6 @@ async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
   }
   return res.json();
 }
-
-/* -------------------------------------------------- */
-/*  Queries                                            */
-/* -------------------------------------------------- */
 
 export function useClients(search: string, page: number, pageSize: number) {
   const params = new URLSearchParams({
@@ -69,10 +57,6 @@ export function useAvailableBusinesses(search: string, page: number, pageSize: n
     staleTime: 30_000,
   });
 }
-
-/* -------------------------------------------------- */
-/*  Mutations                                          */
-/* -------------------------------------------------- */
 
 export function useUpdateBusinessStatus() {
   const qc = useQueryClient();

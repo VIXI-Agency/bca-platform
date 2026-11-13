@@ -2,10 +2,6 @@
 
 import { useQuery, useMutation } from '@tanstack/react-query';
 
-/* -------------------------------------------------- */
-/*  Types                                              */
-/* -------------------------------------------------- */
-
 export interface ReportFilters {
   repId?: string;
   startDate?: string;
@@ -54,10 +50,6 @@ export interface ReportsResponse {
   };
 }
 
-/* -------------------------------------------------- */
-/*  Helpers                                            */
-/* -------------------------------------------------- */
-
 async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
   const res = await fetch(url, init);
   if (!res.ok) {
@@ -80,10 +72,6 @@ function buildQueryString(filters: ReportFilters): string {
   return qs ? `?${qs}` : '';
 }
 
-/* -------------------------------------------------- */
-/*  Queries                                            */
-/* -------------------------------------------------- */
-
 export function useReports(filters: ReportFilters) {
   return useQuery<ReportsResponse>({
     queryKey: ['reports', filters],
@@ -98,10 +86,6 @@ export function useReportsSummary(filters: ReportFilters) {
       fetchJson(`/api/reports/summary${buildQueryString(filters)}`),
   });
 }
-
-/* -------------------------------------------------- */
-/*  Mutations                                          */
-/* -------------------------------------------------- */
 
 export function useResendEmail() {
   return useMutation<{ message: string; sentTo: string }, Error, number>({

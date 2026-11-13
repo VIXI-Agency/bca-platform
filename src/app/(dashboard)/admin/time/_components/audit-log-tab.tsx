@@ -16,10 +16,6 @@ import { useEmployeeList, useEmployeeTimesheet, usePeriodAudits } from '@/hooks/
 import { payPeriodOptions } from '@/lib/time';
 import { AuditTable } from './audit-table';
 
-/* ================================================== */
-/*  TAB 4: Audit Log                                   */
-/* ================================================== */
-
 export function AuditLogTab() {
   const { data: employees } = useEmployeeList();
 

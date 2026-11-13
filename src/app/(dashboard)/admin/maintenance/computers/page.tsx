@@ -25,10 +25,6 @@ import {
 import { useUsers } from '@/hooks/use-users';
 import LogMaintenanceDialog from './log-maintenance-dialog';
 
-/* -------------------------------------------------- */
-/*  Helpers                                            */
-/* -------------------------------------------------- */
-
 function statusBadge(ms: MaintenanceStatus) {
   switch (ms) {
     case 'overdue':   return <Badge variant="destructive">Overdue</Badge>;
@@ -42,10 +38,6 @@ function fmtDate(d: string | null | undefined) {
   if (!d) return '—';
   return new Date(d).toLocaleDateString();
 }
-
-/* -------------------------------------------------- */
-/*  Inline editable cell                               */
-/* -------------------------------------------------- */
 
 function InlineEditCell({
   value,
@@ -120,10 +112,6 @@ function InlineEditCell({
     </button>
   );
 }
-
-/* -------------------------------------------------- */
-/*  Multi-user selector                                */
-/* -------------------------------------------------- */
 
 interface UserOption { userId: number; name: string; lastname: string; }
 
@@ -205,10 +193,6 @@ function UserMultiSelect({
   );
 }
 
-/* -------------------------------------------------- */
-/*  Form state                                         */
-/* -------------------------------------------------- */
-
 interface ComputerForm {
   computerName: string;
   remotePcId: string;
@@ -243,10 +227,6 @@ function formFromComputer(c: Computer): ComputerForm {
     maintenanceIntervalMonths: String(c.maintenanceIntervalMonths),
   };
 }
-
-/* -------------------------------------------------- */
-/*  Page                                               */
-/* -------------------------------------------------- */
 
 export default function ComputersPage() {
   const [search, setSearch] = useState('');

@@ -44,7 +44,7 @@ async function guard(params: Params['params']) {
 export async function GET(request: Request, { params }: Params) {
   try {
     const g = await guard(params);
-    if ('error' in g) return g.error;
+    if (g.error) return g.error;
 
     const parsed = clockWeekSchema.safeParse({ week: new URL(request.url).searchParams.get('week') || undefined });
     if (!parsed.success) {
@@ -74,7 +74,7 @@ export async function GET(request: Request, { params }: Params) {
 export async function POST(request: Request, { params }: Params) {
   try {
     const g = await guard(params);
-    if ('error' in g) return g.error;
+    if (g.error) return g.error;
 
     const parsed = entrySchema.safeParse(await request.json());
     if (!parsed.success) {

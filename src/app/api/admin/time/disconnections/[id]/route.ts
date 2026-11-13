@@ -58,7 +58,7 @@ export async function PATCH(request: Request, { params }: Params) {
     }
 
     const loaded = await load(params);
-    if ('error' in loaded) return loaded.error;
+    if (loaded.error) return loaded.error;
     const { row, adminUserId } = loaded;
 
     const startTime = timeStringToUtcDate(start);
@@ -115,7 +115,7 @@ export async function DELETE(request: Request, { params }: Params) {
     }
 
     const loaded = await load(params);
-    if ('error' in loaded) return loaded.error;
+    if (loaded.error) return loaded.error;
     const { row, adminUserId } = loaded;
 
     await prisma.$transaction(async (tx) => {

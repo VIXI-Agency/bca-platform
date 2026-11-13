@@ -1,7 +1,6 @@
 'use client';
 
 import { useSession } from 'next-auth/react';
-import { Bell } from 'lucide-react';
 
 interface HeaderProps {
   title: string;
@@ -35,24 +34,8 @@ export default function Header({ title }: HeaderProps) {
         {title}
       </h1>
 
-      {/* Right: Notification bell + user avatar */}
+      {/* Right: user avatar */}
       <div className="flex items-center gap-4">
-        <button
-          className="relative flex h-9 w-9 items-center justify-center rounded-lg transition-colors"
-          style={{ color: 'var(--text-secondary)' }}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.backgroundColor = 'var(--accent-subtle)';
-            e.currentTarget.style.color = 'var(--accent)';
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.backgroundColor = 'transparent';
-            e.currentTarget.style.color = 'var(--text-secondary)';
-          }}
-          aria-label="Notifications"
-        >
-          <Bell className="h-5 w-5" />
-        </button>
-
         <div
           className="flex h-9 w-9 items-center justify-center rounded-full text-xs font-semibold"
           style={{

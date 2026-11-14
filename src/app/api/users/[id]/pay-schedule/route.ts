@@ -103,7 +103,7 @@ async function applyChange(
 export async function GET(_request: NextRequest, { params }: Params) {
   try {
     const g = await guard(params);
-    if ('error' in g) return g.error;
+    if (g.error) return g.error;
 
     const history = await payScheduleHistory(g.idUser);
     const { todayStart } = getTodayRangePST();
@@ -124,7 +124,7 @@ export async function GET(_request: NextRequest, { params }: Params) {
 export async function POST(request: NextRequest, { params }: Params) {
   try {
     const g = await guard(params);
-    if ('error' in g) return g.error;
+    if (g.error) return g.error;
 
     const parsed = changeSchema.safeParse(await request.json());
     if (!parsed.success) {
@@ -172,7 +172,7 @@ export async function POST(request: NextRequest, { params }: Params) {
 export async function DELETE(request: NextRequest, { params }: Params) {
   try {
     const g = await guard(params);
-    if ('error' in g) return g.error;
+    if (g.error) return g.error;
 
     const parsed = isoDate.safeParse(request.nextUrl.searchParams.get('effectiveFrom'));
     if (!parsed.success) return NextResponse.json({ error: 'effectiveFrom required (YYYY-MM-DD)' }, { status: 400 });

@@ -10,10 +10,6 @@ import { AuditLogTab } from './_components/audit-log-tab';
 import { EditTimeTab } from './_components/edit-time/edit-time-tab';
 import { PaymentReportTab } from './_components/payment-report/payment-report-tab';
 
-/* -------------------------------------------------- */
-/*  Main Page                                          */
-/* -------------------------------------------------- */
-
 export default function AdminTimePage() {
   const { data: session } = useSession();
   const userRole = (session?.user as { role?: number })?.role;

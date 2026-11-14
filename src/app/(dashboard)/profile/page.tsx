@@ -19,10 +19,6 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 
-/* -------------------------------------------------- */
-/*  Types                                              */
-/* -------------------------------------------------- */
-
 interface ScheduleEntry {
   day: string;
   startTime: string;
@@ -43,10 +39,6 @@ interface ProfileData {
   photo: string | null;
   schedule: ScheduleEntry[];
 }
-
-/* -------------------------------------------------- */
-/*  Toast                                              */
-/* -------------------------------------------------- */
 
 interface Toast {
   message: string;
@@ -77,10 +69,6 @@ function ToastNotification({ toast, onClose }: { toast: Toast; onClose: () => vo
     </div>
   );
 }
-
-/* -------------------------------------------------- */
-/*  Helpers                                            */
-/* -------------------------------------------------- */
 
 const TIMEZONES = [
   { value: 'PST', label: 'Pacific (PST)' },
@@ -130,10 +118,6 @@ function resizeImage(file: File, maxSize: number): Promise<string> {
   });
 }
 
-/* -------------------------------------------------- */
-/*  Main Page                                          */
-/* -------------------------------------------------- */
-
 export default function ProfilePage() {
   const { data: session } = useSession();
   const queryClient = useQueryClient();
@@ -158,7 +142,6 @@ export default function ProfilePage() {
     setToast({ message, type });
   }, []);
 
-  /* ---- Query ---- */
   const { data: profile, isLoading } = useQuery<ProfileData>({
     queryKey: ['profile'],
     queryFn: fetchProfile,
@@ -176,7 +159,6 @@ export default function ProfilePage() {
     }
   }, [profile]);
 
-  /* ---- Mutations ---- */
   const updateProfile = useMutation({
     mutationFn: async (data: Record<string, string | undefined>) => {
       const res = await fetch('/api/profile', {
@@ -231,7 +213,6 @@ export default function ProfilePage() {
     },
   });
 
-  /* ---- Handlers ---- */
   const handlePhotoClick = () => {
     fileInputRef.current?.click();
   };
@@ -295,7 +276,6 @@ export default function ProfilePage() {
     );
   };
 
-  /* ---- Derived ---- */
   const initials = profile
     ? `${(profile.name?.[0] ?? '').toUpperCase()}${(profile.lastname?.[0] ?? '').toUpperCase()}`
     : session?.user?.name
@@ -307,7 +287,6 @@ export default function ProfilePage() {
           .slice(0, 2)
       : '??';
 
-  /* ---- Render ---- */
   if (isLoading) {
     return (
       <>
@@ -324,7 +303,6 @@ export default function ProfilePage() {
       <Header title="My Profile" />
 
       <div className="mx-auto max-w-4xl space-y-6 p-6">
-        {/* ---- Section 1: Profile Header ---- */}
         <Card>
           <CardContent className="p-6">
             <div className="flex items-center gap-6">
@@ -390,7 +368,6 @@ export default function ProfilePage() {
           </CardContent>
         </Card>
 
-        {/* ---- Section 2: Personal Information ---- */}
         <Card>
           <CardContent className="p-6">
             <div className="mb-5 flex items-center gap-2">
@@ -492,7 +469,6 @@ export default function ProfilePage() {
           </CardContent>
         </Card>
 
-        {/* ---- Section 3: Change Password ---- */}
         <Card>
           <CardContent className="p-6">
             <div className="mb-5 flex items-center gap-2">
@@ -558,7 +534,6 @@ export default function ProfilePage() {
           </CardContent>
         </Card>
 
-        {/* ---- Section 4: My Schedule (read-only) ---- */}
         <Card>
           <CardContent className="p-6">
             <div className="mb-5 flex items-center gap-2">
@@ -647,7 +622,6 @@ export default function ProfilePage() {
         </Card>
       </div>
 
-      {/* ---- Toast ---- */}
       {toast && (
         <ToastNotification toast={toast} onClose={() => setToast(null)} />
       )}

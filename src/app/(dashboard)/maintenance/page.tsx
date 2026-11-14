@@ -41,10 +41,6 @@ import {
   type TicketStatus,
 } from '@/hooks/use-maintenance';
 
-/* -------------------------------------------------- */
-/*  Helpers                                            */
-/* -------------------------------------------------- */
-
 function maintenanceStatusInfo(s: MaintenanceStatus) {
   switch (s) {
     case 'overdue':
@@ -88,10 +84,6 @@ function fmtDate(d: string | null | undefined) {
   if (!d) return '—';
   return new Date(d).toLocaleDateString();
 }
-
-/* -------------------------------------------------- */
-/*  ComputerCard                                       */
-/* -------------------------------------------------- */
 
 function ComputerCard({ computer }: { computer: MyComputer }) {
   const statusInfo = maintenanceStatusInfo(computer.maintenanceStatus);
@@ -150,10 +142,6 @@ function ComputerCard({ computer }: { computer: MyComputer }) {
     </div>
   );
 }
-
-/* -------------------------------------------------- */
-/*  Page                                               */
-/* -------------------------------------------------- */
 
 interface TicketForm {
   computerId: number | '';

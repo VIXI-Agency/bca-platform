@@ -5,10 +5,6 @@ import type { Audit } from '@/hooks/use-admin-time';
 import { fieldLabel } from '../_lib/constants';
 import { formatTime, formatSpan } from '../_lib/format';
 
-/* -------------------------------------------------- */
-/*  Shared audit table                                 */
-/* -------------------------------------------------- */
-
 export function AuditTable({
   audits,
   showEmployee,

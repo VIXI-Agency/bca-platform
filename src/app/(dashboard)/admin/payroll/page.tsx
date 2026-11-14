@@ -48,10 +48,6 @@ import { PAY_SCHEDULES, PAY_SCHEDULE_LABELS, groupWeekOptions, type PaySchedule 
 import { weekForOptions } from '../time/_lib/week-options';
 import { formatCurrency } from '@/lib/utils';
 
-/* -------------------------------------------------- */
-/*  Helpers                                            */
-/* -------------------------------------------------- */
-
 /** Today's date in the viewer's own calendar, as YYYY-MM-DD (toISOString
  *  would roll over to tomorrow after ~5pm Pacific). */
 function localDateISO(d: Date): string {
@@ -74,10 +70,6 @@ function statusBadge(status: string | null) {
       return <Badge variant="outline">Live preview — not approved</Badge>;
   }
 }
-
-/* -------------------------------------------------- */
-/*  Main page                                          */
-/* -------------------------------------------------- */
 
 export default function AdminPayrollPage() {
   const { data: session } = useSession();
@@ -127,10 +119,6 @@ export default function AdminPayrollPage() {
     </>
   );
 }
-
-/* -------------------------------------------------- */
-/*  TAB 1: Pay Run                                     */
-/* -------------------------------------------------- */
 
 function PayRunTab({ canManage }: { canManage: boolean }) {
   // Remote employees are paid Fri–Thu, In House Mon–Fri: each is its own payroll.
@@ -544,10 +532,6 @@ function PayRunTab({ canManage }: { canManage: boolean }) {
     </div>
   );
 }
-
-/* -------------------------------------------------- */
-/*  TAB 2: Payment History                             */
-/* -------------------------------------------------- */
 
 function PaymentHistoryTab() {
   const [employeeFilter, setEmployeeFilter] = useState<string>('all');

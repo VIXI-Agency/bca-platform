@@ -20,10 +20,6 @@ import { useUsers } from '@/hooks/use-users';
 import LogMaintenanceDialog from '../computers/log-maintenance-dialog';
 import type { Computer } from '@/hooks/use-maintenance';
 
-/* -------------------------------------------------- */
-/*  Helpers                                            */
-/* -------------------------------------------------- */
-
 function typeBadge(t: MaintenanceType) {
   switch (t) {
     case 'preventive':
@@ -39,10 +35,6 @@ function fmtDate(d: string | null | undefined) {
   if (!d) return '—';
   return new Date(d).toLocaleDateString();
 }
-
-/* -------------------------------------------------- */
-/*  Page                                               */
-/* -------------------------------------------------- */
 
 export default function LogsPage() {
   const [computerFilter, setComputerFilter] = useState('');

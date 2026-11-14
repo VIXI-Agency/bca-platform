@@ -23,10 +23,6 @@ import { StatusSummary } from './status-summary';
 import { EmployeeStatusTable } from './employee-status-table';
 import { DisconnectDialog } from './disconnect-dialog';
 
-/* ================================================== */
-/*  TAB 1: Employee Status                             */
-/* ================================================== */
-
 export function EmployeeStatusTab() {
   const { data: statuses, isLoading, dataUpdatedAt } = useEmployeeStatuses();
   const disconnectMutation = useDisconnectEmployee();

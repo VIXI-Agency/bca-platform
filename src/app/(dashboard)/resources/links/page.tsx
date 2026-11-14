@@ -19,10 +19,6 @@ import {
 import Header from '@/components/layout/header';
 import { Card, CardContent } from '@/components/ui/card';
 
-/* -------------------------------------------------- */
-/*  Link data                                          */
-/* -------------------------------------------------- */
-
 interface LinkCategory {
   title: string;
   icon: React.ComponentType<{ className?: string; style?: React.CSSProperties }>;
@@ -132,10 +128,6 @@ const CATEGORIES: LinkCategory[] = [
     ],
   },
 ];
-
-/* -------------------------------------------------- */
-/*  Main Page                                          */
-/* -------------------------------------------------- */
 
 export default function UsefulLinksPage() {
   return (

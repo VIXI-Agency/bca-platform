@@ -1,9 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 
-/* -------------------------------------------------- */
-/*  Types                                              */
-/* -------------------------------------------------- */
-
 export interface Video {
   id: number;
   title: string;
@@ -11,10 +7,6 @@ export interface Video {
   watched: boolean;
   watchedAt: string | null;
 }
-
-/* -------------------------------------------------- */
-/*  Helpers                                            */
-/* -------------------------------------------------- */
 
 async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
   const res = await fetch(url, init);
@@ -25,10 +17,6 @@ async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
   return res.json();
 }
 
-/* -------------------------------------------------- */
-/*  Queries                                            */
-/* -------------------------------------------------- */
-
 export function useVideos() {
   return useQuery<Video[]>({
     queryKey: ['training-videos'],
@@ -36,10 +24,6 @@ export function useVideos() {
     staleTime: 60_000,
   });
 }
-
-/* -------------------------------------------------- */
-/*  Mutations                                          */
-/* -------------------------------------------------- */
 
 export function useAddVideo() {
   const qc = useQueryClient();

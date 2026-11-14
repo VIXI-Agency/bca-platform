@@ -25,7 +25,6 @@ export async function POST(request: NextRequest) {
     const data = await request.json();
     const { event, payload = {} } = data;
 
-    /* ---- Inbound SMS ---- */
     if (event === 'sms:received') {
       const sender: string = payload.sender ?? payload.phoneNumber ?? '';
       const { message, receivedAt } = payload;
@@ -71,7 +70,6 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ ok: true });
     }
 
-    /* ---- Delivery status events ---- */
     if (event === 'sms:sent' || event === 'sms:delivered' || event === 'sms:failed') {
       const statusMap: Record<string, string> = {
         'sms:sent': 'sent',

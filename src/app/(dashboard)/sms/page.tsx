@@ -51,19 +51,11 @@ import {
   type SmsTemplate,
 } from '@/hooks/use-sms';
 
-/* -------------------------------------------------- */
-/*  Constants                                          */
-/* -------------------------------------------------- */
-
 const SMS_SEGMENT = 160;
 // IIS default requestFiltering limit is ~200KB payload; base64 adds ~33% overhead.
 // Target ≤130KB raw image so the base64 JSON stays well under 200KB.
 const MAX_MEDIA_BYTES = 130 * 1024; // 130 KB raw → ~173 KB base64 + JSON overhead
 const ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
-
-/* -------------------------------------------------- */
-/*  Helpers                                            */
-/* -------------------------------------------------- */
 
 function timeAgo(dateStr: string): string {
   const diff = Date.now() - new Date(dateStr).getTime();
@@ -164,10 +156,6 @@ function MediaBubble({ messageId, mediaType, mediaName, isOutbound }: {
   );
 }
 
-/* -------------------------------------------------- */
-/*  Main Page                                          */
-/* -------------------------------------------------- */
-
 export default function SmsPage() {
   const [selectedPhone, setSelectedPhone] = useState<string | null>(null);
   const [messageText, setMessageText] = useState('');
@@ -193,29 +181,24 @@ export default function SmsPage() {
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  /* ---- Queries ---- */
   const { data: conversations, isLoading: loadingConversations } = useConversations();
   const { data: messages, isLoading: loadingMessages } = useMessages(selectedPhone);
   const { data: contacts = [] } = useContacts();
   const { data: templates = [] } = useTemplates();
 
-  /* ---- Mutations ---- */
   const sendSms = useSendSms();
   const upsertContact = useUpsertContact();
   const deleteContact = useDeleteContact();
   const createTemplate = useCreateTemplate();
   const deleteTemplate = useDeleteTemplate();
 
-  /* ---- Contact name lookup ---- */
   const contactMap = new Map(contacts.map((c) => [c.phoneNumber, c.name]));
   const displayName = (phone: string) => contactMap.get(phone) ?? formatPhone(phone);
 
-  /* ---- Auto-scroll ---- */
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
-  /* ---- Send handler ---- */
   const handleSend = useCallback(() => {
     if (!selectedPhone || (!messageText.trim() && !pendingMedia)) return;
     sendSms.mutate(
@@ -237,7 +220,6 @@ export default function SmsPage() {
     );
   }, [selectedPhone, messageText, pendingMedia, sendSms]);
 
-  /* ---- New conversation ---- */
   const handleNewConversation = useCallback(() => {
     const digits = newPhone.replace(/\D/g, '');
     if (digits.length < 10) return;
@@ -246,7 +228,6 @@ export default function SmsPage() {
     setNewPhone('');
   }, [newPhone]);
 
-  /* ---- Key handler ---- */
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
       if (e.key === 'Enter' && !e.shiftKey) {
@@ -257,7 +238,6 @@ export default function SmsPage() {
     [handleSend],
   );
 
-  /* ---- Save contact name ---- */
   const handleSaveName = useCallback(() => {
     if (!selectedPhone || !nameInput.trim()) return;
     upsertContact.mutate({ phone: selectedPhone, name: nameInput.trim() });
@@ -305,13 +285,11 @@ export default function SmsPage() {
     img.src = objectUrl;
   }, []);
 
-  /* ---- Apply template ---- */
   const handleApplyTemplate = useCallback((tpl: SmsTemplate) => {
     setMessageText(tpl.body);
     setTemplateDialogOpen(false);
   }, []);
 
-  /* ---- Filtered conversations ---- */
   const filteredConversations = conversations?.filter((c) => {
     if (!searchFilter) return true;
     const q = searchFilter.toLowerCase();
@@ -326,12 +304,10 @@ export default function SmsPage() {
 
   const selectedConversation = conversations?.find((c) => c.phone === selectedPhone);
 
-  /* ---- Filtered messages (thread search) ---- */
   const filteredMessages = threadSearch
     ? messages?.filter((m) => m.body.toLowerCase().includes(threadSearch.toLowerCase()))
     : messages;
 
-  /* ---- Date-grouped messages ---- */
   function buildMessageRows(msgs: SmsMessage[]) {
     const rows: Array<{ type: 'separator'; label: string } | { type: 'message'; msg: SmsMessage }> = [];
     let lastDay = '';
@@ -353,9 +329,6 @@ export default function SmsPage() {
       <div className="mx-auto max-w-[1600px] pt-6">
         <Card className="flex overflow-hidden" style={{ height: 'calc(100vh - 160px)' }}>
 
-          {/* ============================================ */}
-          {/*  LEFT PANEL - Conversation List              */}
-          {/* ============================================ */}
           <div className="flex w-[340px] shrink-0 flex-col border-r" style={{ borderColor: 'var(--border)' }}>
             {/* Header bar */}
             <div className="flex items-center justify-between border-b px-4 py-3" style={{ borderColor: 'var(--border)' }}>
@@ -446,9 +419,6 @@ export default function SmsPage() {
             </div>
           </div>
 
-          {/* ============================================ */}
-          {/*  RIGHT PANEL - Message Thread                */}
-          {/* ============================================ */}
           <div className="flex min-w-0 flex-1 flex-col">
             {!selectedPhone ? (
               <div className="flex flex-1 flex-col items-center justify-center">
@@ -698,7 +668,6 @@ export default function SmsPage() {
         </Card>
       </div>
 
-      {/* ---- New Conversation Dialog ---- */}
       <Dialog open={newDialogOpen} onOpenChange={setNewDialogOpen}>
         <DialogContent>
           <DialogHeader>
@@ -726,7 +695,6 @@ export default function SmsPage() {
         </DialogContent>
       </Dialog>
 
-      {/* ---- Template Picker Dialog ---- */}
       <Dialog open={templateDialogOpen} onOpenChange={setTemplateDialogOpen}>
         <DialogContent className="max-w-lg">
           <DialogHeader>

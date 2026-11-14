@@ -18,10 +18,6 @@ import { TimesheetTable } from './timesheet-table';
 import { EditTimeDialog } from './edit-time-dialog';
 import { DisconnectionsPanel } from './disconnections-panel';
 
-/* ================================================== */
-/*  TAB 2: Edit Time                                   */
-/* ================================================== */
-
 export function EditTimeTab() {
   const { data: employees, isLoading: empLoading } = useEmployeeList();
   const editMutation = useEditTime();

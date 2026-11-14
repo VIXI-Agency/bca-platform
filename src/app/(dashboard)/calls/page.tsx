@@ -73,10 +73,6 @@ import {
   type LogCallPayload,
 } from '@/hooks/use-calls';
 
-/* -------------------------------------------------- */
-/*  Constants                                          */
-/* -------------------------------------------------- */
-
 const DISPOSITION_POTENTIAL_CLIENT = 4;
 const DISPOSITION_CALL_BACK = 8;
 const DISPOSITION_INFO_REQUEST = 10;
@@ -99,10 +95,6 @@ function getSubmitLabel(id: number | null): string {
       return 'Log & Next Call';
   }
 }
-
-/* -------------------------------------------------- */
-/*  Form data shape                                    */
-/* -------------------------------------------------- */
 
 interface CallFormData {
   dmakerName: string;
@@ -127,10 +119,6 @@ const defaultValues: CallFormData = {
   callBack: '',
   comments: '',
 };
-
-/* -------------------------------------------------- */
-/*  Toast                                              */
-/* -------------------------------------------------- */
 
 interface Toast {
   message: string;
@@ -162,26 +150,15 @@ function ToastNotification({ toast, onClose }: { toast: Toast; onClose: () => vo
   );
 }
 
-/* -------------------------------------------------- */
-/*  Rebuttal Tabs                                      */
-/* -------------------------------------------------- */
-
-/* -------------------------------------------------- */
-/*  Main Page                                          */
-/* -------------------------------------------------- */
-
 export default function CallsPage() {
-  /* ---- Queries ---- */
   const { data: dispositions, isLoading: loadingDispos } = useDispositions();
   const { data: closers } = useClosers();
   const { data: rebuttals, isLoading: loadingRebuttals } = useRebuttals();
 
-  /* ---- Mutations ---- */
   const nextLead = useNextLead();
   const logCall = useLogCall();
   const revertBusiness = useRevertBusiness();
 
-  /* ---- Local state ---- */
   const [timezone, setTimezone] = useState('');
   const [industry, setIndustry] = useState('');
 
@@ -201,7 +178,6 @@ export default function CallsPage() {
   const [searchResults, setSearchResults] = useState<LeadBusiness[] | null>(null);
   const [isSearching, setIsSearching] = useState(false);
 
-  /* ---- Form ---- */
   const {
     register,
     handleSubmit,
@@ -222,12 +198,10 @@ export default function CallsPage() {
         : false,
   });
 
-  /* ---- Show toast ---- */
   const showToast = useCallback((message: string, type: 'success' | 'error') => {
     setToast({ message, type });
   }, []);
 
-  /* ---- Fetch a new lead from the server ---- */
   // industryOverride exists for the availability panel: it hands back an
   // industry and wants a lead from it in the same gesture, and reading the
   // industry state here would still see the value from before that click.
@@ -259,7 +233,6 @@ export default function CallsPage() {
     );
   }, [timezone, industry, nextLead, reset, showToast]);
 
-  /* ---- Search by phone ---- */
   const doPhoneSearch = useCallback(async () => {
     const digits = phoneSearch.replace(/\D/g, '');
     if (digits.length < 4) {
@@ -291,7 +264,6 @@ export default function CallsPage() {
     showToast(`Loaded: ${business.businessName}`, 'success');
   }, [reset, showToast]);
 
-  /* ---- Revert last ---- */
   const handleRevert = useCallback(() => {
     if (!previousLead) return;
     revertBusiness.mutate(
@@ -310,7 +282,6 @@ export default function CallsPage() {
     );
   }, [previousLead, lastCallId, revertBusiness, reset, showToast]);
 
-  /* ---- Submit call ---- */
   const onSubmit = useCallback(
     (formData: CallFormData) => {
       if (!lead || selectedDisposition === null) return;
@@ -371,7 +342,6 @@ export default function CallsPage() {
     [lead, selectedDisposition, logCall, nextLead, timezone, industry, reset, showToast],
   );
 
-  /* ---- Unified main button handler ---- */
   const handleMainButton = useCallback(() => {
     // No lead loaded yet → need a timezone to fetch one
     if (!lead) {
@@ -399,7 +369,6 @@ export default function CallsPage() {
     onSubmit(defaultValues);
   }, [timezone, lead, selectedDisposition, doFetchLead, showToast, handleSubmit, onSubmit]);
 
-  /* ---- Determine which form fields to show ---- */
   const showDecisionMaker = DISPOSITIONS_WITH_FORM.has(selectedDisposition ?? -1);
   const showDebtorInfo = selectedDisposition === DISPOSITION_POTENTIAL_CLIENT;
   const showAgreement = selectedDisposition === DISPOSITION_POTENTIAL_CLIENT;
@@ -421,7 +390,6 @@ export default function CallsPage() {
 
       <div className="mx-auto max-w-[1200px] pt-6">
         <div className="space-y-5">
-            {/* ---- Filter Bar ---- */}
             <Card>
               <CardContent className="p-4">
                 <div className="flex flex-wrap items-end gap-4">
@@ -597,7 +565,6 @@ export default function CallsPage() {
               </CardContent>
             </Card>
 
-            {/* ---- Loading State ---- */}
             {nextLead.isPending && !lead && (
               <Card>
                 <CardContent className="flex items-center justify-center p-12">
@@ -611,7 +578,6 @@ export default function CallsPage() {
               </Card>
             )}
 
-            {/* ---- Nothing matched the filters ---- */}
             {!lead && !nextLead.isPending && noLeadsFor && (
               <Card>
                 <CardContent className="flex justify-center p-8">
@@ -628,7 +594,6 @@ export default function CallsPage() {
               </Card>
             )}
 
-            {/* ---- Empty State ---- */}
             {!lead && !nextLead.isPending && !noLeadsFor && (
               <Card>
                 <CardContent className="flex flex-col items-center justify-center p-16">
@@ -651,7 +616,6 @@ export default function CallsPage() {
               </Card>
             )}
 
-            {/* ---- Business Info Card ---- */}
             {lead && (
               <Card className="overflow-hidden">
                 <div
@@ -701,7 +665,6 @@ export default function CallsPage() {
               </Card>
             )}
 
-            {/* ---- Disposition Selection ---- */}
             {lead && (
               <Card>
                 <CardHeader className="pb-3">
@@ -758,7 +721,6 @@ export default function CallsPage() {
               </Card>
             )}
 
-            {/* ---- Rebuttals ---- */}
             {lead && (
               <Card>
                 <CardHeader className="pb-3">
@@ -852,7 +814,6 @@ export default function CallsPage() {
               </Card>
             )}
 
-            {/* ---- Dynamic Form ---- */}
             {lead && selectedDisposition !== null && showFullForm && (
               <form onSubmit={(e) => { e.preventDefault(); handleSubmit(onSubmit)(); }}>
                   <Card>
@@ -1131,17 +1092,12 @@ export default function CallsPage() {
         </div>
       </div>
 
-      {/* ---- Toast ---- */}
       {toast && (
         <ToastNotification toast={toast} onClose={() => setToast(null)} />
       )}
     </>
   );
 }
-
-/* -------------------------------------------------- */
-/*  Small helper component                             */
-/* -------------------------------------------------- */
 
 function InfoItem({
   icon: Icon,

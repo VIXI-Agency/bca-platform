@@ -20,10 +20,6 @@ import {
   type Printer,
 } from '@/hooks/use-maintenance';
 
-/* -------------------------------------------------- */
-/*  Inline editable cell                               */
-/* -------------------------------------------------- */
-
 function InlineEditCell({
   value,
   onSave,
@@ -101,10 +97,6 @@ function InlineEditCell({
   );
 }
 
-/* -------------------------------------------------- */
-/*  Inline boolean cell (Folders Sharing)              */
-/* -------------------------------------------------- */
-
 function InlineBoolCell({
   value,
   onSave,
@@ -135,10 +127,6 @@ function InlineBoolCell({
     </button>
   );
 }
-
-/* -------------------------------------------------- */
-/*  Form state                                         */
-/* -------------------------------------------------- */
 
 interface PrinterForm {
   printerName: string;
@@ -171,10 +159,6 @@ function formFromPrinter(p: Printer): PrinterForm {
     notes: p.notes ?? '',
   };
 }
-
-/* -------------------------------------------------- */
-/*  Page                                               */
-/* -------------------------------------------------- */
 
 export default function PrintersPage() {
   const [search, setSearch] = useState('');

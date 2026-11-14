@@ -1,9 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 
-/* -------------------------------------------------- */
-/*  Types                                              */
-/* -------------------------------------------------- */
-
 export type MaintenanceStatus = 'overdue' | 'due-soon' | 'ok' | 'never';
 export type ComputerStatus = 'active' | 'inactive' | 'retired';
 export type MaintenanceType = 'preventive' | 'corrective' | 'emergency';
@@ -117,10 +113,6 @@ export interface PaginatedResponse<T> {
   meta: { total: number; page: number; pageSize: number; totalPages: number };
 }
 
-/* -------------------------------------------------- */
-/*  Create Computer Payload                            */
-/* -------------------------------------------------- */
-
 export interface CreateComputerPayload {
   computerName: string;
   remotePcId?: string;
@@ -191,10 +183,6 @@ export interface UpdateTicketPayload {
   resolvedDate?: string | null;
 }
 
-/* -------------------------------------------------- */
-/*  Helpers                                            */
-/* -------------------------------------------------- */
-
 async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
   const res = await fetch(url, init);
   if (!res.ok) {
@@ -203,10 +191,6 @@ async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
   }
   return res.json() as Promise<T>;
 }
-
-/* -------------------------------------------------- */
-/*  Employee hooks                                     */
-/* -------------------------------------------------- */
 
 export function useMyComputers() {
   return useQuery<MyComputer[]>({
@@ -243,10 +227,6 @@ export function useCreateTicket() {
     },
   });
 }
-
-/* -------------------------------------------------- */
-/*  Admin — Computers                                  */
-/* -------------------------------------------------- */
 
 export function useAdminComputers(filters?: {
   search?: string;
@@ -301,10 +281,6 @@ export function useRetireComputer() {
   });
 }
 
-/* -------------------------------------------------- */
-/*  Admin — Logs                                       */
-/* -------------------------------------------------- */
-
 export function useAdminLogs(filters?: {
   computerId?: number;
   type?: string;
@@ -346,10 +322,6 @@ export function useCreateLog() {
   });
 }
 
-/* -------------------------------------------------- */
-/*  Admin — Tickets                                    */
-/* -------------------------------------------------- */
-
 export function useAdminTickets(filters?: {
   status?: string;
   priority?: string;
@@ -386,10 +358,6 @@ export function useUpdateTicket() {
     },
   });
 }
-
-/* -------------------------------------------------- */
-/*  Admin — Printers                                   */
-/* -------------------------------------------------- */
 
 export function useAdminPrinters(filters?: { search?: string; status?: string }) {
   const params = new URLSearchParams();

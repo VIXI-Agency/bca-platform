@@ -32,16 +32,8 @@ import {
   type ClientBusiness,
 } from '@/hooks/use-clients';
 
-/* -------------------------------------------------- */
-/*  Constants                                          */
-/* -------------------------------------------------- */
-
 const PAGE_SIZE = 15;
 const STATUS_EXISTING = 7;
-
-/* -------------------------------------------------- */
-/*  Table component                                    */
-/* -------------------------------------------------- */
 
 function BusinessTable({
   data,
@@ -160,10 +152,6 @@ function BusinessTable({
   );
 }
 
-/* -------------------------------------------------- */
-/*  Pagination component                               */
-/* -------------------------------------------------- */
-
 function Pagination({
   page,
   totalPages,
@@ -204,23 +192,15 @@ function Pagination({
   );
 }
 
-/* -------------------------------------------------- */
-/*  Main Page                                          */
-/* -------------------------------------------------- */
-
 export default function ClientsPage() {
-  /* ---- Existing Clients tab state ---- */
   const [existingSearch, setExistingSearch] = useState('');
   const [existingPage, setExistingPage] = useState(1);
 
-  /* ---- Mark as Existing tab state ---- */
   const [availableSearch, setAvailableSearch] = useState('');
   const [availablePage, setAvailablePage] = useState(1);
 
-  /* ---- Confirm dialog state ---- */
   const [confirmBusiness, setConfirmBusiness] = useState<ClientBusiness | null>(null);
 
-  /* ---- Queries ---- */
   const {
     data: existingData,
     isLoading: loadingExisting,
@@ -231,10 +211,8 @@ export default function ClientsPage() {
     isLoading: loadingAvailable,
   } = useAvailableBusinesses(availableSearch, availablePage, PAGE_SIZE);
 
-  /* ---- Mutation ---- */
   const updateStatus = useUpdateBusinessStatus();
 
-  /* ---- Handlers ---- */
   const handleConfirmMark = useCallback(() => {
     if (!confirmBusiness) return;
     updateStatus.mutate(
@@ -266,9 +244,6 @@ export default function ClientsPage() {
             <TabsTrigger value="mark">Mark as Existing</TabsTrigger>
           </TabsList>
 
-          {/* ================================================ */}
-          {/*  Tab 1: Existing Clients                         */}
-          {/* ================================================ */}
           <TabsContent value="existing">
             <Card className="mt-4">
               {/* Search */}
@@ -305,9 +280,6 @@ export default function ClientsPage() {
             </Card>
           </TabsContent>
 
-          {/* ================================================ */}
-          {/*  Tab 2: Mark as Existing                         */}
-          {/* ================================================ */}
           <TabsContent value="mark">
             <Card className="mt-4">
               {/* Search */}
@@ -356,7 +328,6 @@ export default function ClientsPage() {
         </Tabs>
       </div>
 
-      {/* ---- Confirmation Dialog ---- */}
       <Dialog
         open={!!confirmBusiness}
         onOpenChange={(open) => !open && setConfirmBusiness(null)}

@@ -2,10 +2,6 @@
 
 import { Pencil, AlertTriangle } from 'lucide-react';
 
-/* -------------------------------------------------- */
-/*  Timesheet cell components                          */
-/* -------------------------------------------------- */
-
 export function TimeCell({
   value,
   modified,

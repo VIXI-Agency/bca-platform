@@ -198,21 +198,6 @@ function formatTotalHours(hours: number | undefined): string {
   return `${h}:${m.toString().padStart(2, '0')}`;
 }
 
-/** Get the current pay period's Friday start date as YYYY-MM-DD. Pay periods
- *  run Friday through Thursday (see admin/time/page.tsx for why). */
-function getCurrentWeekDate(): string {
-  const now = new Date();
-  const pst = new Date(
-    now.toLocaleString('en-US', { timeZone: 'America/Los_Angeles' })
-  );
-  const day = pst.getDay(); // 0=Sun, 1=Mon, ..., 5=Fri, 6=Sat
-  // Find the most recent Friday: Fri=0, Sat=1, Sun=2, Mon=3, Tue=4, Wed=5, Thu=6
-  const diff = (day + 2) % 7;
-  const friday = new Date(pst);
-  friday.setDate(pst.getDate() - diff);
-  return friday.toISOString().split('T')[0];
-}
-
 /** The status shown while each break is in progress. */
 const BREAK_STATUS: Record<BreakKind, ClockStatus> = {
   firstBreak: 'first_break',
@@ -374,14 +359,12 @@ function WeeklyTimesheet() {
   const { data: weeks, isLoading: weeksLoading } = useAvailableWeeks();
   const [selectedWeek, setSelectedWeek] = useState<string>('');
 
-  // Set default week once available
+  // Default to the newest week from /api/clock/weeks (remote Fridays and In House Mondays).
   useEffect(() => {
     if (!selectedWeek && weeks && weeks.length > 0) {
       setSelectedWeek(weeks[0].date);
-    } else if (!selectedWeek && !weeksLoading) {
-      setSelectedWeek(getCurrentWeekDate());
     }
-  }, [weeks, weeksLoading, selectedWeek]);
+  }, [weeks, selectedWeek]);
 
   const { data: timesheet, isLoading: timesheetLoading } =
     useWeeklyTimesheet(selectedWeek);
@@ -689,15 +672,10 @@ export default function ClockPage() {
       if (config) {
         addToast('success', `${config.label} recorded`);
       }
-    } catch (err: any) {
-      const message = err?.message || 'Something went wrong';
-
-      // Check for specific error patterns
-      if (message.toLowerCase().includes('lunch') && message.includes('30')) {
-        addToast('error', message);
-      } else {
-        addToast('error', message);
-      }
+    } catch (err: unknown) {
+      const message =
+        err instanceof Error && err.message ? err.message : 'Something went wrong';
+      addToast('error', message);
     }
   }
 
@@ -707,8 +685,11 @@ export default function ClockPage() {
     try {
       await skipBreak.mutateAsync({ breakType: skippableBreak });
       addToast('info', 'Lunch skipped');
-    } catch (err: any) {
-      addToast('error', err?.message || 'Could not skip break');
+    } catch (err: unknown) {
+      addToast(
+        'error',
+        err instanceof Error && err.message ? err.message : 'Could not skip break',
+      );
     }
   }
 

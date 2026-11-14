@@ -96,19 +96,6 @@ export function minutesSinceStored(stored: Date): number {
   return diff / 60;
 }
 
-/**
- * Pay period boundary: Friday through Thursday (a 7-day calendar span), not
- * Monday–Sunday. Employees are still scheduled Monday–Friday, but the pay
- * period used for timesheets/payroll is anchored on Friday — confirmed
- * against the company's existing manual timesheets (e.g. "Week Starts:
- * 6/26/2026 [Fri] — Week Ends: 7/2/2026 [Thu]"). A Monday–Thursday block
- * belongs to the pay period that started on the *preceding* Friday, not the
- * Friday that falls later in the same calendar week.
- */
-
-/** Day offsets (from the Friday start) of the actual working days in one pay period: Fri, Mon, Tue, Wed, Thu. */
-export const PAY_PERIOD_DAY_OFFSETS = [0, 3, 4, 5, 6] as const;
-
 /*
  * Every calendar date in this module is a UTC-midnight Date (the same shape
  * Prisma returns for DATE columns), and all arithmetic uses the UTC getters.
@@ -164,14 +151,5 @@ export function payPeriodOptions(count: number, today: Date = new Date()): { val
       value: friday.toISOString().slice(0, 10),
       label: `${fmt(friday)} - ${fmt(thursday)}, ${thursday.getUTCFullYear()}`,
     };
-  });
-}
-
-/** ISO date strings (YYYY-MM-DD) for the working days of a pay period, given its Friday start. */
-export function getPayPeriodWorkDates(periodStart: Date): string[] {
-  return PAY_PERIOD_DAY_OFFSETS.map((offset) => {
-    const d = new Date(periodStart);
-    d.setUTCDate(d.getUTCDate() + offset);
-    return d.toISOString().split('T')[0];
   });
 }

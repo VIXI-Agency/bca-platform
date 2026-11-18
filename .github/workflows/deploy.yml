@@ -31,7 +31,6 @@ jobs:
       SMS_WEBHOOK_SECRET: ${{ secrets.SMS_WEBHOOK_SECRET }}
       SCRAPER_API_SECRET: ${{ secrets.SCRAPER_API_SECRET }}
       SCRAPE_ALERT_EMAIL: ${{ secrets.SCRAPE_ALERT_EMAIL }}
-      NEXT_PUBLIC_APP_NAME: "PulseBC"
     steps:
       - uses: actions/checkout@v4
 
@@ -392,7 +391,6 @@ jobs:
               f'SMS_WEBHOOK_SECRET={os.environ.get("SMS_WEBHOOK_SECRET", "")}',
               f'SCRAPER_API_SECRET={os.environ.get("SCRAPER_API_SECRET", "")}',
               f'SCRAPE_ALERT_EMAIL={os.environ.get("SCRAPE_ALERT_EMAIL", "")}',
-              'NEXT_PUBLIC_APP_NAME=PulseBC',
               'NODE_ENV=production',
           ]
           ftp.storbinary(f'STOR {REMOTE_DIR}/.env', BytesIO('\n'.join(env_lines).encode()))

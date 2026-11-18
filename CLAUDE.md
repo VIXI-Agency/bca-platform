@@ -16,7 +16,7 @@ maintenance, quotes, rebuttals, blacklist, etc.).
 ## Tech stack
 
 - **Next.js 16.1.6** (App Router, `output: 'standalone'`, **built with Turbopack**)
-- **React 19**, TypeScript (build errors ignored via `next.config.ts`)
+- **React 19**, TypeScript
 - **Prisma 6** ORM against **SQL Server** (`sqlserver://...`); `binaryTargets = ["native","windows"]`
 - **NextAuth v5 (Auth.js)** credentials auth, `trustHost: true`, custom sign-in page `/login`
 - **Tailwind CSS 4**, Radix UI, lucide-react, TanStack Query/Table, recharts
@@ -51,10 +51,10 @@ allowBuilds:
 
 - Routes live under `src/app/`: `(auth)` (login/register/reset), `(dashboard)`
   (calls, clients, clock, reports, sms, training, profile, admin/*), and `api/*`.
-- **`src/lib/auth.ts`** configures NextAuth. **`src/middleware.ts`** gates routes:
+- **`src/lib/auth.ts`** configures NextAuth. **`src/proxy.ts`** gates routes:
   public routes allow through, unauthenticated users → `/login`, and per-route
   permissions are enforced from the JWT via `src/config/permission-keys.ts`.
-  > NOTE: middleware previously hard-redirected any `qa.` host to prod — that
+  > NOTE: the proxy previously hard-redirected any `qa.` host to prod — that
   > block was removed so the QA subdomain can run the app.
 - DB access is via Prisma (`src/lib/prisma` / generated client). Schema in `prisma/schema.prisma`.
 
@@ -143,7 +143,7 @@ back by renaming on failure. **This only fixes downtime — it does NOT fix the
   only show "Request failed (409)". `deploy.yml` now health-checks `/login` after
   uploading `web.config` and restores the previous one if IIS answers 500.19.
 - **Browsers cache 301s hard.** A permanent redirect served once (e.g. the old
-  qa→prod middleware) sticks in the browser; test fixes in an incognito window.
+  qa→prod proxy) sticks in the browser; test fixes in an incognito window.
 - **Builds are largely reproducible** but `BUILD_ID` is random per build, and
   prerendered `.html`/`.rsc` embed it; a rebuild changes ~all hashed chunk names.
 - The standalone app dir nests differently per build machine
@@ -156,7 +156,7 @@ Keys (values live ONLY in the server `.env` files now — `/httpdocs/.env` and
 `/qa/.env` over FTP — rotate them):
 `DATABASE_URL`, `AUTH_SECRET`, `AUTH_TRUST_HOST`, `AUTH_URL`, `SENDGRID_API_KEY`,
 `SMS_API_URL`, `SMS_USERNAME`, `SMS_PASSWORD`, `SMS_DEVICE_ID`,
-`SMS_WEBHOOK_SECRET`, `NEXT_PUBLIC_APP_NAME`, `NODE_ENV`,
+`SMS_WEBHOOK_SECRET`, `NODE_ENV`,
 `SCRAPER_API_SECRET`, `SCRAPE_ALERT_EMAIL`, `SCRAPE_DRY_RUN`.
 
 > `SCRAPE_ALERT_EMAIL` is no longer read by any code as of 2026-08-07, when

@@ -7,17 +7,6 @@ import { isDayLocked } from '@/lib/payroll/compute';
 import { breakOrderFor, punchOrderError } from '@/lib/clock/break-order';
 import type { ClockAction } from '@/types';
 
-const VALID_FIELDS = [
-  'clockIn',
-  'firstBreakOut',
-  'firstBreakIn',
-  'lunchOut',
-  'lunchIn',
-  'secondBreakOut',
-  'secondBreakIn',
-  'clockOut',
-];
-
 export async function POST(request: Request) {
   try {
     const session = await auth();
@@ -43,25 +32,8 @@ export async function POST(request: Request) {
 
     const { userId, date, field, value, reason } = parsed.data;
 
-    // Validate field name
-    if (!VALID_FIELDS.includes(field)) {
-      return NextResponse.json(
-        { error: `Invalid field: ${field}. Must be one of: ${VALID_FIELDS.join(', ')}` },
-        { status: 400 }
-      );
-    }
-
     // An empty value clears the entry (e.g. a break/lunch the employee never took).
     const isClearing = value.trim() === '';
-
-    // Validate time format (HH:mm) when a value is provided
-    const timeRegex = /^\d{2}:\d{2}$/;
-    if (!isClearing && !timeRegex.test(value)) {
-      return NextResponse.json(
-        { error: 'Value must be in HH:mm format' },
-        { status: 400 }
-      );
-    }
 
     // Parse the target date as UTC midnight (matches logDate storage convention)
     const dateParts = date.split('-').map(Number);

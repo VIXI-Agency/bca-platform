@@ -42,24 +42,3 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }
-
-export async function DELETE() {
-  try {
-    const session = await auth();
-    if (!session?.user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
-    const userId = (session.user as { userId: number }).userId;
-
-    await prisma.user.update({
-      where: { idUser: userId },
-      data: { photo: null },
-    });
-
-    return NextResponse.json({ success: true });
-  } catch (error) {
-    console.error('DELETE /api/profile/photo error:', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
-  }
-}

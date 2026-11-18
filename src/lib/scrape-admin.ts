@@ -4,7 +4,7 @@ import { auth } from '@/lib/auth';
 /**
  * Session-and-role gate for the scrape admin routes.
  *
- * The permission key on the nav entry controls menu visibility and middleware
+ * The permission key on the nav entry controls menu visibility and proxy
  * routing only. Authorization in this codebase is the role check each handler
  * runs, the same shape /api/import and the blacklist routes use.
  *

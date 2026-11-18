@@ -1,5 +1,5 @@
 // Permission key definitions and route mappings
-// This file has NO Prisma imports so it can be used in middleware (Edge runtime)
+// This file has NO Prisma imports so it can be used in the proxy
 
 export const PERMISSION_LABELS: Record<string, string> = {
   dashboard: 'Dashboard',
@@ -57,7 +57,7 @@ export function getPermissionKeyForApiRoute(pathname: string): string | null {
   if (pathname.startsWith('/api/users')) return 'admin_users';
   if (pathname.startsWith('/api/import')) return 'admin_import';
   if (pathname.startsWith('/api/admin/blacklist')) return 'admin_import';
-  // Only /api/scrape/worker/* is exempt from auth, by exact path in middleware.
+  // Only /api/scrape/worker/* is exempt from auth, by exact path in the proxy.
   if (pathname.startsWith('/api/scrape')) return 'admin_import';
   if (pathname.startsWith('/api/admin/payroll')) return 'admin_payroll';
   if (pathname.startsWith('/api/admin/time')) return 'admin_time';

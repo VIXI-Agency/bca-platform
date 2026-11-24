@@ -9,6 +9,7 @@ import {
   periodLabel,
   periodOptions,
   periodWorkDates,
+  periodDates,
   scheduleOn,
   type ScheduleChange,
 } from './pay-schedule';
@@ -60,6 +61,14 @@ describe('periodContaining', () => {
   it('reads history in any order', () => {
     const back: ScheduleChange[] = [{ schedule: 'remote', effectiveFrom: d('2026-10-30') }, ...TRINI];
     expect(span(periodContaining(back, d('2026-10-21')))).toBe('2026-10-19..2026-10-26');
+  });
+});
+
+describe('periodDates', () => {
+  it('lists every day of the period, weekends included', () => {
+    expect(periodDates(periodContaining([], d('2026-10-16')))).toEqual([
+      '2026-10-16', '2026-10-17', '2026-10-18', '2026-10-19', '2026-10-20', '2026-10-21', '2026-10-22',
+    ]);
   });
 });
 

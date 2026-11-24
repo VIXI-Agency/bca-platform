@@ -75,6 +75,15 @@ export function periodWorkDates(period: PayPeriod): string[] {
   return dates;
 }
 
+/** YYYY-MM-DD of every day in the period, weekends included. */
+export function periodDates(period: PayPeriod): string[] {
+  const dates: string[] = [];
+  for (let t = period.start.getTime(); t < period.end.getTime(); t += DAY_MS) {
+    dates.push(new Date(t).toISOString().slice(0, 10));
+  }
+  return dates;
+}
+
 const fmt = (date: Date) => date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' });
 
 /** "Oct 16 - Oct 22, 2026": first to last workday; a one-day period as that day. */

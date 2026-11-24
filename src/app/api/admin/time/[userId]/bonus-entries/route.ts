@@ -6,7 +6,14 @@ import { clockWeekSchema } from '@/lib/validators';
 import { getTodayRangePST } from '@/lib/time';
 import { resolveUserPeriod, userPeriodContaining } from '@/lib/payroll/pay-schedule-db';
 import { isPeriodLocked } from '@/lib/payroll/compute';
-import { DATED_BONUS_CATEGORIES, datedBonusRuleError } from '@/lib/payroll/constants';
+import {
+  BONUS_FIELD_LABELS,
+  BONUS_HOURS_MAX,
+  DATED_BONUS_CATEGORIES,
+  DATED_BONUS_RULES,
+  datedBonusRuleError,
+  isHoursBonus,
+} from '@/lib/payroll/constants';
 import { dayFromString } from '@/lib/admin-time/disconnections';
 
 type Params = { params: Promise<{ userId: string }> };
@@ -14,12 +21,21 @@ type Params = { params: Promise<{ userId: string }> };
 const entrySchema = z.object({
   category: z.enum(DATED_BONUS_CATEGORIES),
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Date must be YYYY-MM-DD'),
+  // Dollars, for the categories paid as an amount (Wheel Spins, CCF Spiffs).
   amount: z
     .number()
     .positive('Amount must be more than 0')
     .max(99999.99)
     // Float-tolerant: 0.1 * 100 is 10.000000000000002 in JavaScript.
-    .refine((n) => Math.abs(Math.round(n * 100) - n * 100) < 1e-6, 'At most 2 decimals'),
+    .refine((n) => Math.abs(Math.round(n * 100) - n * 100) < 1e-6, 'At most 2 decimals')
+    .optional(),
+  // Whole hours, for the categories paid by the hour (Holiday Pay).
+  hours: z
+    .number()
+    .int('Whole hours only')
+    .positive('Hours must be more than 0')
+    .max(BONUS_HOURS_MAX)
+    .optional(),
 });
 
 const isoDay = (d: Date) => d.toISOString().split('T')[0];
@@ -40,7 +56,7 @@ async function guard(params: Params['params']) {
   return { userId, adminUserId };
 }
 
-/** The dated bonuses (Wheel Spins, CCF Spiffs) of one employee's pay period. */
+/** The dated bonuses (Holiday Pay, Wheel Spins, CCF Spiffs) of one employee's pay period. */
 export async function GET(request: Request, { params }: Params) {
   try {
     const g = await guard(params);
@@ -58,7 +74,13 @@ export async function GET(request: Request, { params }: Params) {
     });
 
     return NextResponse.json({
-      entries: rows.map((r) => ({ id: r.idEntry, category: r.category, date: isoDay(r.entryDate), amount: Number(r.amount) })),
+      entries: rows.map((r) => ({
+        id: r.idEntry,
+        category: r.category,
+        date: isoDay(r.entryDate),
+        amount: Number(r.amount),
+        hours: r.hours ?? null,
+      })),
     });
   } catch (error) {
     console.error('GET bonus-entries error:', error);
@@ -67,9 +89,10 @@ export async function GET(request: Request, { params }: Params) {
 }
 
 /**
- * Adds one dated bonus. The pay period is the one the date falls in; the
- * date must be a workday that has already happened, and the category's
- * caps (DATED_BONUS_RULES) are checked against the period's entries.
+ * Adds one dated bonus. The pay period is the one the date falls in, and the
+ * category's rules (DATED_BONUS_RULES) are checked against the period's
+ * entries. Wheel Spins and CCF Spiffs go on a workday that has already
+ * happened; Holiday Pay goes on any day of a pay period that has started.
  */
 export async function POST(request: Request, { params }: Params) {
   try {
@@ -83,22 +106,43 @@ export async function POST(request: Request, { params }: Params) {
         { status: 400 },
       );
     }
-    const { category, date, amount } = parsed.data;
+    const { category, date } = parsed.data;
+    // Paid by the hour: the entry keeps its hours and no dollars (the amount
+    // is hours × the pay rate, worked out when the statement is computed).
+    const byHour = isHoursBonus(category);
+    const hours = byHour ? parsed.data.hours : undefined;
+    const amount = byHour ? 0 : parsed.data.amount;
+    if (byHour ? hours == null : amount == null) {
+      const missing = byHour ? { hours: ['Hours are required'] } : { amount: ['Amount is required'] };
+      return NextResponse.json({ error: 'Invalid input', details: missing }, { status: 400 });
+    }
 
     const day = dayFromString(date);
     if (isNaN(day.getTime()) || isoDay(day) !== date) {
       return NextResponse.json({ error: 'Invalid date' }, { status: 400 });
     }
-    const weekday = day.getUTCDay();
-    if (weekday === 0 || weekday === 6) {
-      return NextResponse.json({ error: 'Bonuses are earned on workdays (Monday to Friday).' }, { status: 400 });
-    }
-    if (day.getTime() > getTodayRangePST().todayStart.getTime()) {
-      return NextResponse.json({ error: 'A bonus can’t be added for a future day.' }, { status: 400 });
+    const today = getTodayRangePST().todayStart.getTime();
+    const { anyDay } = DATED_BONUS_RULES[category];
+    if (!anyDay) {
+      const weekday = day.getUTCDay();
+      if (weekday === 0 || weekday === 6) {
+        return NextResponse.json({ error: 'Bonuses are earned on workdays (Monday to Friday).' }, { status: 400 });
+      }
+      if (day.getTime() > today) {
+        return NextResponse.json({ error: 'A bonus can’t be added for a future day.' }, { status: 400 });
+      }
     }
 
     // Caps (2 Wheel Spins, 5 CCF Spiffs) count within this employee's own pay period.
     const { start: periodStart } = await userPeriodContaining(g.userId, day);
+    // An upcoming holiday can be entered ahead, but only inside a pay period
+    // that is already running: a typo in the year can't file one far ahead.
+    if (anyDay && periodStart.getTime() > today) {
+      return NextResponse.json(
+        { error: `${BONUS_FIELD_LABELS[category]} can’t be added for a pay period that hasn’t started.` },
+        { status: 400 },
+      );
+    }
     if (await isPeriodLocked(periodStart)) {
       return NextResponse.json(
         { error: 'This pay period has been approved or paid and can no longer be edited.' },
@@ -124,7 +168,15 @@ export async function POST(request: Request, { params }: Params) {
       );
       if (ruleError) return { ruleError };
       const created = await tx.payrollBonusEntry.create({
-        data: { idUser: g.userId, periodStart, category, entryDate: day, amount, modifiedBy: String(g.adminUserId) },
+        data: {
+          idUser: g.userId,
+          periodStart,
+          category,
+          entryDate: day,
+          amount: amount!,
+          hours: hours ?? null,
+          modifiedBy: String(g.adminUserId),
+        },
       });
       return { created };
     }, { isolationLevel: 'Serializable' });

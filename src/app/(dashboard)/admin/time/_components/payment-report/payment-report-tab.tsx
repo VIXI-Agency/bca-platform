@@ -20,13 +20,14 @@ export function PaymentReportTab() {
     empLoading, filteredEmployees, weekOptions, navigateWeek,
     isLoading, timesheet, dayLogs, totals, disconnections, employee, periodLabel,
     payRateInput, setPayRateInput, otPayRateInput, setOtPayRateInput, rateIsDirty, handleSaveRate, updatePayRate,
-    bonusInputs, setBonusInputs, countInputs, setCountInputs, hoursInputs, setHoursInputs, notesInput, setNotesInput, bonusIsDirty, bonusLoading, handleSaveBonus, saveBonus, bonusEntries,
+    bonusInputs, setBonusInputs, countInputs, setCountInputs, notesInput, setNotesInput, bonusIsDirty, bonusLoading, handleSaveBonus, saveBonus, bonusEntries, periodDays,
     payRate, otPayRate, regularPay, otPay, otRateMissing, bonusAmounts, bonusCounts, bonusHours, totalPay,
   } = usePaymentReport();
 
   const userId = selectedUserId ? parseInt(selectedUserId, 10) : 0;
   const locked = timesheet?.payRunStatus === 'approved' || timesheet?.payRunStatus === 'paid';
-  // Dated bonuses can go on any workday of the period that has already happened.
+  // Wheel Spins and CCF Spiffs can go on any workday of the period that has
+  // already happened. Holiday Pay takes any day of the period (periodDays).
   const now = new Date();
   const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
   const bonusDays = dayLogs.map((d) => d.date).filter((d) => d <= today);
@@ -102,8 +103,6 @@ export function PaymentReportTab() {
                 setBonusInputs={setBonusInputs}
                 countInputs={countInputs}
                 setCountInputs={setCountInputs}
-                hoursInputs={hoursInputs}
-                setHoursInputs={setHoursInputs}
                 payRate={payRate}
                 notesInput={notesInput}
                 setNotesInput={setNotesInput}
@@ -114,6 +113,7 @@ export function PaymentReportTab() {
                 userId={userId}
                 bonusEntries={bonusEntries}
                 bonusDays={bonusDays}
+                periodDays={periodDays}
                 locked={locked}
               />
 

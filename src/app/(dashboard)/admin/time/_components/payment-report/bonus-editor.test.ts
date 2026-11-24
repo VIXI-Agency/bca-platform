@@ -1,13 +1,17 @@
 /**
- * Holiday Pay is the one bonus typed in hours: the editor shows what those
- * hours pay at the rate being typed, and says so when nothing will be paid.
+ * Holiday Pay is entered per day, like Wheel Spins and CCF Spiffs: it has its
+ * own list under the grid, with the whole pay period to pick a day from.
  */
 import { describe, it, expect, vi } from 'vitest';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 
-// The dated lists load and save on their own (react-query); not under test here.
-vi.mock('./dated-bonus-list', () => ({ DatedBonusList: () => null }));
+// The dated lists load and save on their own (react-query). Here they only
+// report what the editor handed them.
+vi.mock('./dated-bonus-list', () => ({
+  DatedBonusList: (p: { category: string; days: string[]; payRate: number | null; entries: unknown[] }) =>
+    createElement('div', { 'data-list': p.category }, `${p.category}|days=${p.days.join(',')}|rate=${p.payRate}|n=${p.entries.length}`),
+}));
 
 const { BonusEditor } = await import('./bonus-editor');
 
@@ -16,44 +20,40 @@ const blank = {
   accounts: '', reloads: '', verifiedLeads: '',
 };
 
-const render = (holidayHours: string, payRate: number | null) =>
-  renderToStaticMarkup(createElement(BonusEditor, {
-    bonusInputs: blank, setBonusInputs: () => {},
-    countInputs: { accounts: '', verifiedLeads: '' }, setCountInputs: () => {},
-    hoursInputs: { holidayPay: holidayHours }, setHoursInputs: () => {},
-    payRate,
-    notesInput: '', setNotesInput: () => {},
-    bonusIsDirty: false, bonusLoading: false, handleSaveBonus: () => {},
-    saveBonus: { isPending: false, error: null },
-    userId: 7, bonusEntries: [], bonusDays: [], locked: false,
-  }));
+const html = renderToStaticMarkup(createElement(BonusEditor, {
+  bonusInputs: blank, setBonusInputs: () => {},
+  countInputs: { accounts: '', verifiedLeads: '' }, setCountInputs: () => {},
+  payRate: 15,
+  notesInput: '', setNotesInput: () => {},
+  bonusIsDirty: false, bonusLoading: false, handleSaveBonus: () => {},
+  saveBonus: { isPending: false, error: null },
+  userId: 7,
+  bonusEntries: [
+    { id: 1, category: 'holidayPay', date: '2026-11-26', amount: 0, hours: 8 },
+    { id: 2, category: 'wheelSpins', date: '2026-11-23', amount: 7 },
+  ],
+  bonusDays: ['2026-11-20', '2026-11-23'],
+  periodDays: ['2026-11-20', '2026-11-21', '2026-11-22', '2026-11-23', '2026-11-24', '2026-11-25', '2026-11-26'],
+  locked: false,
+}));
 
 describe('BonusEditor — Holiday Pay', () => {
-  it('sits right after Manager Bonus and is typed in whole hours', () => {
-    const html = render('', 7);
-    expect(html).toContain('Holiday Pay (hours)');
-    expect(html.indexOf('Manager Bonus')).toBeLessThan(html.indexOf('Holiday Pay'));
-    expect(html.indexOf('Holiday Pay')).toBeLessThan(html.indexOf('Accounts'));
-    expect(html).toMatch(/id="report-bonus-holidayPay"[^>]*step="1"/);
+  it('is no longer a box in the amounts grid', () => {
+    expect(html).not.toContain('report-bonus-holidayPay');
+    expect(html).toContain('report-bonus-managerBonus');
   });
 
-  it('shows what the hours pay at the typed rate', () => {
-    expect(render('8', 7)).toContain('8 h × $7.00 = $56.00');
+  it('has its own dated list, before Wheel Spins and CCF Spiffs', () => {
+    const order = [...html.matchAll(/data-list="(\w+)"/g)].map((m) => m[1]);
+    expect(order).toEqual(['holidayPay', 'wheelSpins', 'ccfSpiffs']);
   });
 
-  it('warns when there is no pay rate to pay the hours at', () => {
-    const html = render('8', null);
-    expect(html).toContain('Set a pay rate, or Holiday Pay won&#x27;t be paid.');
-    expect(html).not.toContain('= $');
+  it('can go on any day of the pay period, weekends and upcoming days included', () => {
+    expect(html).toContain('holidayPay|days=2026-11-20,2026-11-21,2026-11-22,2026-11-23,2026-11-24,2026-11-25,2026-11-26|rate=15|n=1');
   });
 
-  it('warns about decimals instead of silently dropping them', () => {
-    expect(render('7.5', 7)).toContain('Whole hours only');
-  });
-
-  it('says nothing while the field is empty', () => {
-    const html = render('', null);
-    expect(html).not.toContain('Set a pay rate');
-    expect(html).not.toContain('Whole hours only');
+  it('leaves Wheel Spins and CCF Spiffs on workdays already past', () => {
+    expect(html).toContain('wheelSpins|days=2026-11-20,2026-11-23|rate=15|n=1');
+    expect(html).toContain('ccfSpiffs|days=2026-11-20,2026-11-23|rate=15|n=0');
   });
 });

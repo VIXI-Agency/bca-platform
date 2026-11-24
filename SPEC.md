@@ -181,3 +181,138 @@ Resolved with the requester's side on 2026-11-24:
 - A rep who worked the holiday can also get holiday hours. Nothing blocks it.
 - Hours are whole numbers. No cap per pay period ("No limit", confirmed in
   Slack on 2026-11-24). Only the 999 technical ceiling applies.
+
+---
+
+# Spec, change 2: pick the day for Holiday Pay
+
+Status: approved by Carlos on 2026-11-24. Everything above shipped in
+[#82](https://github.com/VIXI-Agency/bca-platform/pull/82) and stays true
+unless this section says otherwise.
+
+## Objective
+
+The requester asked on 2026-11-24: "could we also add the option of selecting
+a day. like the wheel spins & CCFs". Today Holiday Pay is one hours box per
+pay period, so the report cannot say which holiday was paid.
+
+Holiday Pay becomes a dated entry, like Wheel Spins and CCF Spiffs: the admin
+picks a **day** and types the **hours** for that day. The app still pays
+`hours × regular pay rate`.
+
+**User:** administrators (role 1). Reps see the day on their printed report.
+
+### Behavior
+
+1. Holiday Pay leaves the amounts grid and gets its own box next to Wheel
+   Spins and CCF Spiffs: a day picker, an hours input and an Add button. Saved
+   entries list below as `Thu 11/26 · 8 h · $120.00`, each with a remove button.
+2. An entry saves when the admin clicks Add. Save Bonuses is not needed, the
+   same as Wheel Spins.
+3. Amount per entry = `hoursBonusAmount(hours, payRate)`. The period's Holiday
+   Pay is `hoursBonusAmount(total hours, payRate)`, so the printed math checks.
+4. The report and the PDF print one line, in the format Wheel Spins uses
+   (label, a dash, then the days): `Thu 11/26 8 h × $15.00` and `$120.00`.
+   With two days: `Thu 11/26 8 h · Fri 11/27 8 h (16 h × $15.00)`.
+5. Unchanged from change 1: regular rate only, whole hours, never counts
+   toward overtime, $0 plus a warning when the rep has no pay rate, locked
+   once the period is approved, snapshot of total hours, rate and amount at
+   approval.
+
+### Decisions (confirmed 2026-11-24)
+
+1. The day + hours entry **replaces** the single hours box. Both at once would
+   let a holiday be paid twice. No rep has holiday hours saved yet (checked
+   in the database on 2026-11-24), so nothing needs converting.
+2. The picker offers **every day of the rep's pay period**: weekends too, and
+   days that have not happened yet. Wheel Spins and CCFs only offer Monday to
+   Friday days already past, but a holiday can fall on a weekend and payroll
+   may be prepared before the holiday. The server only refuses a day in a pay
+   period that has not started, so a typo cannot file a holiday far ahead.
+3. **One entry per day**, as many days as needed. No cap on hours beyond the
+   999 technical ceiling ("No limit" still stands).
+4. Hours stay whole numbers.
+
+## Tech Stack
+
+Unchanged. No new dependencies.
+
+## Commands
+
+Unchanged (see above).
+
+## Project Structure
+
+```
+prisma/schema.prisma                         PayrollBonusEntry.hours (new Int? column)
+prisma/migrations/<date>_holiday_pay_days.sql   additive, idempotent
+src/lib/payroll/constants.ts                 holidayPay becomes a dated category paid by the hour
+src/lib/payroll/compute.ts                   holiday hours = sum of the period's entries
+src/lib/payroll/pay-schedule-change.ts       holiday entries re-file with the others
+src/lib/validators.ts                        drop holidayHours from payrollBonusSchema
+src/app/api/admin/time/[userId]/bonus/route.ts          stop reading and writing holidayHours
+src/app/api/admin/time/[userId]/bonus-entries/route.ts  accept holidayPay with hours
+src/hooks/use-admin-time.ts                  BonusEntry.hours, add-entry payload
+payment-report/dated-bonus-list.tsx          hours input for hours categories
+payment-report/bonus-editor.tsx              remove the hours box from the grid
+payment-report/totals.ts, use-payment-report.ts   hours come from entries
+payment-report/payment-summary.tsx           line with the days
+```
+
+## Code Style
+
+Same rule as before: declare the category once, derive the rest.
+
+```ts
+export const DATED_BONUS_CATEGORIES = ['holidayPay', 'wheelSpins', 'ccfSpiffs'] as const;
+
+/** maxPerPeriod null = no cap; anyDay = weekends and upcoming days allowed. */
+export const DATED_BONUS_RULES = {
+  holidayPay: { maxPerPeriod: null, onePerDay: true, anyDay: true },
+  wheelSpins: { maxPerPeriod: 2, onePerDay: false, anyDay: false },
+  ccfSpiffs: { maxPerPeriod: 5, onePerDay: true, anyDay: false },
+};
+```
+
+- `HOURS_BONUS_FIELDS` and `hoursBonusAmount` stay. A holiday entry stores
+  `Hours` and an `Amount` of 0: dollars are still derived, never stored.
+- `PayrollBonuses.HolidayHours` stays in the database, unread, like the legacy
+  `WheelSpins` column. `BONUS_HOURS_KEYS` and the grid input are removed.
+
+## Testing Strategy
+
+| Level | File | Covers |
+|---|---|---|
+| Unit | `constants.test.ts` | holiday rule: second entry on the same day refused, no cap on count |
+| Route | `bonus-entries/route.test.ts` | POST holidayPay with hours; rejects decimals, 0, above 999, a second entry on the same day, a day in a pay period that has not started; accepts a weekend and an upcoming day; 409 when locked. Wheel Spins and CCFs behave as before |
+| Route | `bonus/route.test.ts` | `holidayHours` is no longer accepted or returned |
+| Unit | `pay-statement.test.ts` | holiday pay = summed entry hours × rate; overtime untouched |
+| Unit | `totals.test.ts`, `payment-summary.test.ts` | live total from entries; line with one day and with two |
+| Unit | `pay-schedule-change` tests | holiday entries move with a schedule switch |
+
+## Boundaries
+
+- **Always:** additive, idempotent migration; `hoursBonusAmount` for every
+  amount; feature branch off `origin/main`; tests and lint before committing.
+- **Ask first:** running the migration (shared database, reaches production at
+  once); merging to `main` (deploys to production).
+- **Never:** drop `HolidayHours` or any column; store dollars for holiday
+  entries; change Wheel Spins or CCF rules; touch approved or paid statements.
+
+## Success Criteria
+
+- [ ] Holiday Pay shows a day picker, an hours input and Add, next to Wheel Spins and CCF Spiffs. The old hours box is gone.
+- [ ] Adding Thu 11/26 with 8 h for a rep at $15.00 raises Total Payment by $120.00 at once, and survives a reload.
+- [ ] The report prints the day, the hours and the rate on one line.
+- [ ] A second entry on the same day is refused. Two different days both pay.
+- [ ] A weekend day and an upcoming day of the period can be picked.
+- [ ] Overtime and regular hours are identical with and without entries.
+- [ ] A locked period refuses add and remove with 409.
+- [ ] Approval snapshots total hours, rate and amount.
+- [ ] Wheel Spins and CCF Spiffs behave exactly as before.
+- [ ] All tests pass; lint shows no new problems; build is clean.
+
+## Open Questions
+
+None. The three questions (replace the box, any day, one entry per day) were
+answered on 2026-11-24 and are recorded under Decisions.

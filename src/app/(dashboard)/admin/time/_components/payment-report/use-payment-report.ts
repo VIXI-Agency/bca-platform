@@ -10,17 +10,16 @@ import {
 } from '@/hooks/use-admin-time';
 import {
   BONUS_COUNT_KEYS,
-  BONUS_HOURS_KEYS,
   COUNTED_BONUS_FIELDS,
   DATED_BONUS_CATEGORIES,
   HOURS_BONUS_FIELDS,
   PERIOD_BONUS_FIELDS,
-  type BonusHoursKey,
   type CountedBonusField,
   type DatedBonusCategory,
   type HoursBonusField,
   type PeriodBonusField,
 } from '@/lib/payroll/constants';
+import { periodContaining, periodDates } from '@/lib/payroll/pay-schedule';
 import { employeeWeekOptions, weekForOptions } from '../../_lib/week-options';
 import { computeReportTotals, parseCount } from './totals';
 import { nextSeed, type SeedKey } from './seed';
@@ -47,10 +46,6 @@ export function usePaymentReport() {
   const [countInputs, setCountInputs] = useState<Record<CountedBonusField, string>>(
     () => Object.fromEntries(COUNTED_BONUS_FIELDS.map((key) => [key, ''])) as Record<CountedBonusField, string>,
   );
-  // The hours being paid for Holiday Pay (the amount is hours × pay rate).
-  const [hoursInputs, setHoursInputs] = useState<Record<HoursBonusField, string>>(
-    () => Object.fromEntries(HOURS_BONUS_FIELDS.map((key) => [key, ''])) as Record<HoursBonusField, string>,
-  );
 
   const userId = selectedUserId ? parseInt(selectedUserId, 10) : 0;
   const employee = useMemo(
@@ -60,6 +55,16 @@ export function usePaymentReport() {
   const payScheduleChanges = employee?.payScheduleChanges;
   const weekOptions = useMemo(() => employeeWeekOptions(payScheduleChanges, 24), [payScheduleChanges]);
   const selectedWeek = weekForOptions(weekOptions, pickedWeek);
+  // Every day of the selected pay period, weekends included: a holiday can be
+  // entered for any of them.
+  const periodDays = useMemo(() => {
+    if (!selectedWeek) return [];
+    const history = (payScheduleChanges ?? []).map((c) => ({
+      schedule: c.schedule,
+      effectiveFrom: new Date(`${c.effectiveFrom}T00:00:00.000Z`),
+    }));
+    return periodDates(periodContaining(history, new Date(`${selectedWeek}T00:00:00.000Z`)));
+  }, [payScheduleChanges, selectedWeek]);
 
   const { data: timesheet, isLoading: timesheetLoading } = useEmployeeTimesheet(userId, selectedWeek);
   const { data: disconnections, isLoading: disconnectionsLoading } = useDisconnections(userId, selectedWeek);
@@ -99,14 +104,6 @@ export function usePaymentReport() {
         }),
       ) as Record<CountedBonusField, string>,
     );
-    setHoursInputs(
-      Object.fromEntries(
-        HOURS_BONUS_FIELDS.map((key) => {
-          const saved = next.from?.[BONUS_HOURS_KEYS[key]];
-          return [key, saved != null && saved > 0 ? String(saved) : ''];
-        }),
-      ) as Record<HoursBonusField, string>,
-    );
     setNotesInput(next.from?.notes ?? '');
   }, [userId, selectedWeek, bonus]);
 
@@ -128,7 +125,8 @@ export function usePaymentReport() {
   const dayLogs = timesheet?.data ?? [];
   const totals = timesheet?.weekTotals;
 
-  // Wheel Spins and CCF Spiffs: saved dated entries, summed per category.
+  // Saved dated entries, summed per category: dollars for Wheel Spins and CCF
+  // Spiffs, hours for Holiday Pay (its entries carry no dollars).
   const entries = useMemo(() => bonusEntries ?? [], [bonusEntries]);
   const datedTotals = Object.fromEntries(
     DATED_BONUS_CATEGORIES.map((key) => [
@@ -136,6 +134,12 @@ export function usePaymentReport() {
       Math.round(entries.filter((e) => e.category === key).reduce((sum, e) => sum + e.amount, 0) * 100) / 100,
     ]),
   ) as Record<DatedBonusCategory, number>;
+  const datedHours = Object.fromEntries(
+    HOURS_BONUS_FIELDS.map((key) => [
+      key,
+      entries.filter((e) => e.category === key).reduce((sum, e) => sum + (e.hours ?? 0), 0),
+    ]),
+  ) as Record<HoursBonusField, number>;
 
   const { payRate, otPayRate, regularPay, otRateMissing, otPay, bonusAmounts, bonusCounts, bonusHours, totalPay } = computeReportTotals({
     totals,
@@ -143,8 +147,8 @@ export function usePaymentReport() {
     otPayRateInput,
     bonusInputs,
     countInputs,
-    hoursInputs,
     datedTotals,
+    datedHours,
   });
   const periodLabel = weekOptions.find((w) => w.value === selectedWeek)?.label ?? '';
 
@@ -154,12 +158,8 @@ export function usePaymentReport() {
   const typedCounts = Object.fromEntries(
     COUNTED_BONUS_FIELDS.map((key) => [BONUS_COUNT_KEYS[key], parseCount(countInputs[key])]),
   ) as Record<(typeof BONUS_COUNT_KEYS)[CountedBonusField], number | null>;
-  const typedHours = Object.fromEntries(
-    HOURS_BONUS_FIELDS.map((key) => [BONUS_HOURS_KEYS[key], bonusHours[key]]),
-  ) as Record<BonusHoursKey, number | null>;
   const bonusIsDirty =
     PERIOD_BONUS_FIELDS.some((key) => bonusAmounts[key] !== (bonus?.[key] ?? 0)) ||
-    HOURS_BONUS_FIELDS.some((key) => bonusHours[key] !== (bonus?.[BONUS_HOURS_KEYS[key]] || null)) ||
     COUNTED_BONUS_FIELDS.some((key) => typedCounts[BONUS_COUNT_KEYS[key]] !== (bonus?.[BONUS_COUNT_KEYS[key]] ?? null)) ||
     (notesInput.trim() || null) !== (bonus?.notes ?? null);
 
@@ -180,7 +180,7 @@ export function usePaymentReport() {
     if (!userId || !selectedWeek) return;
     try {
       const typed = Object.fromEntries(PERIOD_BONUS_FIELDS.map((key) => [key, bonusAmounts[key]])) as Record<PeriodBonusField, number>;
-      await saveBonus.mutateAsync({ userId, week: selectedWeek, ...typed, ...typedCounts, ...typedHours, notes: notesInput.trim() || null });
+      await saveBonus.mutateAsync({ userId, week: selectedWeek, ...typed, ...typedCounts, notes: notesInput.trim() || null });
     } catch {
       /* shown from saveBonus.error */
     }
@@ -191,7 +191,7 @@ export function usePaymentReport() {
     empLoading, filteredEmployees, weekOptions, navigateWeek,
     isLoading, timesheet, dayLogs, totals, disconnections, employee, periodLabel,
     payRateInput, setPayRateInput, otPayRateInput, setOtPayRateInput, rateIsDirty, handleSaveRate, updatePayRate,
-    bonusInputs, setBonusInputs, countInputs, setCountInputs, hoursInputs, setHoursInputs, notesInput, setNotesInput, bonusIsDirty, bonusLoading, handleSaveBonus, saveBonus, bonusEntries: entries,
+    bonusInputs, setBonusInputs, countInputs, setCountInputs, notesInput, setNotesInput, bonusIsDirty, bonusLoading, handleSaveBonus, saveBonus, bonusEntries: entries, periodDays,
     payRate, otPayRate, regularPay, otPay, otRateMissing, bonusAmounts, bonusCounts, bonusHours, totalPay,
   };
 }

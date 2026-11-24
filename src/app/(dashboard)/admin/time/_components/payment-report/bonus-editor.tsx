@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Loading } from '@/components/ui/loading';
-import type { BonusEntry } from '@/hooks/use-admin-time';
+import type { BonusEntry, CustomBonus } from '@/hooks/use-admin-time';
 import {
   BONUS_FIELDS,
   BONUS_FIELD_LABELS,
@@ -17,6 +17,7 @@ import {
   type CountedBonusField,
   type PeriodBonusField,
 } from '@/lib/payroll/constants';
+import { CustomBonusList } from './custom-bonus-list';
 import { DatedBonusList } from './dated-bonus-list';
 
 // Every bonus typed in this grid, in the order the report lists them. The
@@ -45,6 +46,12 @@ interface BonusEditorProps {
   bonusDays: string[];
   /** Every day of the period, weekends and upcoming days included (Holiday Pay). */
   periodDays: string[];
+  /** The selected pay period (its first day), which custom bonuses are filed under. */
+  week: string;
+  /** Bonuses payroll named itself ("Raffle"), which also save on their own. */
+  customBonuses: CustomBonus[];
+  /** Names used before, offered in the custom bonus name box. */
+  customSuggestions: string[];
   locked: boolean;
 }
 
@@ -69,6 +76,9 @@ export function BonusEditor({
   bonusEntries,
   bonusDays,
   periodDays,
+  week,
+  customBonuses,
+  customSuggestions,
   locked,
 }: BonusEditorProps) {
   return (
@@ -138,7 +148,7 @@ export function BonusEditor({
       {/* Entered for specific days: each entry has its own date and amount (or
           hours, for Holiday Pay) and is saved as soon as it's added (no Save
           Bonuses needed). */}
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+      <div className="grid gap-3 sm:grid-cols-2">
         {DATED_BONUS_CATEGORIES.map((category) => (
           <DatedBonusList
             key={category}
@@ -150,6 +160,8 @@ export function BonusEditor({
             locked={locked}
           />
         ))}
+        {/* Any other bonus, named by payroll: saved as soon as it's added too. */}
+        <CustomBonusList userId={userId} week={week} bonuses={customBonuses} suggestions={customSuggestions} locked={locked} />
       </div>
 
       <div className="space-y-1">

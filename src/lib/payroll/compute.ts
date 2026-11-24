@@ -274,8 +274,11 @@ export interface PayStatementAmounts {
   bonusCounts: Record<CountedBonusField, number | null>;
   /** Hours behind each bonus paid by the hour (Holiday Pay); null when none. */
   bonusHours: Record<HoursBonusField, number | null>;
+  /** Bonuses payroll named itself ("Raffle"), in the order they were added. */
+  customBonuses: { name: string; amount: number }[];
   /** The week's note from the Payment Report (printed on the employee's PDF). */
   notes: string | null;
+  /** Every bonus category plus the custom bonuses. */
   bonusTotal: number;
   grossPay: number;
 }
@@ -289,7 +292,7 @@ export async function computePayStatement(userId: number, day: Date): Promise<Pa
   // Bonuses are stored under the start of the employee's own period.
   const period = await userPeriodContaining(userId, day);
   const periodStart = period.start;
-  const [hours, user, bonus, entries] = await Promise.all([
+  const [hours, user, bonus, entries, customRows] = await Promise.all([
     hoursInPeriod(userId, period),
     prisma.user.findUnique({
       where: { idUser: userId },
@@ -301,6 +304,11 @@ export async function computePayStatement(userId: number, day: Date): Promise<Pa
     prisma.payrollBonusEntry.findMany({
       where: { idUser: userId, periodStart },
       select: { category: true, amount: true, hours: true },
+    }),
+    prisma.payrollCustomBonus.findMany({
+      where: { idUser: userId, periodStart },
+      orderBy: { idCustomBonus: 'asc' },
+      select: { name: true, amount: true },
     }),
   ]);
 
@@ -335,7 +343,11 @@ export async function computePayStatement(userId: number, day: Date): Promise<Pa
       return [key, bonus?.[key] != null ? Number(bonus[key]) : 0];
     }),
   ) as Record<BonusFieldKey, number>;
-  const bonusTotal = round2(BONUS_FIELDS.reduce((sum, key) => sum + bonusAmounts[key], 0));
+  const customBonuses = customRows.map((c) => ({ name: c.name, amount: Number(c.amount) }));
+  const bonusTotal = round2(
+    BONUS_FIELDS.reduce((sum, key) => sum + bonusAmounts[key], 0) +
+      customBonuses.reduce((sum, c) => sum + c.amount, 0),
+  );
   const bonusCounts = Object.fromEntries(
     COUNTED_BONUS_FIELDS.map((key) => {
       const typed = bonus?.[BONUS_COUNT_KEYS[key]];
@@ -353,6 +365,7 @@ export async function computePayStatement(userId: number, day: Date): Promise<Pa
     bonusAmounts,
     bonusCounts,
     bonusHours,
+    customBonuses,
     notes: bonus?.notes ?? null,
     bonusTotal,
     grossPay: round2(regularPay + overtimePay + bonusTotal),

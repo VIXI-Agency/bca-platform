@@ -27,6 +27,8 @@ export interface ReportTotalsInput {
   datedTotals: Record<DatedBonusCategory, number>;
   /** Hours of the saved Holiday Pay entries, summed over the period. */
   datedHours?: Partial<Record<HoursBonusField, number>>;
+  /** Amounts of the saved custom bonuses ("Raffle", "Birthday Bonus"). */
+  customAmounts?: readonly number[];
 }
 
 export interface ReportTotals {
@@ -54,6 +56,7 @@ export function computeReportTotals({
   countInputs = {},
   datedTotals,
   datedHours = {},
+  customAmounts = [],
 }: ReportTotalsInput): ReportTotals {
   // The rate used for the live calculation and for print comes from what's
   // currently typed, not from the saved record — so the total updates as
@@ -91,7 +94,9 @@ export function computeReportTotals({
       return [key, typed[key]];
     }),
   ) as Record<BonusFieldKey, number>;
-  const bonusTotal = cents(BONUS_FIELDS.reduce((sum, key) => sum + bonusAmounts[key], 0));
+  const bonusTotal = cents(
+    BONUS_FIELDS.reduce((sum, key) => sum + bonusAmounts[key], 0) + customAmounts.reduce((sum, a) => sum + a, 0),
+  );
   const bonusCounts = Object.fromEntries(
     COUNTED_BONUS_FIELDS.map((key) => [key, bonusCount(parseCount(countInputs[key]), bonusAmounts[key])]),
   ) as Record<CountedBonusField, number | null>;

@@ -20,7 +20,7 @@ export function PaymentReportTab() {
     empLoading, filteredEmployees, weekOptions, navigateWeek,
     isLoading, timesheet, dayLogs, totals, disconnections, employee, periodLabel,
     payRateInput, setPayRateInput, otPayRateInput, setOtPayRateInput, rateIsDirty, handleSaveRate, updatePayRate,
-    bonusInputs, setBonusInputs, countInputs, setCountInputs, notesInput, setNotesInput, bonusIsDirty, bonusLoading, handleSaveBonus, saveBonus, bonusEntries, periodDays,
+    bonusInputs, setBonusInputs, countInputs, setCountInputs, notesInput, setNotesInput, bonusIsDirty, bonusLoading, handleSaveBonus, saveBonus, bonusEntries, periodDays, customBonuses, customSuggestions,
     payRate, otPayRate, regularPay, otPay, otRateMissing, bonusAmounts, bonusCounts, bonusHours, totalPay,
   } = usePaymentReport();
 
@@ -114,6 +114,9 @@ export function PaymentReportTab() {
                 bonusEntries={bonusEntries}
                 bonusDays={bonusDays}
                 periodDays={periodDays}
+                week={selectedWeek}
+                customBonuses={customBonuses}
+                customSuggestions={customSuggestions}
                 locked={locked}
               />
 
@@ -149,6 +152,7 @@ export function PaymentReportTab() {
                   bonusEntries={bonusEntries}
                   bonusCounts={bonusCounts}
                   bonusHours={bonusHours}
+                  customBonuses={customBonuses}
                   notes={notesInput}
                   totalPay={totalPay}
                 />

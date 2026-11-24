@@ -7,6 +7,7 @@ const bonusFindUnique = vi.fn();
 const payRunFindUnique = vi.fn();
 const bonusEntryFindMany = vi.fn();
 const scheduleFindMany = vi.fn();
+const customBonusFindMany = vi.fn();
 
 vi.mock('@/lib/prisma', () => ({
   prisma: {
@@ -16,6 +17,7 @@ vi.mock('@/lib/prisma', () => ({
     payrollBonus: { findUnique: (...a: unknown[]) => bonusFindUnique(...a) },
     payRun: { findUnique: (...a: unknown[]) => payRunFindUnique(...a) },
     payrollBonusEntry: { findMany: (...a: unknown[]) => bonusEntryFindMany(...a) },
+    payrollCustomBonus: { findMany: (...a: unknown[]) => customBonusFindMany(...a) },
     userPaySchedule: { findMany: (...a: unknown[]) => scheduleFindMany(...a) },
   },
 }));
@@ -70,6 +72,7 @@ beforeEach(() => {
   userFindUnique.mockResolvedValue({ payRate: '15.00', otPayRate: '22.50' });
   bonusFindUnique.mockResolvedValue(null);
   bonusEntryFindMany.mockResolvedValue([]);
+  customBonusFindMany.mockResolvedValue([]);
   scheduleFindMany.mockResolvedValue([]);
 });
 
@@ -214,6 +217,31 @@ describe('computePayStatement', () => {
       verifiedLeads: 0.15,
     });
     expect(s.grossPay).toBe(751.88);
+  });
+
+  describe('custom bonuses', () => {
+    it('adds each named bonus to the bonus total and gross pay', async () => {
+      setLogs([log('2026-10-12')]); // 8h at $15.00 = $120.00
+      bonusFindUnique.mockResolvedValue({ managerBonus: '5.00' });
+      customBonusFindMany.mockResolvedValue([{ name: 'Raffle', amount: '50.00' }, { name: 'Birthday Bonus', amount: '25.50' }]);
+      const s = await computePayStatement(USER, PERIOD);
+      expect(s.customBonuses).toEqual([{ name: 'Raffle', amount: 50 }, { name: 'Birthday Bonus', amount: 25.5 }]);
+      expect(s.bonusTotal).toBe(80.5);
+      expect(s.grossPay).toBe(200.5);
+      expect(customBonusFindMany.mock.calls[0][0].where).toEqual({ idUser: USER, periodStart: PERIOD });
+    });
+
+    it('leaves the named categories alone', async () => {
+      customBonusFindMany.mockResolvedValue([{ name: 'Raffle', amount: '50.00' }]);
+      const s = await computePayStatement(USER, PERIOD);
+      expect(Object.values(s.bonusAmounts).every((a) => a === 0)).toBe(true);
+    });
+
+    it('has none by default', async () => {
+      const s = await computePayStatement(USER, PERIOD);
+      expect(s.customBonuses).toEqual([]);
+      expect(s.bonusTotal).toBe(0);
+    });
   });
 
   describe('Holiday Pay', () => {

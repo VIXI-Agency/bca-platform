@@ -15,6 +15,7 @@ const PAY_DATA_KEYS = [
   ['admin-disconnections'],
   ['admin-bonus'],
   ['admin-bonus-entries'],
+  ['admin-custom-bonuses'],
   ['admin-time-employees'],
   ['payroll-run'],
   ['payroll-history'],

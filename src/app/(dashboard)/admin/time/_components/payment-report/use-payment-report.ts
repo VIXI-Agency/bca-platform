@@ -7,6 +7,7 @@ import {
   useBonus,
   useSaveBonus,
   useBonusEntries,
+  useCustomBonuses,
 } from '@/hooks/use-admin-time';
 import {
   BONUS_COUNT_KEYS,
@@ -70,6 +71,7 @@ export function usePaymentReport() {
   const { data: disconnections, isLoading: disconnectionsLoading } = useDisconnections(userId, selectedWeek);
   const { data: bonus, isLoading: bonusLoading } = useBonus(userId, selectedWeek);
   const { data: bonusEntries } = useBonusEntries(userId, selectedWeek);
+  const { data: customData } = useCustomBonuses(userId, selectedWeek);
 
   // Fill the editors from saved values once per selection — never again on a
   // refetch of the same selection (after Save, for one), which used to
@@ -141,6 +143,10 @@ export function usePaymentReport() {
     ]),
   ) as Record<HoursBonusField, number>;
 
+  // Bonuses payroll named itself; saved as soon as they're added.
+  const customBonuses = useMemo(() => customData?.bonuses ?? [], [customData]);
+  const customSuggestions = useMemo(() => customData?.suggestions ?? [], [customData]);
+
   const { payRate, otPayRate, regularPay, otRateMissing, otPay, bonusAmounts, bonusCounts, bonusHours, totalPay } = computeReportTotals({
     totals,
     payRateInput,
@@ -149,6 +155,7 @@ export function usePaymentReport() {
     countInputs,
     datedTotals,
     datedHours,
+    customAmounts: customBonuses.map((c) => c.amount),
   });
   const periodLabel = weekOptions.find((w) => w.value === selectedWeek)?.label ?? '';
 
@@ -191,7 +198,7 @@ export function usePaymentReport() {
     empLoading, filteredEmployees, weekOptions, navigateWeek,
     isLoading, timesheet, dayLogs, totals, disconnections, employee, periodLabel,
     payRateInput, setPayRateInput, otPayRateInput, setOtPayRateInput, rateIsDirty, handleSaveRate, updatePayRate,
-    bonusInputs, setBonusInputs, countInputs, setCountInputs, notesInput, setNotesInput, bonusIsDirty, bonusLoading, handleSaveBonus, saveBonus, bonusEntries: entries, periodDays,
+    bonusInputs, setBonusInputs, countInputs, setCountInputs, notesInput, setNotesInput, bonusIsDirty, bonusLoading, handleSaveBonus, saveBonus, bonusEntries: entries, periodDays, customBonuses, customSuggestions,
     payRate, otPayRate, regularPay, otPay, otRateMissing, bonusAmounts, bonusCounts, bonusHours, totalPay,
   };
 }

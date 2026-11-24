@@ -11,6 +11,9 @@ import {
   DATED_BONUS_RULES,
   isHoursBonus,
   hoursBonusAmount,
+  customBonusRuleError,
+  normalizeBonusName,
+  CUSTOM_BONUS_MAX_PER_PERIOD,
 } from './constants';
 
 const entry = (category: string, entryDate: string) => ({ category, entryDate });
@@ -97,6 +100,23 @@ describe('bonus categories', () => {
     expect(isHoursBonus('wheelSpins')).toBe(false);
     expect([...DATED_BONUS_CATEGORIES]).toContain('holidayPay');
     expect([...HOURS_BONUS_FIELDS]).toEqual(['holidayPay']);
+  });
+});
+
+describe('custom bonuses', () => {
+  it('tidies the typed name', () => {
+    expect(normalizeBonusName('  Birthday   Bonus ')).toBe('Birthday Bonus');
+  });
+
+  it('allows up to 5 per pay period', () => {
+    expect(CUSTOM_BONUS_MAX_PER_PERIOD).toBe(5);
+    expect(customBonusRuleError('Raffle', ['A', 'B', 'C', 'D'])).toBeNull();
+    expect(customBonusRuleError('Raffle', ['A', 'B', 'C', 'D', 'E'])).toBe('Custom bonuses: at most 5 per pay period.');
+  });
+
+  it('refuses the same name twice in a period, whatever the capitals or spaces', () => {
+    expect(customBonusRuleError(' raffle ', ['Raffle'])).toMatch(/already a "raffle" bonus/);
+    expect(customBonusRuleError('Raffle 2', ['Raffle'])).toBeNull();
   });
 });
 

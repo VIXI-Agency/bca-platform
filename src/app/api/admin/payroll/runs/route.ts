@@ -7,7 +7,7 @@ import { getPayPeriodEnd, getTodayRangePST, parseDateParam } from '@/lib/time';
 import { computePayStatement, type PayStatementAmounts } from '@/lib/payroll/compute';
 import { payScheduleHistories } from '@/lib/payroll/pay-schedule-db';
 import { PAY_SCHEDULES, lastWorkDay, scheduleOn, weekStart, type PaySchedule } from '@/lib/payroll/pay-schedule';
-import { BONUS_FIELDS, BONUS_FIELD_LABELS, isCountedBonus, isHoursBonus } from '@/lib/payroll/constants';
+import { BONUS_FIELDS, BONUS_FIELD_LABELS, CUSTOM_BONUS_CATEGORY, isCountedBonus, isHoursBonus } from '@/lib/payroll/constants';
 
 const isoDate = (d: Date) => d.toISOString().split('T')[0];
 
@@ -179,6 +179,10 @@ function statementLines(amounts: PayStatementAmounts) {
       const quantity = isCountedBonus(key) ? (amounts.bonusCounts?.[key] ?? null) : null;
       lines.push({ kind: 'bonus', category: key, label: BONUS_FIELD_LABELS[key], quantity, rate: null, amount });
     }
+  }
+  // Custom bonuses keep the name payroll typed as their label.
+  for (const custom of amounts.customBonuses ?? []) {
+    lines.push({ kind: 'bonus', category: CUSTOM_BONUS_CATEGORY, label: custom.name, quantity: null, rate: null, amount: custom.amount });
   }
   return lines;
 }

@@ -8,7 +8,7 @@ import {
   BONUS_FIELDS,
   BONUS_FIELD_LABELS,
   HOURS_BONUS_FIELDS,
-  BONUS_HOURS_KEYS,
+  DATED_BONUS_RULES,
   isHoursBonus,
   hoursBonusAmount,
 } from './constants';
@@ -35,6 +35,18 @@ describe('datedBonusRuleError', () => {
     expect(datedBonusRuleError('ccfSpiffs', '2026-10-12', [entry('ccfSpiffs', '2026-10-12')])).toBe('CCF Spiffs: only one per day.');
     const five = ['2026-10-09', '2026-10-12', '2026-10-13', '2026-10-14', '2026-10-15'].map((d) => entry('ccfSpiffs', d));
     expect(datedBonusRuleError('ccfSpiffs', '2026-10-15', five)).toBe('CCF Spiffs: at most 5 per pay period.');
+  });
+
+  it('allows one Holiday Pay entry per day, with no cap on how many days', () => {
+    const week = ['2026-11-20', '2026-11-21', '2026-11-22', '2026-11-23', '2026-11-24', '2026-11-25'].map((d) => entry('holidayPay', d));
+    expect(datedBonusRuleError('holidayPay', '2026-11-26', week)).toBeNull();
+    expect(datedBonusRuleError('holidayPay', '2026-11-25', week)).toBe('Holiday Pay: only one per day.');
+  });
+
+  it('lets only Holiday Pay land on a weekend or an upcoming day', () => {
+    expect(DATED_BONUS_RULES.holidayPay.anyDay).toBe(true);
+    expect(DATED_BONUS_RULES.wheelSpins.anyDay).toBe(false);
+    expect(DATED_BONUS_RULES.ccfSpiffs.anyDay).toBe(false);
   });
 
   it('counts each category on its own', () => {
@@ -70,10 +82,8 @@ describe('labels', () => {
 });
 
 describe('bonus categories', () => {
-  it('split every category into exactly one of: typed per period, dated, or typed in hours', () => {
-    expect([...PERIOD_BONUS_FIELDS, ...DATED_BONUS_CATEGORIES, ...HOURS_BONUS_FIELDS].sort()).toEqual(
-      [...BONUS_FIELDS].sort(),
-    );
+  it('split every category into exactly one of: typed per period, or dated', () => {
+    expect([...PERIOD_BONUS_FIELDS, ...DATED_BONUS_CATEGORIES].sort()).toEqual([...BONUS_FIELDS].sort());
   });
 
   it('lists Holiday Pay right after Manager Bonus', () => {
@@ -81,10 +91,12 @@ describe('bonus categories', () => {
     expect(BONUS_FIELD_LABELS.holidayPay).toBe('Holiday Pay');
   });
 
-  it('types Holiday Pay in hours, kept in holidayHours', () => {
+  it('enters Holiday Pay per day, in hours', () => {
     expect(isHoursBonus('holidayPay')).toBe(true);
     expect(isHoursBonus('managerBonus')).toBe(false);
-    expect(BONUS_HOURS_KEYS.holidayPay).toBe('holidayHours');
+    expect(isHoursBonus('wheelSpins')).toBe(false);
+    expect([...DATED_BONUS_CATEGORIES]).toContain('holidayPay');
+    expect([...HOURS_BONUS_FIELDS]).toEqual(['holidayPay']);
   });
 });
 

@@ -168,9 +168,6 @@ export const payrollBonusSchema = z.object({
   // How many accounts / verified leads the amount is for ("Accounts (4)").
   accountsCount: bonusCountField,
   verifiedLeadsCount: bonusCountField,
-  // Holiday Pay: whole hours, paid at the employee's regular rate. The business
-  // set no cap; 999 is only the 3-digit ceiling the count boxes also have.
-  holidayHours: bonusCountField,
   // The week's note, printed on the employee's PDF; blank clears it.
   notes: z
     .string()

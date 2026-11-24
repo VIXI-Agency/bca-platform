@@ -69,19 +69,36 @@ describe('PaymentSummary', () => {
     expect(html).not.toContain('Reloads Spiffs (');
   });
 
-  it('shows Holiday Pay with its hours and rate, right after Manager Bonus', () => {
+  it('shows Holiday Pay with its day, hours and rate, right after Manager Bonus', () => {
     const html = render({
       bonusAmounts: { ...noBonus, managerBonus: 5, holidayPay: 56, accounts: 15 },
+      bonusEntries: [{ id: 1, category: 'holidayPay', date: '2026-11-26', amount: 0, hours: 8 }],
       bonusHours: { holidayPay: 8 },
       totalPay: 216.98,
     });
-    expect(html).toContain('Holiday Pay (8 h × $7.00)');
+    expect(html).toContain('Holiday Pay — Thu 11/26 8 h × $7.00');
     expect(html).toContain('$56.00');
+    expect(html.match(/Holiday Pay/g)).toHaveLength(1);
     expect(html.indexOf('Manager Bonus')).toBeLessThan(html.indexOf('Holiday Pay'));
     expect(html.indexOf('Holiday Pay')).toBeLessThan(html.indexOf('Accounts'));
   });
 
-  it('leaves Holiday Pay out when it pays nothing', () => {
+  it('lists every holiday on one line, with the total hours that were multiplied', () => {
+    const html = render({
+      bonusAmounts: { ...noBonus, holidayPay: 112 },
+      bonusEntries: [
+        { id: 1, category: 'holidayPay', date: '2026-11-26', amount: 0, hours: 8 },
+        { id: 2, category: 'holidayPay', date: '2026-11-28', amount: 0, hours: 8 },
+      ],
+      bonusHours: { holidayPay: 16 },
+      totalPay: 252.98,
+    });
+    expect(html).toContain('Holiday Pay — Thu 11/26 8 h · Sat 11/28 8 h (16 h × $7.00)');
+    expect(html).toContain('$112.00');
+    expect(html).not.toContain('$0.00');
+  });
+
+  it('leaves Holiday Pay out when there are no holiday entries', () => {
     expect(render({ bonusHours: { holidayPay: null } })).not.toContain('Holiday Pay');
   });
 

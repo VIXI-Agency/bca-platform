@@ -11,21 +11,17 @@ import {
   BONUS_FIELD_LABELS,
   BONUS_NOTES_MAX,
   DATED_BONUS_CATEGORIES,
-  hoursBonusAmount,
+  DATED_BONUS_RULES,
   isCountedBonus,
   isDatedBonus,
-  isHoursBonus,
   type CountedBonusField,
-  type HoursBonusField,
   type PeriodBonusField,
 } from '@/lib/payroll/constants';
-import { formatCurrency } from '@/lib/utils';
 import { DatedBonusList } from './dated-bonus-list';
-import { parseCount } from './totals';
 
-// Every bonus typed in this grid, in the order the report lists them. Holiday
-// Pay sits with the amounts but is typed in hours.
-const GRID_FIELDS = BONUS_FIELDS.filter((key) => !isDatedBonus(key)) as (PeriodBonusField | HoursBonusField)[];
+// Every bonus typed in this grid, in the order the report lists them. The
+// dated ones (Holiday Pay, Wheel Spins, CCF Spiffs) have their own lists below.
+const GRID_FIELDS = BONUS_FIELDS.filter((key) => !isDatedBonus(key)) as PeriodBonusField[];
 
 interface BonusEditorProps {
   bonusInputs: Record<PeriodBonusField, string>;
@@ -33,10 +29,7 @@ interface BonusEditorProps {
   /** How many accounts / verified leads (printed as "Accounts (4)"). */
   countInputs: Record<CountedBonusField, string>;
   setCountInputs: Dispatch<SetStateAction<Record<CountedBonusField, string>>>;
-  /** Hours being paid for Holiday Pay; the amount is hours × the pay rate. */
-  hoursInputs: Record<HoursBonusField, string>;
-  setHoursInputs: Dispatch<SetStateAction<Record<HoursBonusField, string>>>;
-  /** The regular rate as typed in the rate editor (null until one is entered). */
+  /** The regular rate as typed in the rate editor (null until one is entered). Holiday Pay is hours × this. */
   payRate: number | null;
   /** The week's note (saved with Save Bonuses, printed on the PDF). */
   notesInput: string;
@@ -45,11 +38,13 @@ interface BonusEditorProps {
   bonusLoading: boolean;
   handleSaveBonus: () => void;
   saveBonus: { isPending: boolean; error: Error | null };
-  /** For the dated bonuses (Wheel Spins, CCF Spiffs), which save on their own. */
+  /** For the dated bonuses (Holiday Pay, Wheel Spins, CCF Spiffs), which save on their own. */
   userId: number;
   bonusEntries: BonusEntry[];
-  /** Workdays of the period that have already happened. */
+  /** Workdays of the period that have already happened (Wheel Spins, CCF Spiffs). */
   bonusDays: string[];
+  /** Every day of the period, weekends and upcoming days included (Holiday Pay). */
+  periodDays: string[];
   locked: boolean;
 }
 
@@ -63,8 +58,6 @@ export function BonusEditor({
   setBonusInputs,
   countInputs,
   setCountInputs,
-  hoursInputs,
-  setHoursInputs,
   payRate,
   notesInput,
   setNotesInput,
@@ -75,6 +68,7 @@ export function BonusEditor({
   userId,
   bonusEntries,
   bonusDays,
+  periodDays,
   locked,
 }: BonusEditorProps) {
   return (
@@ -100,44 +94,7 @@ export function BonusEditor({
         </Button>
       </div>
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        {GRID_FIELDS.map((key) => {
-          if (isHoursBonus(key)) {
-            const raw = hoursInputs[key];
-            const hours = parseCount(raw) || null;
-            const invalid = raw.trim() !== '' && parseCount(raw) == null;
-            return (
-              <div key={key} className="space-y-1">
-                <Label htmlFor={`report-bonus-${key}`} className="text-xs" style={{ color: 'var(--text-secondary)' }}>
-                  {BONUS_FIELD_LABELS[key]} (hours)
-                </Label>
-                <Input
-                  id={`report-bonus-${key}`}
-                  title="Hours being paid. The amount is hours × the pay rate."
-                  type="number"
-                  min="0"
-                  max="999"
-                  step="1"
-                  className="h-8 min-w-0"
-                  value={raw}
-                  onChange={(e) => setHoursInputs((prev) => ({ ...prev, [key]: e.target.value }))}
-                  placeholder="0 h"
-                  disabled={bonusLoading}
-                />
-                {invalid && <p className="text-[11px] text-amber-600">Whole hours only, up to 999.</p>}
-                {hours != null && payRate == null && (
-                  <p className="text-[11px] text-amber-600">
-                    Set a pay rate, or {BONUS_FIELD_LABELS[key]} won&apos;t be paid.
-                  </p>
-                )}
-                {hours != null && payRate != null && (
-                  <p className="text-[11px] tabular-nums" style={{ color: 'var(--text-muted)' }}>
-                    {hours} h × {formatCurrency(payRate)} = {formatCurrency(hoursBonusAmount(hours, payRate))}
-                  </p>
-                )}
-              </div>
-            );
-          }
-          return (
+        {GRID_FIELDS.map((key) => (
           <div key={key} className="space-y-1">
             <Label htmlFor={`report-bonus-${key}`} className="text-xs" style={{ color: 'var(--text-secondary)' }}>
               {BONUS_FIELD_LABELS[key]}
@@ -174,21 +131,22 @@ export function BonusEditor({
               <p className="text-[11px] text-amber-600">Add the $ amount, or it won&apos;t be paid or shown.</p>
             )}
           </div>
-          );
-        })}
+        ))}
       </div>
       {saveBonus.error && <p className="text-xs text-red-500">{saveBonus.error.message}</p>}
 
-      {/* Earned on specific days: each entry has its own date and amount and is
-          saved as soon as it's added (no Save Bonuses needed). */}
-      <div className="grid gap-3 sm:grid-cols-2">
+      {/* Entered for specific days: each entry has its own date and amount (or
+          hours, for Holiday Pay) and is saved as soon as it's added (no Save
+          Bonuses needed). */}
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
         {DATED_BONUS_CATEGORIES.map((category) => (
           <DatedBonusList
             key={category}
             userId={userId}
             category={category}
             entries={bonusEntries.filter((e) => e.category === category)}
-            days={bonusDays}
+            days={DATED_BONUS_RULES[category].anyDay ? periodDays : bonusDays}
+            payRate={payRate}
             locked={locked}
           />
         ))}

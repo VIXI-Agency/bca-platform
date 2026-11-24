@@ -57,7 +57,7 @@ export function planBonusRefile(
       const days = inPeriod.map((e) => e.entryDate.getTime());
       const label = isDatedBonus(category) ? BONUS_FIELD_LABELS[category] : category;
       const week = dayLabel(new Date(start));
-      if (inPeriod.length > rule.maxPerPeriod) {
+      if (rule.maxPerPeriod != null && inPeriod.length > rule.maxPerPeriod) {
         return { moves: [], error: `${label}: at most ${rule.maxPerPeriod} per pay period, and the week of ${week} would have ${inPeriod.length}. Remove some first.` };
       }
       if (rule.onePerDay && new Set(days).size !== days.length) {

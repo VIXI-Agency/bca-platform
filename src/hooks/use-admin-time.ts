@@ -5,7 +5,6 @@ import {
   BONUS_FIELDS,
   type BonusCountKey,
   type BonusFieldKey,
-  type BonusHoursKey,
   type DatedBonusCategory,
   type PeriodBonusField,
 } from '@/lib/payroll/constants';
@@ -111,17 +110,19 @@ export interface DisconnectionsResponse {
 // re-exported so existing imports from this hook keep working.
 export { BONUS_FIELDS, type BonusFieldKey };
 
-/** The bonuses typed as one amount per period (Wheel Spins / CCF Spiffs are dated entries). */
+/** The bonuses typed as one amount per period (Holiday Pay / Wheel Spins / CCF Spiffs are dated entries). */
 export type BonusResponse = Record<PeriodBonusField, number | null> &
-  Record<BonusCountKey, number | null> &
-  Partial<Record<BonusHoursKey, number | null>> & { notes?: string | null };
+  Record<BonusCountKey, number | null> & { notes?: string | null };
 
-/** One dated bonus (Wheel Spins, CCF Spiffs). */
+/** One dated bonus (Holiday Pay, Wheel Spins, CCF Spiffs). */
 export interface BonusEntry {
   id: number;
   category: DatedBonusCategory;
   date: string;
+  /** Dollars; 0 for a bonus paid by the hour, whose amount follows the pay rate. */
   amount: number;
+  /** Hours paid for that day (Holiday Pay); null for the dollar categories. */
+  hours?: number | null;
 }
 
 /** A disconnection's span in an audit entry (PST wall-clock TIME values). */
@@ -376,10 +377,10 @@ export function useRemoveDisconnection() {
   });
 }
 
-/** Adds one dated bonus; the server enforces each category's caps. */
+/** Adds one dated bonus (dollars, or hours for Holiday Pay); the server enforces each category's rules. */
 export function useAddBonusEntry() {
   const qc = useQueryClient();
-  return useMutation<unknown, Error, { userId: number; category: DatedBonusCategory; date: string; amount: number }>({
+  return useMutation<unknown, Error, { userId: number; category: DatedBonusCategory; date: string; amount?: number; hours?: number }>({
     mutationFn: ({ userId, ...body }) =>
       fetchJson(`/api/admin/time/${userId}/bonus-entries`, {
         method: 'POST',
@@ -429,7 +430,7 @@ export function useSaveBonus() {
   return useMutation<
     BonusResponse,
     Error,
-    { userId: number; week: string } & Partial<Record<PeriodBonusField | BonusCountKey | BonusHoursKey, number | null>> & {
+    { userId: number; week: string } & Partial<Record<PeriodBonusField | BonusCountKey, number | null>> & {
       notes?: string | null;
     }
   >({

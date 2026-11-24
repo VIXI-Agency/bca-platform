@@ -54,7 +54,7 @@ const log = (iso: string, clockOut: string) => ({
 
 const noBonus = () =>
   Object.fromEntries(PERIOD_BONUS_FIELDS.map((key) => [key, ''])) as Record<PeriodBonusField, string>;
-const noDated = (): Record<DatedBonusCategory, number> => ({ wheelSpins: 0, ccfSpiffs: 0 });
+const noDated = (): Record<DatedBonusCategory, number> => ({ holidayPay: 0, wheelSpins: 0, ccfSpiffs: 0 });
 
 interface Case {
   name: string;
@@ -64,8 +64,8 @@ interface Case {
   bonus: Partial<Record<PeriodBonusField, number>>;
   /** How many accounts / verified leads, as typed (null = left blank). */
   counts?: Partial<Record<CountedBonusField, number | null>>;
-  /** Holiday hours as stored (paid at the regular rate). */
-  holidayHours?: number;
+  /** Holiday hours per dated entry, as stored (paid at the regular rate). */
+  holidayHours?: number[];
   /** Dated entries (Wheel Spins, CCF Spiffs) as stored. */
   entries?: { category: DatedBonusCategory; amount: string }[];
 }
@@ -77,8 +77,9 @@ const CASES: Case[] = [
   { name: 'a rate that needs rounding to cents', clockOuts: ['13:30'], payRate: '15.3333', otPayRate: null, bonus: {} },
   { name: 'odd minutes and bonuses', clockOuts: ['14:37', '15:02', '13:11'], payRate: '7.00', otPayRate: '10.50', bonus: { discretionaryBonus: 25, accounts: 0.2 }, entries: [{ category: 'wheelSpins', amount: '0.10' }, { category: 'ccfSpiffs', amount: '5.00' }, { category: 'ccfSpiffs', amount: '2.55' }] },
   { name: 'counted bonuses, one count left blank', clockOuts: ['14:30'], payRate: '10.00', otPayRate: null, bonus: { accounts: 15, verifiedLeads: 20 }, counts: { accounts: 4, verifiedLeads: null } },
-  { name: 'holiday hours at a rate that needs rounding', clockOuts: ['14:30'], payRate: '7.33', otPayRate: '11.00', bonus: { managerBonus: 5 }, holidayHours: 8 },
-  { name: 'holiday hours on top of an overtime day', clockOuts: ['16:30'], payRate: '10.00', otPayRate: '15.00', bonus: {}, holidayHours: 16 },
+  { name: 'holiday hours at a rate that needs rounding', clockOuts: ['14:30'], payRate: '7.33', otPayRate: '11.00', bonus: { managerBonus: 5 }, holidayHours: [8] },
+  { name: 'holiday hours on top of an overtime day', clockOuts: ['16:30'], payRate: '10.00', otPayRate: '15.00', bonus: {}, holidayHours: [8, 8] },
+  { name: 'holiday days whose per-day cents would round differently', clockOuts: ['14:30'], payRate: '7.333', otPayRate: null, bonus: {}, holidayHours: [3, 3], entries: [{ category: 'wheelSpins', amount: '7.00' }] },
   { name: 'a count with no amount', clockOuts: ['14:30'], payRate: '10.00', otPayRate: null, bonus: {}, counts: { accounts: 3 } },
 ];
 
@@ -96,9 +97,9 @@ describe('computeReportTotals', () => {
       ...c.bonus,
       accountsCount: c.counts?.accounts ?? null,
       verifiedLeadsCount: c.counts?.verifiedLeads ?? null,
-      holidayHours: c.holidayHours ?? null,
     });
-    bonusEntryFindMany.mockResolvedValue(c.entries ?? []);
+    const holidayEntries = (c.holidayHours ?? []).map((hours) => ({ category: 'holidayPay', amount: '0.00', hours }));
+    bonusEntryFindMany.mockResolvedValue([...(c.entries ?? []), ...holidayEntries]);
 
     const server = await computePayStatement(USER, PERIOD);
     const hours = await computePeriodHours(USER, PERIOD);
@@ -117,8 +118,8 @@ describe('computeReportTotals', () => {
         accounts: c.counts?.accounts != null ? String(c.counts.accounts) : '',
         verifiedLeads: c.counts?.verifiedLeads != null ? String(c.counts.verifiedLeads) : '',
       },
-      hoursInputs: { holidayPay: c.holidayHours != null ? String(c.holidayHours) : '' },
       datedTotals,
+      datedHours: { holidayPay: (c.holidayHours ?? []).reduce((sum, h) => sum + h, 0) },
     });
 
     expect(client.bonusHours).toEqual(server.bonusHours);
@@ -196,32 +197,32 @@ describe('computeReportTotals', () => {
   });
 
   describe('Holiday Pay', () => {
-    const holiday = (hours: string, payRateInput = '7') =>
+    const holiday = (hours: number | undefined, payRateInput = '7') =>
       computeReportTotals({
         totals: { totalHours: 8, overtime: 0 },
         payRateInput,
         otPayRateInput: '',
         bonusInputs: noBonus(),
-        hoursInputs: { holidayPay: hours },
         datedTotals: noDated(),
+        datedHours: hours != null ? { holidayPay: hours } : undefined,
       });
 
-    it('pays the typed hours at the typed rate, before anything is saved', () => {
-      const r = holiday('8');
+    it('pays the entered hours at the typed rate, before the rate is saved', () => {
+      const r = holiday(8);
       expect(r.bonusHours.holidayPay).toBe(8);
       expect(r.bonusAmounts.holidayPay).toBe(56);
       expect(r.totalPay).toBe(112); // 8 h worked + 8 h holiday at $7.00
     });
 
     it('follows the rate as it is retyped', () => {
-      expect(holiday('8', '9.5').bonusAmounts.holidayPay).toBe(76);
+      expect(holiday(8, '9.5').bonusAmounts.holidayPay).toBe(76);
     });
 
     it('has no business cap', () => {
-      expect(holiday('40').bonusAmounts.holidayPay).toBe(280);
+      expect(holiday(40).bonusAmounts.holidayPay).toBe(280);
     });
 
-    it.each(['', '0', '7.5', '-4', 'x'])('pays nothing for hours typed as "%s"', (hours) => {
+    it.each([undefined, 0])('pays nothing with no holiday entries (%s)', (hours) => {
       const r = holiday(hours);
       expect(r.bonusHours.holidayPay).toBeNull();
       expect(r.bonusAmounts.holidayPay).toBe(0);
@@ -229,7 +230,7 @@ describe('computeReportTotals', () => {
     });
 
     it('pays nothing without a pay rate', () => {
-      expect(holiday('8', '').bonusAmounts.holidayPay).toBe(0);
+      expect(holiday(8, '').bonusAmounts.holidayPay).toBe(0);
     });
   });
 

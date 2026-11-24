@@ -217,10 +217,14 @@ describe('computePayStatement', () => {
   });
 
   describe('Holiday Pay', () => {
+    /** A holiday entry as stored: hours for one day, and no dollars. */
+    const holiday = (hours: number) => ({ category: 'holidayPay', amount: '0.00', hours });
+
     it('pays the holiday hours at the regular rate, inside the bonus total and gross pay', async () => {
       setLogs([log('2026-10-12')]); // 8h worked
       userFindUnique.mockResolvedValue({ payRate: '7.33', otPayRate: '11.00' });
-      bonusFindUnique.mockResolvedValue({ holidayHours: 8, managerBonus: '5.00' });
+      bonusFindUnique.mockResolvedValue({ managerBonus: '5.00' });
+      bonusEntryFindMany.mockResolvedValue([holiday(8)]);
       const s = await computePayStatement(USER, PERIOD);
       expect(s.bonusHours).toEqual({ holidayPay: 8 });
       expect(s.bonusAmounts.holidayPay).toBe(58.64);
@@ -231,7 +235,7 @@ describe('computePayStatement', () => {
     it('never counts holiday hours as worked hours or overtime', async () => {
       setLogs(WEEK.map((d) => log(d))); // a full 40h week
       const without = await computePayStatement(USER, PERIOD);
-      bonusFindUnique.mockResolvedValue({ holidayHours: 16 });
+      bonusEntryFindMany.mockResolvedValue([holiday(8), holiday(8)]);
       const withHoliday = await computePayStatement(USER, PERIOD);
       expect(withHoliday.regularHours).toBe(without.regularHours);
       expect(withHoliday.overtimeHours).toBe(0);
@@ -242,16 +246,39 @@ describe('computePayStatement', () => {
 
     it('uses the regular rate even when the employee has an OT rate', async () => {
       userFindUnique.mockResolvedValue({ payRate: '10.00', otPayRate: '15.00' });
-      bonusFindUnique.mockResolvedValue({ holidayHours: 4 });
+      bonusEntryFindMany.mockResolvedValue([holiday(4)]);
       expect((await computePayStatement(USER, PERIOD)).bonusAmounts.holidayPay).toBe(40);
     });
 
     it('pays nothing when the employee has no pay rate', async () => {
       userFindUnique.mockResolvedValue({ payRate: null, otPayRate: null });
-      bonusFindUnique.mockResolvedValue({ holidayHours: 8 });
+      bonusEntryFindMany.mockResolvedValue([holiday(8)]);
       const s = await computePayStatement(USER, PERIOD);
       expect(s.bonusAmounts.holidayPay).toBe(0);
       expect(s.grossPay).toBe(0);
+    });
+
+    it('pays the period’s total hours once, so the printed multiplication checks out', async () => {
+      // 3 h × $7.333 rounds to $22.00 a day; the 6 h actually paid are $44.00.
+      userFindUnique.mockResolvedValue({ payRate: '7.333', otPayRate: null });
+      bonusEntryFindMany.mockResolvedValue([holiday(3), holiday(3)]);
+      const s = await computePayStatement(USER, PERIOD);
+      expect(s.bonusHours).toEqual({ holidayPay: 6 });
+      expect(s.bonusAmounts.holidayPay).toBe(44);
+    });
+
+    it('ignores the legacy per-period HolidayHours column', async () => {
+      bonusFindUnique.mockResolvedValue({ holidayHours: 8 });
+      const s = await computePayStatement(USER, PERIOD);
+      expect(s.bonusHours).toEqual({ holidayPay: null });
+      expect(s.bonusAmounts.holidayPay).toBe(0);
+    });
+
+    it('keeps holiday entries out of the dollar categories', async () => {
+      bonusEntryFindMany.mockResolvedValue([holiday(8), { category: 'wheelSpins', amount: '7.00', hours: null }]);
+      const s = await computePayStatement(USER, PERIOD);
+      expect(s.bonusAmounts.wheelSpins).toBe(7);
+      expect(s.bonusAmounts.holidayPay).toBe(120);
     });
 
     it('has no holiday hours when none were saved', async () => {

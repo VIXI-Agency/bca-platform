@@ -38,8 +38,8 @@ const PERIOD = D('2026-10-09');
 const userParams = { params: Promise.resolve({ userId: '40' }) };
 const post = (body: unknown) =>
   POST(new Request('http://localhost/api/admin/time/40/bonus-entries', { method: 'POST', body: JSON.stringify(body) }), userParams);
-const row = (id: number, category: string, iso: string, amount = '7.00') =>
-  ({ idEntry: id, idUser: 40, periodStart: PERIOD, category, entryDate: D(iso), amount, modifiedBy: '262', createdAt: D(iso) });
+const row = (id: number, category: string, iso: string, amount = '7.00', hours: number | null = null) =>
+  ({ idEntry: id, idUser: 40, periodStart: PERIOD, category, entryDate: D(iso), amount, hours, modifiedBy: '262', createdAt: D(iso) });
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -54,13 +54,18 @@ beforeEach(() => {
 
 describe('GET /api/admin/time/[userId]/bonus-entries', () => {
   it('lists the period’s dated bonuses, oldest first', async () => {
-    entryFindMany.mockResolvedValue([row(1, 'wheelSpins', '2026-10-12', '14.00'), row(2, 'ccfSpiffs', '2026-10-13', '5.50')]);
+    entryFindMany.mockResolvedValue([
+      row(1, 'wheelSpins', '2026-10-12', '14.00'),
+      row(2, 'ccfSpiffs', '2026-10-13', '5.50'),
+      row(3, 'holidayPay', '2026-10-13', '0.00', 8),
+    ]);
     const res = await GET(new Request('http://localhost/api/admin/time/40/bonus-entries?week=2026-10-14'), userParams);
     const body = await res.json();
     expect(entryFindMany.mock.calls[0][0].where).toEqual({ idUser: 40, periodStart: PERIOD });
     expect(body.entries).toEqual([
-      { id: 1, category: 'wheelSpins', date: '2026-10-12', amount: 14 },
-      { id: 2, category: 'ccfSpiffs', date: '2026-10-13', amount: 5.5 },
+      { id: 1, category: 'wheelSpins', date: '2026-10-12', amount: 14, hours: null },
+      { id: 2, category: 'ccfSpiffs', date: '2026-10-13', amount: 5.5, hours: null },
+      { id: 3, category: 'holidayPay', date: '2026-10-13', amount: 0, hours: 8 },
     ]);
   });
 });
@@ -70,7 +75,7 @@ describe('POST /api/admin/time/[userId]/bonus-entries', () => {
     const res = await post({ category: 'wheelSpins', date: '2026-10-12', amount: 14 });
     expect(res.status).toBe(201);
     expect(tx.payrollBonusEntry.create.mock.calls[0][0].data).toMatchObject({
-      idUser: 40, periodStart: PERIOD, category: 'wheelSpins', entryDate: D('2026-10-12'), amount: 14, modifiedBy: '262',
+      idUser: 40, periodStart: PERIOD, category: 'wheelSpins', entryDate: D('2026-10-12'), amount: 14, hours: null, modifiedBy: '262',
     });
   });
 
@@ -119,6 +124,8 @@ describe('POST /api/admin/time/[userId]/bonus-entries', () => {
     ['more than 2 decimals', { amount: 5.555 }],
     ['an unknown category', { category: 'discretionaryBonus' }],
     ['a malformed date', { date: '10/12/2026' }],
+    ['no amount', { amount: undefined }],
+    ['hours instead of an amount', { amount: undefined, hours: 8 }],
   ])('rejects %s', async (_name, change) => {
     const res = await post({ category: 'wheelSpins', date: '2026-10-12', amount: 7, ...change });
     expect(res.status).toBe(400);
@@ -133,6 +140,73 @@ describe('POST /api/admin/time/[userId]/bonus-entries', () => {
   it('is for Administrators only', async () => {
     session.value = { user: { role: 2, userId: 5 } };
     expect((await post({ category: 'wheelSpins', date: '2026-10-12', amount: 7 })).status).toBe(403);
+  });
+});
+
+describe('POST /api/admin/time/[userId]/bonus-entries — Holiday Pay', () => {
+  // "Today" is Thu 10/15, the last day of the remote period Fri 10/9 – Thu 10/15.
+  const holiday = (change: Record<string, unknown> = {}) =>
+    post({ category: 'holidayPay', date: '2026-10-12', hours: 8, ...change });
+
+  it('stores the day and the hours, and no dollars', async () => {
+    expect((await holiday()).status).toBe(201);
+    expect(tx.payrollBonusEntry.create.mock.calls[0][0].data).toMatchObject({
+      idUser: 40, periodStart: PERIOD, category: 'holidayPay', entryDate: D('2026-10-12'), hours: 8, amount: 0, modifiedBy: '262',
+    });
+  });
+
+  it('never stores an amount sent along with the hours', async () => {
+    await holiday({ amount: 500 });
+    expect(tx.payrollBonusEntry.create.mock.calls[0][0].data).toMatchObject({ amount: 0, hours: 8 });
+  });
+
+  it('accepts a weekend day of the pay period', async () => {
+    expect((await holiday({ date: '2026-10-10' })).status).toBe(201); // Saturday
+  });
+
+  it('accepts an upcoming day of the pay period that is running', async () => {
+    // In House week Mon 10/12 – Sun 10/18: Fri 10/16 is tomorrow.
+    scheduleFindMany.mockResolvedValue([{ schedule: 'inhouse', effectiveFrom: D('2026-10-12') }]);
+    expect((await holiday({ date: '2026-10-16' })).status).toBe(201);
+    expect(tx.payrollBonusEntry.create.mock.calls[0][0].data).toMatchObject({ periodStart: D('2026-10-12') });
+  });
+
+  it('refuses a day in a pay period that has not started', async () => {
+    const res = await holiday({ date: '2026-10-16' }); // remote: the next Friday week
+    expect(res.status).toBe(400);
+    expect((await res.json()).error).toBe('Holiday Pay can’t be added for a pay period that hasn’t started.');
+    expect(tx.payrollBonusEntry.create).not.toHaveBeenCalled();
+  });
+
+  it('has no cap on hours or on days', async () => {
+    tx.payrollBonusEntry.findMany.mockResolvedValue(
+      ['2026-10-09', '2026-10-10', '2026-10-11', '2026-10-13', '2026-10-14', '2026-10-15'].map((d, i) => row(i + 1, 'holidayPay', d, '0.00', 8)),
+    );
+    expect((await holiday({ hours: 40 })).status).toBe(201);
+  });
+
+  it('refuses a second entry on the same day', async () => {
+    tx.payrollBonusEntry.findMany.mockResolvedValue([row(1, 'holidayPay', '2026-10-12', '0.00', 8)]);
+    const res = await holiday();
+    expect(res.status).toBe(409);
+    expect((await res.json()).error).toBe('Holiday Pay: only one per day.');
+  });
+
+  it.each([
+    ['decimal hours', { hours: 7.5 }],
+    ['zero hours', { hours: 0 }],
+    ['negative hours', { hours: -8 }],
+    ['more than 999 hours', { hours: 1000 }],
+    ['no hours', { hours: undefined }],
+    ['an amount instead of hours', { hours: undefined, amount: 120 }],
+  ])('rejects %s', async (_name, change) => {
+    expect((await holiday(change)).status).toBe(400);
+    expect(tx.payrollBonusEntry.create).not.toHaveBeenCalled();
+  });
+
+  it('refuses a period that is approved or paid', async () => {
+    locked.value = true;
+    expect((await holiday()).status).toBe(409);
   });
 });
 

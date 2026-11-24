@@ -17,8 +17,11 @@ export const BONUS_FIELDS = [
 
 export type BonusFieldKey = (typeof BONUS_FIELDS)[number];
 
-/** Bonuses earned on a specific day: each entry has its own date and amount. */
-export const DATED_BONUS_CATEGORIES = ['wheelSpins', 'ccfSpiffs'] as const;
+/**
+ * Bonuses entered for a specific day: each entry has its own date, and an
+ * amount (Wheel Spins, CCF Spiffs) or hours (Holiday Pay).
+ */
+export const DATED_BONUS_CATEGORIES = ['holidayPay', 'wheelSpins', 'ccfSpiffs'] as const;
 export type DatedBonusCategory = (typeof DATED_BONUS_CATEGORIES)[number];
 
 /** Bonuses typed as one amount per pay period (a PayrollBonuses column each). */
@@ -48,17 +51,15 @@ export const BONUS_COUNT_KEYS = {
 export type BonusCountKey = (typeof BONUS_COUNT_KEYS)[CountedBonusField];
 
 /**
- * Bonuses typed as hours and paid at the employee's regular rate. Only the
- * hours are stored: the amount follows the rate until payroll is approved.
+ * Dated bonuses typed as hours and paid at the employee's regular rate. Each
+ * entry stores its hours (PayrollBonusEntries.Hours), never dollars: the
+ * amount follows the rate until payroll is approved.
  */
-export const HOURS_BONUS_FIELDS = ['holidayPay'] as const;
+export const HOURS_BONUS_FIELDS = ['holidayPay'] as const satisfies readonly DatedBonusCategory[];
 export type HoursBonusField = (typeof HOURS_BONUS_FIELDS)[number];
 
-/** Where each hours bonus keeps its hours (API field = PayrollBonuses column). */
-export const BONUS_HOURS_KEYS = {
-  holidayPay: 'holidayHours',
-} as const satisfies Record<HoursBonusField, string>;
-export type BonusHoursKey = (typeof BONUS_HOURS_KEYS)[HoursBonusField];
+/** Most hours one entry can hold. A typing guard, not a business cap. */
+export const BONUS_HOURS_MAX = 999;
 
 export const isHoursBonus = (key: string): key is HoursBonusField =>
   (HOURS_BONUS_FIELDS as readonly string[]).includes(key);
@@ -88,13 +89,23 @@ export function bonusCount(count: number | null | undefined, amount: number): nu
   return count != null && count > 0 ? count : 1;
 }
 
+export interface DatedBonusRule {
+  /** Most entries in one pay period; null = no cap. */
+  maxPerPeriod: number | null;
+  onePerDay: boolean;
+  /** Any day of the pay period, weekends and upcoming days included. Otherwise only workdays already past. */
+  anyDay: boolean;
+}
+
 /**
- * Caps per pay period (Friday–Thursday remote, Monday–Friday In House). Wheel Spins can land on the same
- * day; a CCF Spiff is daily, so at most one per day.
+ * Rules per pay period (Friday–Thursday remote, Monday–Friday In House). Wheel Spins can land on the same
+ * day; a CCF Spiff is daily, so at most one per day. A holiday is paid once,
+ * can fall on a weekend, and payroll may enter it before the day comes.
  */
-export const DATED_BONUS_RULES: Record<DatedBonusCategory, { maxPerPeriod: number; onePerDay: boolean }> = {
-  wheelSpins: { maxPerPeriod: 2, onePerDay: false },
-  ccfSpiffs: { maxPerPeriod: 5, onePerDay: true },
+export const DATED_BONUS_RULES: Record<DatedBonusCategory, DatedBonusRule> = {
+  holidayPay: { maxPerPeriod: null, onePerDay: true, anyDay: true },
+  wheelSpins: { maxPerPeriod: 2, onePerDay: false, anyDay: false },
+  ccfSpiffs: { maxPerPeriod: 5, onePerDay: true, anyDay: false },
 };
 
 export const isDatedBonus = (key: string): key is DatedBonusCategory =>
@@ -122,7 +133,7 @@ export function datedBonusRuleError(
   const rule = DATED_BONUS_RULES[category];
   const same = existing.filter((e) => e.category === category);
   const label = BONUS_FIELD_LABELS[category];
-  if (same.length >= rule.maxPerPeriod) {
+  if (rule.maxPerPeriod != null && same.length >= rule.maxPerPeriod) {
     return `${label}: at most ${rule.maxPerPeriod} per pay period.`;
   }
   if (rule.onePerDay && same.some((e) => e.entryDate === entryDate)) {

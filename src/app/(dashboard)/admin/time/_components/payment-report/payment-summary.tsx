@@ -32,11 +32,11 @@ interface PaymentSummaryProps {
   otPay: number | null;
   otRateMissing: boolean;
   bonusAmounts: Record<BonusFieldKey, number>;
-  /** Dated bonuses (Wheel Spins, CCF Spiffs): printed one line per entry. */
+  /** Dated bonuses (Holiday Pay, Wheel Spins, CCF Spiffs): printed one line per category, listing each day. */
   bonusEntries?: BonusEntry[];
   /** How many accounts / verified leads: printed as "Accounts (4)". */
   bonusCounts?: Partial<Record<CountedBonusField, number | null>>;
-  /** Holiday hours: printed with the rate, as "Holiday Pay (8 h × $7.00)". */
+  /** The period's holiday hours: printed with the rate, as "8 h × $7.00". */
   bonusHours?: Partial<Record<HoursBonusField, number | null>>;
   /** The week's note, printed under the total. */
   notes?: string | null;
@@ -89,7 +89,14 @@ export function PaymentSummary({
           // of spiffs doesn't push the printed report onto a second sheet.
           const entries = bonusEntries.filter((e) => e.category === key);
           if (entries.length === 0) return [];
-          const detail = entries.map((e) => `${dayLabel(e.date)} ${formatCurrency(e.amount)}`).join(' · ');
+          let detail = entries.map((e) => `${dayLabel(e.date)} ${formatCurrency(e.amount)}`).join(' · ');
+          if (isHoursBonus(key)) {
+            // Paid by the hour: show the day and the multiplication, like
+            // Regular and Overtime. Several days add up before the rate.
+            const rate = payRate != null ? ` × ${formatCurrency(payRate)}` : '';
+            const days = entries.map((e) => `${dayLabel(e.date)} ${e.hours ?? 0} h`);
+            detail = days.length === 1 ? `${days[0]}${rate}` : `${days.join(' · ')} (${bonusHours[key] ?? 0} h${rate})`;
+          }
           return [
             <div key={key} className="flex justify-between gap-4 text-sm print:text-[9.5px]" style={{ color: 'var(--text-secondary)' }}>
               <span>{`${BONUS_FIELD_LABELS[key]} — ${detail}`}</span>
@@ -98,11 +105,7 @@ export function PaymentSummary({
           ];
         }
         if (bonusAmounts[key] <= 0) return [];
-        const count = isCountedBonus(key) ? bonusCounts[key] : null;
-        // Paid by the hour: show the multiplication, like Regular and Overtime.
-        const paidHours = isHoursBonus(key) ? bonusHours[key] : null;
-        const detail =
-          paidHours != null && payRate != null ? `${paidHours} h × ${formatCurrency(payRate)}` : count;
+        const detail = isCountedBonus(key) ? bonusCounts[key] : null;
         return [
           <div key={key} className="flex justify-between text-sm print:text-[9.5px]" style={{ color: 'var(--text-secondary)' }}>
             <span>{detail != null ? `${BONUS_FIELD_LABELS[key]} (${detail})` : BONUS_FIELD_LABELS[key]}</span>

@@ -280,8 +280,9 @@ model PayrollBonus {
   // How many accounts / verified leads the amount above is for ("Accounts (4)").
   accountsCount      Int?     @map("AccountsCount")
   verifiedLeadsCount Int?     @map("VerifiedLeadsCount")
-  // Holiday Pay is typed in hours and paid at the regular rate; only the hours
-  // are stored (see hoursBonusAmount in src/lib/payroll/constants.ts).
+  // Legacy: Holiday Pay was one hours box per period for a day (2026-11-24).
+  // It is now a dated entry (PayrollBonusEntries.Hours); the app no longer
+  // reads or writes this column.
   holidayHours       Int?     @map("HolidayHours")
   // The week's note, printed on the employee's Payment Report (max 500 chars).
   notes              String?  @map("Notes") @db.NVarChar(500)
@@ -303,9 +304,12 @@ model PayrollBonusEntry {
   idEntry     Int      @id @default(autoincrement()) @map("IdEntry")
   idUser      Int      @map("IdUser")
   periodStart DateTime @map("PeriodStart") @db.Date
-  category    String   @map("Category") // 'wheelSpins' | 'ccfSpiffs'
+  category    String   @map("Category") // 'holidayPay' | 'wheelSpins' | 'ccfSpiffs'
   entryDate   DateTime @map("EntryDate") @db.Date
   amount      Decimal  @map("Amount") @db.Decimal(10, 2)
+  /// Holiday Pay only: the hours paid for that day. Amount stays 0, since
+  /// the dollars are hours x the pay rate and are never stored here.
+  hours       Int?     @map("Hours")
   modifiedBy  String?  @map("ModifiedBy")
   createdAt   DateTime @default(now()) @map("CreatedAt")
 

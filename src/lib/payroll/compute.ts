@@ -3,7 +3,6 @@ import { userPeriodContaining } from './pay-schedule-db';
 import {
   BONUS_COUNT_KEYS,
   BONUS_FIELDS,
-  BONUS_HOURS_KEYS,
   COUNTED_BONUS_FIELDS,
   DATED_BONUS_CATEGORIES,
   HOURS_BONUS_FIELDS,
@@ -301,7 +300,7 @@ export async function computePayStatement(userId: number, day: Date): Promise<Pa
     }),
     prisma.payrollBonusEntry.findMany({
       where: { idUser: userId, periodStart },
-      select: { category: true, amount: true },
+      select: { category: true, amount: true, hours: true },
     }),
   ]);
 
@@ -313,24 +312,26 @@ export async function computePayStatement(userId: number, day: Date): Promise<Pa
 
   // One amount per period for most categories; Wheel Spins and CCF Spiffs are
   // the sum of their dated entries (PayrollBonuses.WheelSpins is legacy).
+  // Holiday entries carry hours and no dollars, so they add nothing here.
   const datedTotals = Object.fromEntries(
     DATED_BONUS_CATEGORIES.map((key) => [
       key,
       round2(entries.filter((e) => e.category === key).reduce((sum, e) => sum + Number(e.amount), 0)),
     ]),
   ) as Record<DatedBonusCategory, number>;
-  // Holiday Pay is stored as hours and paid at the regular rate. Those hours
+  // Holiday Pay is entered per day as hours and paid at the regular rate on
+  // the period's total (PayrollBonuses.HolidayHours is legacy). Those hours
   // are not worked hours: they never add to regular hours or to overtime.
   const bonusHours = Object.fromEntries(
     HOURS_BONUS_FIELDS.map((key) => {
-      const saved = bonus?.[BONUS_HOURS_KEYS[key]];
-      return [key, saved != null && Number(saved) > 0 ? Number(saved) : null];
+      const total = entries.filter((e) => e.category === key).reduce((sum, e) => sum + (e.hours ?? 0), 0);
+      return [key, total > 0 ? total : null];
     }),
   ) as Record<HoursBonusField, number | null>;
   const bonusAmounts = Object.fromEntries(
     BONUS_FIELDS.map((key) => {
-      if (isDatedBonus(key)) return [key, datedTotals[key]];
       if (isHoursBonus(key)) return [key, hoursBonusAmount(bonusHours[key], payRate)];
+      if (isDatedBonus(key)) return [key, datedTotals[key]];
       return [key, bonus?.[key] != null ? Number(bonus[key]) : 0];
     }),
   ) as Record<BonusFieldKey, number>;

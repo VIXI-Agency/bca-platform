@@ -49,6 +49,13 @@ describe('planBonusRefile', () => {
     expect(plan.error).toMatch(/Wheel Spins: at most 2/);
   });
 
+  it('moves holiday entries with the others, with no cap on how many', () => {
+    const days = ['2026-10-19', '2026-10-20', '2026-10-21', '2026-10-22'];
+    const plan = planBonusRefile(INHOUSE_FROM_1019, days.map((day, i) => entry(i + 1, 'holidayPay', day, '2026-10-16')), []);
+    expect(plan.error).toBeNull();
+    expect(plan.moves).toHaveLength(4);
+  });
+
   it('refuses when a typed weekly bonus would no longer start a pay week', () => {
     const plan = planBonusRefile(INHOUSE_FROM_1019, [], [{ periodStart: d('2026-10-23'), hasAmounts: true }]);
     expect(plan.error).toMatch(/Oct 23/);

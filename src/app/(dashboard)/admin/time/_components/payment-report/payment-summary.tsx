@@ -6,8 +6,10 @@ import {
   BONUS_FIELD_LABELS,
   isCountedBonus,
   isDatedBonus,
+  isHoursBonus,
   type BonusFieldKey,
   type CountedBonusField,
+  type HoursBonusField,
 } from '@/lib/payroll/constants';
 import { formatCurrency } from '@/lib/utils';
 
@@ -34,6 +36,8 @@ interface PaymentSummaryProps {
   bonusEntries?: BonusEntry[];
   /** How many accounts / verified leads: printed as "Accounts (4)". */
   bonusCounts?: Partial<Record<CountedBonusField, number | null>>;
+  /** Holiday hours: printed with the rate, as "Holiday Pay (8 h × $7.00)". */
+  bonusHours?: Partial<Record<HoursBonusField, number | null>>;
   /** The week's note, printed under the total. */
   notes?: string | null;
   totalPay: number;
@@ -50,6 +54,7 @@ export function PaymentSummary({
   bonusAmounts,
   bonusEntries = [],
   bonusCounts = {},
+  bonusHours = {},
   notes,
   totalPay,
 }: PaymentSummaryProps) {
@@ -94,9 +99,13 @@ export function PaymentSummary({
         }
         if (bonusAmounts[key] <= 0) return [];
         const count = isCountedBonus(key) ? bonusCounts[key] : null;
+        // Paid by the hour: show the multiplication, like Regular and Overtime.
+        const paidHours = isHoursBonus(key) ? bonusHours[key] : null;
+        const detail =
+          paidHours != null && payRate != null ? `${paidHours} h × ${formatCurrency(payRate)}` : count;
         return [
           <div key={key} className="flex justify-between text-sm print:text-[9.5px]" style={{ color: 'var(--text-secondary)' }}>
-            <span>{count != null ? `${BONUS_FIELD_LABELS[key]} (${count})` : BONUS_FIELD_LABELS[key]}</span>
+            <span>{detail != null ? `${BONUS_FIELD_LABELS[key]} (${detail})` : BONUS_FIELD_LABELS[key]}</span>
             <span>{formatCurrency(bonusAmounts[key])}</span>
           </div>,
         ];

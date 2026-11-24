@@ -9,7 +9,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { PaymentSummary } from './payment-summary';
 
 const noBonus = {
-  discretionaryBonus: 0, collectionsBonus: 0, trainingBonus: 0, managerBonus: 0,
+  discretionaryBonus: 0, collectionsBonus: 0, trainingBonus: 0, managerBonus: 0, holidayPay: 0,
   wheelSpins: 0, ccfSpiffs: 0, accounts: 0, reloads: 0, verifiedLeads: 0,
 };
 const totals = (totalHours: number, overtime: number) =>
@@ -67,6 +67,22 @@ describe('PaymentSummary', () => {
     expect(html).toContain('Verified Leads (1)');
     expect(html).toContain('Reloads Spiffs');
     expect(html).not.toContain('Reloads Spiffs (');
+  });
+
+  it('shows Holiday Pay with its hours and rate, right after Manager Bonus', () => {
+    const html = render({
+      bonusAmounts: { ...noBonus, managerBonus: 5, holidayPay: 56, accounts: 15 },
+      bonusHours: { holidayPay: 8 },
+      totalPay: 216.98,
+    });
+    expect(html).toContain('Holiday Pay (8 h × $7.00)');
+    expect(html).toContain('$56.00');
+    expect(html.indexOf('Manager Bonus')).toBeLessThan(html.indexOf('Holiday Pay'));
+    expect(html.indexOf('Holiday Pay')).toBeLessThan(html.indexOf('Accounts'));
+  });
+
+  it('leaves Holiday Pay out when it pays nothing', () => {
+    expect(render({ bonusHours: { holidayPay: null } })).not.toContain('Holiday Pay');
   });
 
   it('prints the week’s note under the total, keeping its line breaks', () => {

@@ -7,6 +7,7 @@ export const BONUS_FIELDS = [
   'collectionsBonus',
   'trainingBonus',
   'managerBonus',
+  'holidayPay',
   'wheelSpins',
   'ccfSpiffs',
   'accounts',
@@ -46,6 +47,32 @@ export const BONUS_COUNT_KEYS = {
 } as const satisfies Record<CountedBonusField, string>;
 export type BonusCountKey = (typeof BONUS_COUNT_KEYS)[CountedBonusField];
 
+/**
+ * Bonuses typed as hours and paid at the employee's regular rate. Only the
+ * hours are stored: the amount follows the rate until payroll is approved.
+ */
+export const HOURS_BONUS_FIELDS = ['holidayPay'] as const;
+export type HoursBonusField = (typeof HOURS_BONUS_FIELDS)[number];
+
+/** Where each hours bonus keeps its hours (API field = PayrollBonuses column). */
+export const BONUS_HOURS_KEYS = {
+  holidayPay: 'holidayHours',
+} as const satisfies Record<HoursBonusField, string>;
+export type BonusHoursKey = (typeof BONUS_HOURS_KEYS)[HoursBonusField];
+
+export const isHoursBonus = (key: string): key is HoursBonusField =>
+  (HOURS_BONUS_FIELDS as readonly string[]).includes(key);
+
+/**
+ * What an hours bonus pays. The Payment Report preview and computePayStatement
+ * both use this, so the screen and the approved statement can't disagree.
+ * No rate means nothing is paid.
+ */
+export function hoursBonusAmount(hours: number | null | undefined, payRate: number | null | undefined): number {
+  if (!(hours != null && hours > 0) || payRate == null) return 0;
+  return Math.round(hours * payRate * 100) / 100;
+}
+
 /** Longest note per employee per week (it prints on the one-page PDF). */
 export const BONUS_NOTES_MAX = 500;
 
@@ -78,6 +105,7 @@ export const BONUS_FIELD_LABELS: Record<BonusFieldKey, string> = {
   collectionsBonus: 'Collections Bonus',
   trainingBonus: 'Training Bonus',
   managerBonus: 'Manager Bonus',
+  holidayPay: 'Holiday Pay',
   wheelSpins: 'Wheel Spins',
   ccfSpiffs: 'CCF Spiffs',
   accounts: 'Accounts',

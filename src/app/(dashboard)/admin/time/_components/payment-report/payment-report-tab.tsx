@@ -20,8 +20,8 @@ export function PaymentReportTab() {
     empLoading, filteredEmployees, weekOptions, navigateWeek,
     isLoading, timesheet, dayLogs, totals, disconnections, employee, periodLabel,
     payRateInput, setPayRateInput, otPayRateInput, setOtPayRateInput, rateIsDirty, handleSaveRate, updatePayRate,
-    bonusInputs, setBonusInputs, countInputs, setCountInputs, notesInput, setNotesInput, bonusIsDirty, bonusLoading, handleSaveBonus, saveBonus, bonusEntries,
-    payRate, otPayRate, regularPay, otPay, otRateMissing, bonusAmounts, bonusCounts, totalPay,
+    bonusInputs, setBonusInputs, countInputs, setCountInputs, hoursInputs, setHoursInputs, notesInput, setNotesInput, bonusIsDirty, bonusLoading, handleSaveBonus, saveBonus, bonusEntries,
+    payRate, otPayRate, regularPay, otPay, otRateMissing, bonusAmounts, bonusCounts, bonusHours, totalPay,
   } = usePaymentReport();
 
   const userId = selectedUserId ? parseInt(selectedUserId, 10) : 0;
@@ -102,6 +102,9 @@ export function PaymentReportTab() {
                 setBonusInputs={setBonusInputs}
                 countInputs={countInputs}
                 setCountInputs={setCountInputs}
+                hoursInputs={hoursInputs}
+                setHoursInputs={setHoursInputs}
+                payRate={payRate}
                 notesInput={notesInput}
                 setNotesInput={setNotesInput}
                 bonusIsDirty={bonusIsDirty}
@@ -145,6 +148,7 @@ export function PaymentReportTab() {
                   bonusAmounts={bonusAmounts}
                   bonusEntries={bonusEntries}
                   bonusCounts={bonusCounts}
+                  bonusHours={bonusHours}
                   notes={notesInput}
                   totalPay={totalPay}
                 />

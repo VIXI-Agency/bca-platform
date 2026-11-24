@@ -7,6 +7,10 @@ import {
   COUNTED_BONUS_FIELDS,
   BONUS_FIELDS,
   BONUS_FIELD_LABELS,
+  HOURS_BONUS_FIELDS,
+  BONUS_HOURS_KEYS,
+  isHoursBonus,
+  hoursBonusAmount,
 } from './constants';
 
 const entry = (category: string, entryDate: string) => ({ category, entryDate });
@@ -66,7 +70,37 @@ describe('labels', () => {
 });
 
 describe('bonus categories', () => {
-  it('split every category into exactly one of: typed per period, or dated', () => {
-    expect([...PERIOD_BONUS_FIELDS, ...DATED_BONUS_CATEGORIES].sort()).toEqual([...BONUS_FIELDS].sort());
+  it('split every category into exactly one of: typed per period, dated, or typed in hours', () => {
+    expect([...PERIOD_BONUS_FIELDS, ...DATED_BONUS_CATEGORIES, ...HOURS_BONUS_FIELDS].sort()).toEqual(
+      [...BONUS_FIELDS].sort(),
+    );
+  });
+
+  it('lists Holiday Pay right after Manager Bonus', () => {
+    expect(BONUS_FIELDS.indexOf('holidayPay')).toBe(BONUS_FIELDS.indexOf('managerBonus') + 1);
+    expect(BONUS_FIELD_LABELS.holidayPay).toBe('Holiday Pay');
+  });
+
+  it('types Holiday Pay in hours, kept in holidayHours', () => {
+    expect(isHoursBonus('holidayPay')).toBe(true);
+    expect(isHoursBonus('managerBonus')).toBe(false);
+    expect(BONUS_HOURS_KEYS.holidayPay).toBe('holidayHours');
+  });
+});
+
+describe('hoursBonusAmount', () => {
+  it('pays the hours at the pay rate, to the cent', () => {
+    expect(hoursBonusAmount(8, 7)).toBe(56);
+    expect(hoursBonusAmount(8, 7.33)).toBe(58.64);
+  });
+
+  it('pays nothing without hours', () => {
+    expect(hoursBonusAmount(0, 7)).toBe(0);
+    expect(hoursBonusAmount(null, 7)).toBe(0);
+    expect(hoursBonusAmount(undefined, 7)).toBe(0);
+  });
+
+  it('pays nothing without a pay rate', () => {
+    expect(hoursBonusAmount(8, null)).toBe(0);
   });
 });

@@ -206,6 +206,7 @@ describe('computePayStatement', () => {
       collectionsBonus: 25.5,
       trainingBonus: 10,
       managerBonus: 5.25,
+      holidayPay: 0,
       wheelSpins: 3,
       ccfSpiffs: 0,
       accounts: 2,
@@ -213,6 +214,51 @@ describe('computePayStatement', () => {
       verifiedLeads: 0.15,
     });
     expect(s.grossPay).toBe(751.88);
+  });
+
+  describe('Holiday Pay', () => {
+    it('pays the holiday hours at the regular rate, inside the bonus total and gross pay', async () => {
+      setLogs([log('2026-10-12')]); // 8h worked
+      userFindUnique.mockResolvedValue({ payRate: '7.33', otPayRate: '11.00' });
+      bonusFindUnique.mockResolvedValue({ holidayHours: 8, managerBonus: '5.00' });
+      const s = await computePayStatement(USER, PERIOD);
+      expect(s.bonusHours).toEqual({ holidayPay: 8 });
+      expect(s.bonusAmounts.holidayPay).toBe(58.64);
+      expect(s.bonusTotal).toBe(63.64);
+      expect(s.grossPay).toBe(122.28); // 58.64 worked + 58.64 holiday + 5.00
+    });
+
+    it('never counts holiday hours as worked hours or overtime', async () => {
+      setLogs(WEEK.map((d) => log(d))); // a full 40h week
+      const without = await computePayStatement(USER, PERIOD);
+      bonusFindUnique.mockResolvedValue({ holidayHours: 16 });
+      const withHoliday = await computePayStatement(USER, PERIOD);
+      expect(withHoliday.regularHours).toBe(without.regularHours);
+      expect(withHoliday.overtimeHours).toBe(0);
+      expect(withHoliday.overtimePay).toBe(0);
+      expect(withHoliday.regularPay).toBe(without.regularPay);
+      expect(withHoliday.grossPay).toBe(without.grossPay + 16 * 15);
+    });
+
+    it('uses the regular rate even when the employee has an OT rate', async () => {
+      userFindUnique.mockResolvedValue({ payRate: '10.00', otPayRate: '15.00' });
+      bonusFindUnique.mockResolvedValue({ holidayHours: 4 });
+      expect((await computePayStatement(USER, PERIOD)).bonusAmounts.holidayPay).toBe(40);
+    });
+
+    it('pays nothing when the employee has no pay rate', async () => {
+      userFindUnique.mockResolvedValue({ payRate: null, otPayRate: null });
+      bonusFindUnique.mockResolvedValue({ holidayHours: 8 });
+      const s = await computePayStatement(USER, PERIOD);
+      expect(s.bonusAmounts.holidayPay).toBe(0);
+      expect(s.grossPay).toBe(0);
+    });
+
+    it('has no holiday hours when none were saved', async () => {
+      const s = await computePayStatement(USER, PERIOD);
+      expect(s.bonusHours).toEqual({ holidayPay: null });
+      expect(s.bonusAmounts.holidayPay).toBe(0);
+    });
   });
 
   it('pays overtime at the OT rate, not the regular rate', async () => {

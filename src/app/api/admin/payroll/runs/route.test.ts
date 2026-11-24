@@ -163,6 +163,26 @@ describe('POST /api/admin/payroll/runs (approve)', () => {
     expect(byCategory).toMatchObject({ accounts: 4, verifiedLeads: 1, reloads: null });
   });
 
+  it('snapshots Holiday Pay with its hours and the rate it was paid at', async () => {
+    computePayStatement.mockResolvedValue({
+      ...amounts,
+      bonusAmounts: { ...amounts.bonusAmounts, holidayPay: 80 },
+      bonusHours: { holidayPay: 8 },
+    });
+    await approve();
+    const lines: { category: string | null }[] = tx.payStatementLine.createMany.mock.calls[0][0].data;
+    expect(lines.find((l) => l.category === 'holidayPay')).toMatchObject({
+      kind: 'bonus', label: 'Holiday Pay', quantity: 8, rate: 10, amount: 80,
+    });
+  });
+
+  it('writes no Holiday Pay line when it pays nothing', async () => {
+    computePayStatement.mockResolvedValue({ ...amounts, bonusAmounts: { ...amounts.bonusAmounts, holidayPay: 0 }, bonusHours: { holidayPay: null } });
+    await approve();
+    const lines: { category: string | null }[] = tx.payStatementLine.createMany.mock.calls[0][0].data;
+    expect(lines.some((l) => l.category === 'holidayPay')).toBe(false);
+  });
+
   it('keeps the week’s note in the approved statement', async () => {
     computePayStatement.mockResolvedValue({ ...amounts, notes: 'Covered two extra shifts.' });
     await approve();

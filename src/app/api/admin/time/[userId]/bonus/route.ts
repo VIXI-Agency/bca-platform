@@ -7,20 +7,28 @@ import { resolveUserPeriod, userPeriodContaining } from '@/lib/payroll/pay-sched
 import { isPeriodLocked } from '@/lib/payroll/compute';
 import {
   BONUS_COUNT_KEYS,
+  BONUS_HOURS_KEYS,
   COUNTED_BONUS_FIELDS,
+  HOURS_BONUS_FIELDS,
   PERIOD_BONUS_FIELDS,
   type BonusCountKey,
+  type BonusHoursKey,
   type PeriodBonusField,
 } from '@/lib/payroll/constants';
 
 // One typed amount per period. Wheel Spins and CCF Spiffs are dated entries
 // (see ./bonus-entries); the legacy WheelSpins column is no longer read.
 type BonusAmounts = Record<PeriodBonusField, number | null> &
-  Record<BonusCountKey, number | null> & { notes: string | null };
+  Record<BonusCountKey | BonusHoursKey, number | null> & { notes: string | null };
 
-const COUNT_KEYS = COUNTED_BONUS_FIELDS.map((key) => BONUS_COUNT_KEYS[key]);
+// Whole numbers stored beside the amounts: how many accounts / verified leads,
+// and the hours of each bonus that is paid by the hour (Holiday Pay).
+const COUNT_KEYS = [
+  ...COUNTED_BONUS_FIELDS.map((key) => BONUS_COUNT_KEYS[key]),
+  ...HOURS_BONUS_FIELDS.map((key) => BONUS_HOURS_KEYS[key]),
+];
 
-/** Amounts per category, how many accounts / verified leads they're for, and the week's note. */
+/** Amounts per category, their counts, the holiday hours, and the week's note. */
 function toResponse(bonus: Record<string, unknown> | null): BonusAmounts {
   return Object.fromEntries([
     ...PERIOD_BONUS_FIELDS.map((key) => [key, bonus?.[key] != null ? Number(bonus[key]) : null]),

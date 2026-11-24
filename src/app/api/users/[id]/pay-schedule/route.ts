@@ -73,20 +73,25 @@ async function applyChange(
       });
       if (lockedRuns > 0) throw new Refusal(LOCKED, 409);
 
-      const [entries, bonuses] = await Promise.all([
+      const [entries, bonuses, customBonuses] = await Promise.all([
         tx.payrollBonusEntry.findMany({
           where: { idUser, entryDate: { gte: from } },
           select: { idEntry: true, category: true, entryDate: true, periodStart: true },
         }),
         tx.payrollBonus.findMany({ where: { idUser, periodStart: { gte: from } } }),
+        tx.payrollCustomBonus.findMany({ where: { idUser, periodStart: { gte: from } }, select: { periodStart: true } }),
       ]);
       const plan = planBonusRefile(
         newHistory,
         entries,
-        bonuses.map((b) => ({
-          periodStart: b.periodStart,
-          hasAmounts: PERIOD_BONUS_FIELDS.some((key) => Number(b[key] ?? 0) > 0),
-        })),
+        [
+          ...bonuses.map((b) => ({
+            periodStart: b.periodStart,
+            hasAmounts: PERIOD_BONUS_FIELDS.some((key) => Number(b[key] ?? 0) > 0),
+          })),
+          // Custom bonuses are filed under their period too, and always pay.
+          ...customBonuses.map((c) => ({ periodStart: c.periodStart, hasAmounts: true })),
+        ],
       );
       if (plan.error) throw new Refusal(plan.error, 409);
 

@@ -8,6 +8,7 @@ const tx = {
   payRun: { count: vi.fn() },
   payrollBonusEntry: { findMany: vi.fn(), update: vi.fn() },
   payrollBonus: { findMany: vi.fn() },
+  payrollCustomBonus: { findMany: vi.fn() },
   userPaySchedule: { upsert: vi.fn(), deleteMany: vi.fn() },
 };
 
@@ -44,6 +45,7 @@ beforeEach(() => {
   tx.payRun.count.mockResolvedValue(0);
   tx.payrollBonusEntry.findMany.mockResolvedValue([]);
   tx.payrollBonus.findMany.mockResolvedValue([]);
+  tx.payrollCustomBonus.findMany.mockResolvedValue([]);
   tx.userPaySchedule.upsert.mockResolvedValue({});
   tx.userPaySchedule.deleteMany.mockResolvedValue({ count: 1 });
 });
@@ -101,6 +103,14 @@ describe('POST /api/users/[id]/pay-schedule', () => {
 
   it('refuses when typed weekly bonuses would no longer belong to a pay week', async () => {
     tx.payrollBonus.findMany.mockResolvedValue([{ periodStart: D('2026-10-23'), accounts: '15.00' }]);
+    const res = await post({ schedule: 'inhouse', effectiveFrom: '2026-10-19' });
+    expect(res.status).toBe(409);
+    expect((await res.json()).error).toMatch(/week of Oct 23/);
+    expect(tx.userPaySchedule.upsert).not.toHaveBeenCalled();
+  });
+
+  it('refuses when a custom bonus would no longer belong to a pay week', async () => {
+    tx.payrollCustomBonus.findMany.mockResolvedValue([{ periodStart: D('2026-10-23') }]);
     const res = await post({ schedule: 'inhouse', effectiveFrom: '2026-10-19' });
     expect(res.status).toBe(409);
     expect((await res.json()).error).toMatch(/week of Oct 23/);

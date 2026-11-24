@@ -13,6 +13,11 @@ vi.mock('./dated-bonus-list', () => ({
     createElement('div', { 'data-list': p.category }, `${p.category}|days=${p.days.join(',')}|rate=${p.payRate}|n=${p.entries.length}`),
 }));
 
+vi.mock('./custom-bonus-list', () => ({
+  CustomBonusList: (p: { week: string; bonuses: unknown[]; suggestions: string[] }) =>
+    createElement('div', { 'data-custom': 'yes' }, `custom|week=${p.week}|n=${p.bonuses.length}|suggest=${p.suggestions.join(',')}`),
+}));
+
 const { BonusEditor } = await import('./bonus-editor');
 
 const blank = {
@@ -34,6 +39,9 @@ const html = renderToStaticMarkup(createElement(BonusEditor, {
   ],
   bonusDays: ['2026-11-20', '2026-11-23'],
   periodDays: ['2026-11-20', '2026-11-21', '2026-11-22', '2026-11-23', '2026-11-24', '2026-11-25', '2026-11-26'],
+  week: '2026-11-20',
+  customBonuses: [{ id: 5, name: 'Raffle', amount: 50 }],
+  customSuggestions: ['Raffle', 'Birthday Bonus'],
   locked: false,
 }));
 
@@ -50,6 +58,11 @@ describe('BonusEditor — Holiday Pay', () => {
 
   it('can go on any day of the pay period, weekends and upcoming days included', () => {
     expect(html).toContain('holidayPay|days=2026-11-20,2026-11-21,2026-11-22,2026-11-23,2026-11-24,2026-11-25,2026-11-26|rate=15|n=1');
+  });
+
+  it('offers custom bonuses after the dated lists, for the selected pay period', () => {
+    expect(html).toContain('custom|week=2026-11-20|n=1|suggest=Raffle,Birthday Bonus');
+    expect(html.indexOf('data-list="ccfSpiffs"')).toBeLessThan(html.indexOf('data-custom'));
   });
 
   it('leaves Wheel Spins and CCF Spiffs on workdays already past', () => {

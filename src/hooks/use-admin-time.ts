@@ -268,6 +268,28 @@ export function useBonusEntries(userId: number, week: string) {
   });
 }
 
+/** A bonus payroll named itself ("Raffle"): a name and a dollar amount for the pay period. */
+export interface CustomBonus {
+  id: number;
+  name: string;
+  amount: number;
+}
+
+export interface CustomBonusesResponse {
+  bonuses: CustomBonus[];
+  /** Names used before, most used first, for the name box. */
+  suggestions: string[];
+}
+
+/** The pay period's custom bonuses for one employee. */
+export function useCustomBonuses(userId: number, week: string) {
+  return useQuery<CustomBonusesResponse>({
+    queryKey: ['admin-custom-bonuses', userId, week],
+    queryFn: () => fetchJson<CustomBonusesResponse>(`/api/admin/time/${userId}/custom-bonuses?week=${week}`),
+    enabled: !!userId && !!week,
+  });
+}
+
 export function useDisconnections(userId: number, week: string) {
   return useQuery<DisconnectionsResponse>({
     queryKey: ['admin-disconnections', userId, week],
@@ -387,6 +409,29 @@ export function useAddBonusEntry() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
       }),
+    onSuccess: () => invalidatePayData(qc),
+  });
+}
+
+/** Adds one custom bonus to the pay period; the server enforces the cap and refuses a repeated name. */
+export function useAddCustomBonus() {
+  const qc = useQueryClient();
+  return useMutation<unknown, Error, { userId: number; period: string; name: string; amount: number }>({
+    mutationFn: ({ userId, ...body }) =>
+      fetchJson(`/api/admin/time/${userId}/custom-bonuses`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      }),
+    onSuccess: () => invalidatePayData(qc),
+  });
+}
+
+/** Removes one custom bonus. */
+export function useRemoveCustomBonus() {
+  const qc = useQueryClient();
+  return useMutation<unknown, Error, { id: number }>({
+    mutationFn: ({ id }) => fetchJson(`/api/admin/time/custom-bonuses/${id}`, { method: 'DELETE' }),
     onSuccess: () => invalidatePayData(qc),
   });
 }

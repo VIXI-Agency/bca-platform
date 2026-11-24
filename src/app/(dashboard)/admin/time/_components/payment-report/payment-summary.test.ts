@@ -102,6 +102,21 @@ describe('PaymentSummary', () => {
     expect(render({ bonusHours: { holidayPay: null } })).not.toContain('Holiday Pay');
   });
 
+  it('prints each custom bonus under the name payroll typed, after the other bonuses', () => {
+    const html = render({
+      bonusAmounts: { ...noBonus, verifiedLeads: 20 },
+      customBonuses: [{ id: 1, name: 'Raffle', amount: 50 }, { id: 2, name: 'Birthday Bonus', amount: 25.5 }],
+      totalPay: 236.48,
+    });
+    expect(html).toContain('Raffle');
+    expect(html).toContain('$50.00');
+    expect(html).toContain('Birthday Bonus');
+    expect(html).toContain('$25.50');
+    expect(html.indexOf('Verified Leads')).toBeLessThan(html.indexOf('Raffle'));
+    expect(html.indexOf('Raffle')).toBeLessThan(html.indexOf('Birthday Bonus'));
+    expect(html.indexOf('Birthday Bonus')).toBeLessThan(html.indexOf('Total Payment'));
+  });
+
   it('prints the week’s note under the total, keeping its line breaks', () => {
     const html = render({ notes: 'Covered two extra shifts.\nGreat week!' });
     expect(html).toContain('Notes');

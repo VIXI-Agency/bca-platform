@@ -318,6 +318,23 @@ model PayrollBonusEntry {
   @@schema("benjaise_sqluser2")
 }
 
+/// One-off bonuses payroll names itself ("Raffle", "Birthday Bonus"): a name
+/// and a dollar amount per employee per pay period, at most 5 of them. The
+/// name is the label on the Payment Report and on the approved statement.
+model PayrollCustomBonus {
+  idCustomBonus Int      @id @default(autoincrement()) @map("IdCustomBonus")
+  idUser        Int      @map("IdUser")
+  periodStart   DateTime @map("PeriodStart") @db.Date
+  name          String   @map("Name") @db.NVarChar(40)
+  amount        Decimal  @map("Amount") @db.Decimal(10, 2)
+  modifiedBy    String?  @map("ModifiedBy")
+  createdAt     DateTime @default(now()) @map("CreatedAt")
+
+  @@index([idUser, periodStart], map: "IX_PayrollCustomBonuses_User_Period")
+  @@map("PayrollCustomBonuses")
+  @@schema("benjaise_sqluser2")
+}
+
 // Phase 1 payroll module: an approved/paid PayRun snapshots live numbers
 // (hours × rate, OT, each bonus category) into PayStatements that never
 // change again, so printing last month's report always matches what was

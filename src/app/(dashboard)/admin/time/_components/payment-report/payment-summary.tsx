@@ -1,6 +1,6 @@
 'use client';
 
-import type { BonusEntry, WeekTotals } from '@/hooks/use-admin-time';
+import type { BonusEntry, CustomBonus, WeekTotals } from '@/hooks/use-admin-time';
 import {
   BONUS_FIELDS,
   BONUS_FIELD_LABELS,
@@ -38,6 +38,8 @@ interface PaymentSummaryProps {
   bonusCounts?: Partial<Record<CountedBonusField, number | null>>;
   /** The period's holiday hours: printed with the rate, as "8 h × $7.00". */
   bonusHours?: Partial<Record<HoursBonusField, number | null>>;
+  /** Bonuses payroll named itself: one line each, under the name it typed. */
+  customBonuses?: Pick<CustomBonus, 'id' | 'name' | 'amount'>[];
   /** The week's note, printed under the total. */
   notes?: string | null;
   totalPay: number;
@@ -55,6 +57,7 @@ export function PaymentSummary({
   bonusEntries = [],
   bonusCounts = {},
   bonusHours = {},
+  customBonuses = [],
   notes,
   totalPay,
 }: PaymentSummaryProps) {
@@ -113,6 +116,12 @@ export function PaymentSummary({
           </div>,
         ];
       })}
+      {customBonuses.map((custom) => (
+        <div key={`custom-${custom.id}`} className="flex justify-between gap-4 text-sm print:text-[9.5px]" style={{ color: 'var(--text-secondary)' }}>
+          <span className="break-words">{custom.name}</span>
+          <span>{formatCurrency(custom.amount)}</span>
+        </div>
+      ))}
       <div className="flex justify-between pt-2 text-base font-bold print:pt-[3px] print:text-[11px]" style={{ color: 'var(--text-primary)' }}>
         <span>Total Payment</span>
         <span>{formatCurrency(totalPay)}</span>

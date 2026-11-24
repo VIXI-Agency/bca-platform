@@ -17,6 +17,7 @@ const timeLogFindMany = vi.fn();
 const userFindUnique = vi.fn();
 const bonusFindUnique = vi.fn();
 const bonusEntryFindMany = vi.fn();
+const customBonusFindMany = vi.fn();
 
 vi.mock('@/lib/prisma', () => ({
   prisma: {
@@ -25,6 +26,7 @@ vi.mock('@/lib/prisma', () => ({
     user: { findUnique: (...a: unknown[]) => userFindUnique(...a) },
     payrollBonus: { findUnique: (...a: unknown[]) => bonusFindUnique(...a) },
     payrollBonusEntry: { findMany: (...a: unknown[]) => bonusEntryFindMany(...a) },
+    payrollCustomBonus: { findMany: (...a: unknown[]) => customBonusFindMany(...a) },
     userPaySchedule: { findMany: () => Promise.resolve([]) },
   },
 }));
@@ -66,6 +68,8 @@ interface Case {
   counts?: Partial<Record<CountedBonusField, number | null>>;
   /** Holiday hours per dated entry, as stored (paid at the regular rate). */
   holidayHours?: number[];
+  /** Custom bonus amounts as stored ("Raffle", "Birthday Bonus"). */
+  custom?: string[];
   /** Dated entries (Wheel Spins, CCF Spiffs) as stored. */
   entries?: { category: DatedBonusCategory; amount: string }[];
 }
@@ -80,6 +84,7 @@ const CASES: Case[] = [
   { name: 'holiday hours at a rate that needs rounding', clockOuts: ['14:30'], payRate: '7.33', otPayRate: '11.00', bonus: { managerBonus: 5 }, holidayHours: [8] },
   { name: 'holiday hours on top of an overtime day', clockOuts: ['16:30'], payRate: '10.00', otPayRate: '15.00', bonus: {}, holidayHours: [8, 8] },
   { name: 'holiday days whose per-day cents would round differently', clockOuts: ['14:30'], payRate: '7.333', otPayRate: null, bonus: {}, holidayHours: [3, 3], entries: [{ category: 'wheelSpins', amount: '7.00' }] },
+  { name: 'custom bonuses with cents, next to a typed bonus', clockOuts: ['14:37'], payRate: '7.33', otPayRate: null, bonus: { managerBonus: 5 }, custom: ['50.00', '0.10', '0.20'] },
   { name: 'a count with no amount', clockOuts: ['14:30'], payRate: '10.00', otPayRate: null, bonus: {}, counts: { accounts: 3 } },
 ];
 
@@ -101,6 +106,8 @@ describe('computeReportTotals', () => {
     const holidayEntries = (c.holidayHours ?? []).map((hours) => ({ category: 'holidayPay', amount: '0.00', hours }));
     bonusEntryFindMany.mockResolvedValue([...(c.entries ?? []), ...holidayEntries]);
 
+    customBonusFindMany.mockResolvedValue((c.custom ?? []).map((amount, i) => ({ name: `Custom ${i}`, amount })));
+
     const server = await computePayStatement(USER, PERIOD);
     const hours = await computePeriodHours(USER, PERIOD);
     const bonusInputs = { ...noBonus() };
@@ -120,6 +127,7 @@ describe('computeReportTotals', () => {
       },
       datedTotals,
       datedHours: { holidayPay: (c.holidayHours ?? []).reduce((sum, h) => sum + h, 0) },
+      customAmounts: (c.custom ?? []).map(Number),
     });
 
     expect(client.bonusHours).toEqual(server.bonusHours);
@@ -232,6 +240,19 @@ describe('computeReportTotals', () => {
     it('pays nothing without a pay rate', () => {
       expect(holiday(8, '').bonusAmounts.holidayPay).toBe(0);
     });
+  });
+
+  it('adds custom bonuses to Total Payment', () => {
+    const r = computeReportTotals({
+      totals: { totalHours: 8, overtime: 0 },
+      payRateInput: '10',
+      otPayRateInput: '',
+      bonusInputs: noBonus(),
+      datedTotals: noDated(),
+      customAmounts: [50, 25.5],
+    });
+    expect(r.bonusTotal).toBe(75.5);
+    expect(r.totalPay).toBe(155.5);
   });
 
   it('has no amounts before the timesheet loads', () => {

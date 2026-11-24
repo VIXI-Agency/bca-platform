@@ -74,6 +74,33 @@ export function hoursBonusAmount(hours: number | null | undefined, payRate: numb
   return Math.round(hours * payRate * 100) / 100;
 }
 
+/**
+ * Custom bonuses: one-off bonuses payroll names itself ("Raffle", "Birthday
+ * Bonus"), each a dollar amount for the pay period. They have no category of
+ * their own in BONUS_FIELDS: the name typed is the label on the report.
+ */
+export const CUSTOM_BONUS_CATEGORY = 'custom';
+/** Most custom bonuses per employee per pay period (keeps the PDF on one page). */
+export const CUSTOM_BONUS_MAX_PER_PERIOD = 5;
+export const CUSTOM_BONUS_NAME_MAX = 40;
+/** Names offered before payroll has typed any of its own. */
+export const CUSTOM_BONUS_STARTER_NAMES = ['Raffle', 'Birthday Bonus'] as const;
+
+/** A typed bonus name with outer and repeated spaces removed. */
+export const normalizeBonusName = (name: string) => name.trim().replace(/\s+/g, ' ');
+
+/** Why a new custom bonus can't be added to the period, or null if it fits. */
+export function customBonusRuleError(name: string, existingNames: readonly string[]): string | null {
+  if (existingNames.length >= CUSTOM_BONUS_MAX_PER_PERIOD) {
+    return `Custom bonuses: at most ${CUSTOM_BONUS_MAX_PER_PERIOD} per pay period.`;
+  }
+  const wanted = normalizeBonusName(name).toLowerCase();
+  if (existingNames.some((n) => normalizeBonusName(n).toLowerCase() === wanted)) {
+    return `There is already a "${normalizeBonusName(name)}" bonus in this pay period. Remove it to change the amount.`;
+  }
+  return null;
+}
+
 /** Longest note per employee per week (it prints on the one-page PDF). */
 export const BONUS_NOTES_MAX = 500;
 

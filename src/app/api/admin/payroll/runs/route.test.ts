@@ -183,6 +183,19 @@ describe('POST /api/admin/payroll/runs (approve)', () => {
     expect(lines.some((l) => l.category === 'holidayPay')).toBe(false);
   });
 
+  it('snapshots each custom bonus under the name payroll typed', async () => {
+    computePayStatement.mockResolvedValue({
+      ...amounts,
+      customBonuses: [{ name: 'Raffle', amount: 50 }, { name: 'Birthday Bonus', amount: 25.5 }],
+    });
+    await approve();
+    const lines: { category: string | null; label: string }[] = tx.payStatementLine.createMany.mock.calls[0][0].data;
+    expect(lines.filter((l) => l.category === 'custom')).toEqual([
+      { idStatement: 200, kind: 'bonus', category: 'custom', label: 'Raffle', quantity: null, rate: null, amount: 50 },
+      { idStatement: 200, kind: 'bonus', category: 'custom', label: 'Birthday Bonus', quantity: null, rate: null, amount: 25.5 },
+    ]);
+  });
+
   it('keeps the week’s note in the approved statement', async () => {
     computePayStatement.mockResolvedValue({ ...amounts, notes: 'Covered two extra shifts.' });
     await approve();

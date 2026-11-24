@@ -316,3 +316,95 @@ export const DATED_BONUS_RULES = {
 
 None. The three questions (replace the box, any day, one entry per day) were
 answered on 2026-11-24 and are recorded under Decisions.
+
+---
+
+# Spec, change 3: custom bonuses
+
+Status: approved by Carlos on 2026-11-24 ("ok dale"), after the requester said
+"The Custom Bonus box it's even better".
+
+## Objective
+
+Payroll first asked for Raffle and Birthday Bonus boxes (amounts only, no
+date), then explained that it adds one-off bonuses all the time. The
+Thanksgiving bonuses went into Discretionary Bonus because no box fit. A fixed
+box per bonus would bring the same request back each time.
+
+Add **Custom Bonuses**: payroll types a name and a dollar amount, and that
+name is what prints on the report.
+
+### Behavior
+
+1. A Custom Bonuses box sits with Holiday Pay, Wheel Spins and CCF Spiffs: a
+   name, an amount and Add. Saved bonuses list below, each with a remove button.
+2. A bonus saves on Add. Save Bonuses is not needed.
+3. The name box suggests names used before, most used first, so "Birthday
+   Bonus" is spelled one way. "Raffle" and "Birthday Bonus" are offered from
+   day one. Any other name can be typed.
+4. Each custom bonus prints as its own line, after the other bonuses, and adds
+   to the bonus total and Total Payment.
+5. Approving payroll snapshots one statement line per custom bonus, with the
+   typed name as its label.
+6. A locked period refuses add and remove.
+
+### Decisions
+
+1. Dollar amounts only. No date and no hours (confirmed in Slack).
+2. At most **5 per rep per pay period**, so the printed report stays on one
+   page. This cap is Carlos's proposal and can be raised.
+3. The same name cannot be added twice in one period. To change an amount,
+   remove the bonus and add it again.
+4. Names are up to 40 characters.
+5. No dedicated Raffle or Birthday boxes. Bonuses already typed into
+   Discretionary Bonus stay where they are.
+
+## Project Structure
+
+```
+prisma/schema.prisma                            PayrollCustomBonus (new model)
+prisma/migrations/20261124_custom_bonuses.sql   new table, idempotent
+src/lib/payroll/constants.ts                    cap, name length, customBonusRuleError
+src/lib/payroll/compute.ts                      customBonuses in the statement and bonusTotal
+src/app/api/admin/time/[userId]/custom-bonuses/route.ts   GET (with suggestions), POST
+src/app/api/admin/time/custom-bonuses/[id]/route.ts       DELETE
+src/app/api/admin/payroll/runs/route.ts         one snapshot line per custom bonus
+src/app/api/users/[id]/pay-schedule/route.ts    a pay-week change cannot strand one
+src/hooks/use-admin-time.ts                     useCustomBonuses, add, remove
+payment-report/custom-bonus-list.tsx            the box
+payment-report/totals.ts, payment-summary.tsx   live total and report lines
+```
+
+Tech stack, commands and code style are unchanged.
+
+## Testing Strategy
+
+| Level | File | Covers |
+|---|---|---|
+| Unit | `constants.test.ts` | cap of 5, repeated name, name tidying |
+| Route | `custom-bonuses/route.test.ts` | list, suggestions, add, cap, repeated name, bad input, locked period, admin only, delete |
+| Unit | `pay-statement.test.ts`, `totals.test.ts` | custom bonuses in the bonus total and gross pay; preview equals server |
+| Route | `payroll/runs/route.test.ts` | snapshot line per custom bonus |
+| Route | `pay-schedule/route.test.ts` | pay-week change refused when it would strand one |
+| Unit | `custom-bonus-list.test.ts`, `payment-summary.test.ts`, `bonus-editor.test.ts` | the box, the printed lines, the wiring |
+
+## Boundaries
+
+- **Always:** additive, idempotent migration; tests and lint before committing.
+- **Ask first:** running the migration (shared database); merging to `main`.
+- **Never:** change existing tables or rows; touch approved or paid statements.
+
+## Success Criteria
+
+- [ ] Adding "Raffle" with $50.00 raises Total Payment by $50.00 at once and survives a reload.
+- [ ] The report prints one line per custom bonus with the typed name.
+- [ ] The name box suggests Raffle and Birthday Bonus, then names used before.
+- [ ] A sixth bonus and a repeated name are refused with a clear message.
+- [ ] A locked period refuses add and remove with 409.
+- [ ] Approval writes one statement line per custom bonus.
+- [ ] The other bonuses behave exactly as before.
+- [ ] All tests pass; lint shows no new problems; build is clean.
+
+## Open Questions
+
+1. Is 5 per rep per pay period enough for payroll? (Carlos to confirm with the team.)

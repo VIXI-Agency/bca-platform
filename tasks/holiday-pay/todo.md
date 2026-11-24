@@ -141,7 +141,7 @@ Total Payment follow it as the admin types.
 **Acceptance criteria:**
 - [x] With Carlos's go-ahead, `20261124_holiday_pay.sql` has run on the shared database and `HolidayHours` exists. (Run 2026-11-24.)
 - [ ] In QA: 8 h for a rep with a known rate shows the right total on screen and on the PDF; after approving the run, changing the rate leaves the statement unchanged; a locked period rejects the edit.
-- [ ] A PR from `feat/holiday-pay` into `main` is open, links SPEC.md and waits for approval. No merge without it, since `main` deploys to production.
+- [x] PR #82 from `feat/holiday-pay` into `main` is open (issue #81), links SPEC.md and waits for approval. No merge without it, since `main` deploys to production.
 
 **Verification:**
 - [x] `SELECT COL_LENGTH('benjaise_sqluser2.PayrollBonuses', 'HolidayHours')` returns a value (4, an INT; 94 rows untouched)

@@ -7,7 +7,7 @@ import { getPayPeriodEnd, getTodayRangePST, parseDateParam } from '@/lib/time';
 import { computePayStatement, type PayStatementAmounts } from '@/lib/payroll/compute';
 import { payScheduleHistories } from '@/lib/payroll/pay-schedule-db';
 import { PAY_SCHEDULES, lastWorkDay, scheduleOn, weekStart, type PaySchedule } from '@/lib/payroll/pay-schedule';
-import { BONUS_FIELDS, BONUS_FIELD_LABELS, isCountedBonus } from '@/lib/payroll/constants';
+import { BONUS_FIELDS, BONUS_FIELD_LABELS, isCountedBonus, isHoursBonus } from '@/lib/payroll/constants';
 
 const isoDate = (d: Date) => d.toISOString().split('T')[0];
 
@@ -169,6 +169,13 @@ function statementLines(amounts: PayStatementAmounts) {
   for (const key of BONUS_FIELDS) {
     const amount = amounts.bonusAmounts[key];
     if (amount > 0) {
+      if (isHoursBonus(key)) {
+        // Paid by the hour (Holiday Pay): keep the hours and the rate they
+        // were paid at, so a later rate change can't alter the statement.
+        const quantity = amounts.bonusHours?.[key] ?? null;
+        lines.push({ kind: 'bonus', category: key, label: BONUS_FIELD_LABELS[key], quantity, rate: amounts.payRate, amount });
+        continue;
+      }
       const quantity = isCountedBonus(key) ? (amounts.bonusCounts?.[key] ?? null) : null;
       lines.push({ kind: 'bonus', category: key, label: BONUS_FIELD_LABELS[key], quantity, rate: null, amount });
     }

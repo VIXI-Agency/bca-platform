@@ -1,12 +1,16 @@
 import {
   BONUS_FIELDS,
   COUNTED_BONUS_FIELDS,
+  HOURS_BONUS_FIELDS,
   PERIOD_BONUS_FIELDS,
   bonusCount,
+  hoursBonusAmount,
   isDatedBonus,
+  isHoursBonus,
   type BonusFieldKey,
   type CountedBonusField,
   type DatedBonusCategory,
+  type HoursBonusField,
   type PeriodBonusField,
 } from '@/lib/payroll/constants';
 
@@ -19,6 +23,8 @@ export interface ReportTotalsInput {
   bonusInputs: Record<PeriodBonusField, string>;
   /** What's typed in the # box of Accounts / Verified Leads. */
   countInputs?: Partial<Record<CountedBonusField, string>>;
+  /** What's typed in the hours box of Holiday Pay. */
+  hoursInputs?: Partial<Record<HoursBonusField, string>>;
   /** Saved dated entries (Wheel Spins, CCF Spiffs), summed per category. */
   datedTotals: Record<DatedBonusCategory, number>;
 }
@@ -33,6 +39,8 @@ export interface ReportTotals {
   bonusAmounts: Record<BonusFieldKey, number>;
   /** How many accounts / verified leads to print (null when that bonus isn't paid). */
   bonusCounts: Record<CountedBonusField, number | null>;
+  /** Whole hours typed for Holiday Pay (null when blank, zero or not valid). */
+  bonusHours: Record<HoursBonusField, number | null>;
   bonusTotal: number;
   totalPay: number | null;
 }
@@ -44,6 +52,7 @@ export function computeReportTotals({
   otPayRateInput,
   bonusInputs,
   countInputs = {},
+  hoursInputs = {},
   datedTotals,
 }: ReportTotalsInput): ReportTotals {
   // The rate used for the live calculation and for print comes from what's
@@ -70,8 +79,17 @@ export function computeReportTotals({
       return [key, raw != null && !isNaN(raw) && raw >= 0 ? raw : 0];
     }),
   ) as Record<PeriodBonusField, number>;
+  // Holiday Pay is typed in hours and paid at the regular rate being typed
+  // above. Those hours stay out of the worked hours and of overtime.
+  const bonusHours = Object.fromEntries(
+    HOURS_BONUS_FIELDS.map((key) => [key, parseCount(hoursInputs[key]) || null]),
+  ) as Record<HoursBonusField, number | null>;
   const bonusAmounts = Object.fromEntries(
-    BONUS_FIELDS.map((key) => [key, isDatedBonus(key) ? datedTotals[key] : typed[key]]),
+    BONUS_FIELDS.map((key) => {
+      if (isDatedBonus(key)) return [key, datedTotals[key]];
+      if (isHoursBonus(key)) return [key, hoursBonusAmount(bonusHours[key], payRate)];
+      return [key, typed[key]];
+    }),
   ) as Record<BonusFieldKey, number>;
   const bonusTotal = cents(BONUS_FIELDS.reduce((sum, key) => sum + bonusAmounts[key], 0));
   const bonusCounts = Object.fromEntries(
@@ -79,7 +97,7 @@ export function computeReportTotals({
   ) as Record<CountedBonusField, number | null>;
   const totalPay = regularPay != null && otPay != null ? cents(regularPay + otPay + bonusTotal) : null;
 
-  return { payRate, otPayRate, regularPay, hasOvertime, otRateMissing, otPay, bonusAmounts, bonusCounts, bonusTotal, totalPay };
+  return { payRate, otPayRate, regularPay, hasOvertime, otRateMissing, otPay, bonusAmounts, bonusCounts, bonusHours, bonusTotal, totalPay };
 }
 
 /** A typed count as a whole number, or null when blank or not a valid count. */

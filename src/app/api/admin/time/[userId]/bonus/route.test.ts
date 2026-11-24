@@ -57,6 +57,40 @@ describe('/api/admin/time/[userId]/bonus — counts', () => {
   });
 });
 
+describe('/api/admin/time/[userId]/bonus — holiday hours', () => {
+  it('saves the holiday hours (the amount is never stored)', async () => {
+    const res = await put({ period: '2026-10-09', holidayHours: 8 });
+    expect(res.status).toBe(200);
+    const { create, update } = upsert.mock.calls[0][0];
+    expect(create).toMatchObject({ holidayHours: 8 });
+    expect(update).toMatchObject({ holidayHours: 8 });
+    expect(create).not.toHaveProperty('holidayPay');
+    expect(await res.json()).toMatchObject({ holidayHours: 8 });
+  });
+
+  it('has no business cap: 40 hours is accepted', async () => {
+    expect((await put({ period: '2026-10-09', holidayHours: 40 })).status).toBe(200);
+  });
+
+  it('clears hours that were left blank', async () => {
+    await put({ period: '2026-10-09', holidayHours: null });
+    expect(upsert.mock.calls[0][0].update.holidayHours).toBeNull();
+  });
+
+  it.each([7.5, -1, 1000])('rejects %s hours', async (holidayHours) => {
+    expect((await put({ period: '2026-10-09', holidayHours })).status).toBe(400);
+    expect(upsert).not.toHaveBeenCalled();
+  });
+
+  it('returns the saved hours, or null when there are none', async () => {
+    findUnique.mockResolvedValue({ holidayHours: 16 });
+    const url = 'http://localhost/api/admin/time/40/bonus?week=2026-10-09';
+    expect(await (await GET(new Request(url), params)).json()).toMatchObject({ holidayHours: 16 });
+    findUnique.mockResolvedValue(null);
+    expect(await (await GET(new Request(url), params)).json()).toMatchObject({ holidayHours: null });
+  });
+});
+
 describe('/api/admin/time/[userId]/bonus — notes', () => {
   it('saves the week’s note with the bonuses, trimmed', async () => {
     const res = await put({ period: '2026-10-09', accounts: 15, notes: '  Covered two extra shifts.\nGreat week!  ' });

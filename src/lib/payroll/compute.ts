@@ -3,13 +3,18 @@ import { userPeriodContaining } from './pay-schedule-db';
 import {
   BONUS_COUNT_KEYS,
   BONUS_FIELDS,
+  BONUS_HOURS_KEYS,
   COUNTED_BONUS_FIELDS,
   DATED_BONUS_CATEGORIES,
+  HOURS_BONUS_FIELDS,
   bonusCount,
+  hoursBonusAmount,
   isDatedBonus,
+  isHoursBonus,
   type BonusFieldKey,
   type CountedBonusField,
   type DatedBonusCategory,
+  type HoursBonusField,
 } from './constants';
 
 export interface TimeLogRow {
@@ -268,6 +273,8 @@ export interface PayStatementAmounts {
   bonusAmounts: Record<BonusFieldKey, number>;
   /** How many accounts / verified leads (null when that bonus isn't paid). */
   bonusCounts: Record<CountedBonusField, number | null>;
+  /** Hours behind each bonus paid by the hour (Holiday Pay); null when none. */
+  bonusHours: Record<HoursBonusField, number | null>;
   /** The week's note from the Payment Report (printed on the employee's PDF). */
   notes: string | null;
   bonusTotal: number;
@@ -312,11 +319,20 @@ export async function computePayStatement(userId: number, day: Date): Promise<Pa
       round2(entries.filter((e) => e.category === key).reduce((sum, e) => sum + Number(e.amount), 0)),
     ]),
   ) as Record<DatedBonusCategory, number>;
+  // Holiday Pay is stored as hours and paid at the regular rate. Those hours
+  // are not worked hours: they never add to regular hours or to overtime.
+  const bonusHours = Object.fromEntries(
+    HOURS_BONUS_FIELDS.map((key) => {
+      const saved = bonus?.[BONUS_HOURS_KEYS[key]];
+      return [key, saved != null && Number(saved) > 0 ? Number(saved) : null];
+    }),
+  ) as Record<HoursBonusField, number | null>;
   const bonusAmounts = Object.fromEntries(
-    BONUS_FIELDS.map((key) => [
-      key,
-      isDatedBonus(key) ? datedTotals[key] : bonus?.[key] != null ? Number(bonus[key]) : 0,
-    ]),
+    BONUS_FIELDS.map((key) => {
+      if (isDatedBonus(key)) return [key, datedTotals[key]];
+      if (isHoursBonus(key)) return [key, hoursBonusAmount(bonusHours[key], payRate)];
+      return [key, bonus?.[key] != null ? Number(bonus[key]) : 0];
+    }),
   ) as Record<BonusFieldKey, number>;
   const bonusTotal = round2(BONUS_FIELDS.reduce((sum, key) => sum + bonusAmounts[key], 0));
   const bonusCounts = Object.fromEntries(
@@ -335,6 +351,7 @@ export async function computePayStatement(userId: number, day: Date): Promise<Pa
     overtimePay,
     bonusAmounts,
     bonusCounts,
+    bonusHours,
     notes: bonus?.notes ?? null,
     bonusTotal,
     grossPay: round2(regularPay + overtimePay + bonusTotal),

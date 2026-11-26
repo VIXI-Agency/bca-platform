@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { importValidateSchema } from '@/lib/validators';
+import { classifyLead, describeRejection, type RawLead } from '@/lib/leads';
+import { loadBlocklists } from '@/lib/leads-db';
 
 export async function POST(request: NextRequest) {
   try {
@@ -27,49 +29,41 @@ export async function POST(request: NextRequest) {
     const { data } = parsed.data;
     const valid: number[] = [];
     const errors: { row: number; field: string; message: string }[] = [];
-
-    // Collect all phone digits for batch duplicate check
     const phoneDigitsInBatch = new Map<string, number[]>();
+    const blocklists = await loadBlocklists();
 
     for (let i = 0; i < data.length; i++) {
       const row = data[i];
       const rowNum = i + 1;
-      let rowValid = true;
+      const lead: RawLead = {
+        businessName: row.businessName || row.BusinessName || '',
+        phone: row.phone || row.Phone || '',
+        address: row.address || row.Address || '',
+        location: row.location || row.Location || '',
+        industry: row.industry || row.Industry || '',
+        timeZone: row.timeZone || row.TimeZone || row.timezone || '',
+      };
 
-      const businessName = row.businessName || row.BusinessName || '';
-      const phone = row.phone || row.Phone || '';
-
-      if (!businessName) {
-        errors.push({ row: rowNum, field: 'businessName', message: 'Business name is required' });
-        rowValid = false;
+      const verdict = classifyLead(lead, blocklists);
+      if (!verdict.ok) {
+        const kind = verdict.reason.kind;
+        errors.push({
+          row: rowNum,
+          field: kind === 'missing-name' || kind === 'blocked-name' ? 'businessName' : 'phone',
+          // Preview already prints "Row N:" in front of message.
+          message: describeRejection(verdict.reason, rowNum, lead.businessName).replace(/^Row \d+: /, ''),
+        });
+        continue;
       }
 
-      if (!phone) {
-        errors.push({ row: rowNum, field: 'phone', message: 'Phone number is required' });
-        rowValid = false;
-      } else {
-        const digits = phone.replace(/\D/g, '');
-        if (digits.length < 10) {
-          errors.push({ row: rowNum, field: 'phone', message: `Invalid phone number "${phone}"` });
-          rowValid = false;
-        } else {
-          // Track duplicates within the batch
-          const existing = phoneDigitsInBatch.get(digits);
-          if (existing) {
-            existing.push(rowNum);
-          } else {
-            phoneDigitsInBatch.set(digits, [rowNum]);
-          }
-        }
-      }
-
-      if (rowValid) {
-        valid.push(rowNum);
-      }
+      const existing = phoneDigitsInBatch.get(verdict.digits);
+      if (existing) existing.push(rowNum);
+      else phoneDigitsInBatch.set(verdict.digits, [rowNum]);
+      valid.push(rowNum);
     }
 
     // Check for duplicates within the batch
-    for (const [digits, rows] of phoneDigitsInBatch) {
+    for (const rows of phoneDigitsInBatch.values()) {
       if (rows.length > 1) {
         for (const rowNum of rows.slice(1)) {
           errors.push({ row: rowNum, field: 'phone', message: `Duplicate phone number within import data` });

@@ -13,7 +13,7 @@ import {
   Save,
 } from 'lucide-react';
 import Header from '@/components/layout/header';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -128,6 +128,8 @@ export default function UsersPage() {
   const [editingUser, setEditingUser] = useState<User | null>(null);
   const [deactivatingUser, setDeactivatingUser] = useState<User | null>(null);
   const [form, setForm] = useState<UserFormState>(INITIAL_FORM);
+  const [formError, setFormError] = useState<string | null>(null);
+  const [deactivateError, setDeactivateError] = useState<string | null>(null);
   const [showSchedule, setShowSchedule] = useState(false);
   const [schedule, setSchedule] = useState<ScheduleDay[]>(DEFAULT_SCHEDULE);
 
@@ -223,8 +225,6 @@ export default function UsersPage() {
     });
   }
 
-  const [formError, setFormError] = useState<string | null>(null);
-
   async function handleSave() {
     if (!form.name.trim() || !form.email.trim()) return;
     setFormError(null);
@@ -300,8 +300,6 @@ export default function UsersPage() {
       schedule,
     });
   }
-
-  const [deactivateError, setDeactivateError] = useState<string | null>(null);
 
   async function handleDeactivate() {
     if (!deactivatingUser) return;

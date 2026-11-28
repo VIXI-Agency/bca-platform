@@ -1,11 +1,6 @@
 @import url("https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap");
 @import "tailwindcss";
 
-/* ============================================
-   PulseBC - Dark Theme
-   Design Language: aso-platform
-   ============================================ */
-
 :root {
   /* Background layers */
   --bg-primary: #0a0a12;
@@ -58,10 +53,6 @@
   --transition-slow: 400ms cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-/* ============================================
-   Light Theme
-   ============================================ */
-
 [data-theme="light"] {
   --bg-primary: #f8fafc;
   --bg-secondary: #ffffff;
@@ -110,10 +101,6 @@
   --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, sans-serif;
 }
 
-/* ============================================
-   Base Styles
-   ============================================ */
-
 html {
   scroll-behavior: smooth;
 }
@@ -128,10 +115,6 @@ body {
   line-height: 1.6;
 }
 
-/* ============================================
-   Selection Highlight
-   ============================================ */
-
 ::selection {
   background-color: var(--accent-glow);
   color: var(--text-primary);
@@ -141,10 +124,6 @@ body {
   background-color: var(--accent-glow);
   color: var(--text-primary);
 }
-
-/* ============================================
-   Custom Scrollbar
-   ============================================ */
 
 ::-webkit-scrollbar {
   width: 8px;
@@ -176,10 +155,6 @@ body {
   scrollbar-color: var(--border-strong) var(--bg-secondary);
 }
 
-/* ============================================
-   Utility Classes - Glow Effects
-   ============================================ */
-
 .glow {
   box-shadow:
     0 0 20px var(--accent-glow),
@@ -194,10 +169,6 @@ body {
     0 0 20px rgba(0, 212, 255, 0.05);
   border-color: rgba(0, 212, 255, 0.4);
 }
-
-/* ============================================
-   Utility Classes - Cards
-   ============================================ */
 
 .card {
   background-color: var(--bg-card);
@@ -235,10 +206,6 @@ body {
     0 0 30px rgba(0, 212, 255, 0.05);
 }
 
-/* ============================================
-   Form Input Focus Styles
-   ============================================ */
-
 input,
 textarea,
 select {
@@ -262,10 +229,6 @@ input::placeholder,
 textarea::placeholder {
   color: var(--text-muted);
 }
-
-/* ============================================
-   Interactive Element Transitions
-   ============================================ */
 
 a,
 button,
@@ -291,10 +254,6 @@ button:active,
   transform: scale(0.98);
 }
 
-/* ============================================
-   Link Styles
-   ============================================ */
-
 a {
   color: var(--accent);
   text-decoration: none;
@@ -303,14 +262,6 @@ a {
 a:hover {
   color: var(--accent-hover);
 }
-
-/* ============================================
-   Reduced Motion
-   ============================================ */
-
-/* ============================================
-   Rebuttal HTML Content
-   ============================================ */
 
 .rebuttal-content h1,
 .rebuttal-content h2,

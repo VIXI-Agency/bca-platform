@@ -31,7 +31,6 @@ export default function BlacklistPage() {
   const [newKeyword, setNewKeyword] = useState('');
   const [newAreaCode, setNewAreaCode] = useState('');
 
-  // ─── Blocked Names ───────────────────────────────────────────────────────────
   const { data: names = [], isLoading: namesLoading } = useQuery<BlockedName[]>({
     queryKey: ['blacklist-names'],
     queryFn: () => fetch('/api/admin/blacklist/names').then((r) => r.json()),
@@ -57,7 +56,6 @@ export default function BlacklistPage() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['blacklist-names'] }),
   });
 
-  // ─── Blocked Area Codes ──────────────────────────────────────────────────────
   const { data: areaCodes = [], isLoading: codesLoading } = useQuery<BlockedAreaCode[]>({
     queryKey: ['blacklist-areacodes'],
     queryFn: () => fetch('/api/admin/blacklist/areacodes').then((r) => r.json()),
@@ -154,7 +152,6 @@ export default function BlacklistPage() {
             </TabsTrigger>
           </TabsList>
 
-          {/* ── Names Tab ── */}
           <TabsContent value="names">
             <Card>
               <CardHeader>
@@ -235,7 +232,6 @@ export default function BlacklistPage() {
             </Card>
           </TabsContent>
 
-          {/* ── Area Codes Tab ── */}
           <TabsContent value="areacodes">
             <Card>
               <CardHeader>

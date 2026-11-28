@@ -11,18 +11,17 @@ export async function GET(
     if (!session?.user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
     const { id } = await params;
-    const rows = await prisma.$queryRaw<{ mediaData: string; mediaType: string; mediaName: string }[]>`
-      SELECT MediaData as mediaData, MediaType as mediaType, MediaName as mediaName
-      FROM benjaise_sqluser2.Messages
-      WHERE Id = ${Number(id)} AND MediaData IS NOT NULL
-    `;
+    const row = await prisma.message.findFirst({
+      where: { id: Number(id), mediaData: { not: null } },
+      select: { mediaData: true, mediaType: true, mediaName: true },
+    });
 
-    if (!rows[0]?.mediaData) return NextResponse.json({ error: 'Not found' }, { status: 404 });
+    if (!row?.mediaData) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
     return NextResponse.json({
-      data: rows[0].mediaData,
-      type: rows[0].mediaType,
-      name: rows[0].mediaName,
+      data: row.mediaData,
+      type: row.mediaType,
+      name: row.mediaName,
     });
   } catch (error) {
     const msg = error instanceof Error ? error.message : String(error);

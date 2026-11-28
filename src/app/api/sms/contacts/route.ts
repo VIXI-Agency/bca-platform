@@ -7,11 +7,10 @@ export async function GET() {
     const session = await auth();
     if (!session?.user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-    const contacts = await prisma.$queryRaw<{ id: number; phoneNumber: string; name: string }[]>`
-      SELECT Id as id, PhoneNumber as phoneNumber, Name as name
-      FROM benjaise_sqluser2.SmsContacts
-      ORDER BY Name ASC
-    `;
+    const contacts = await prisma.contact.findMany({
+      select: { id: true, phoneNumber: true, name: true },
+      orderBy: { name: 'asc' },
+    });
     return NextResponse.json(contacts);
   } catch (error) {
     const msg = error instanceof Error ? error.message : String(error);
@@ -33,21 +32,21 @@ export async function POST(request: NextRequest) {
     const trimmedName = name.trim();
     const now = new Date();
 
-    const existing = await prisma.$queryRaw<{ id: number }[]>`
-      SELECT Id as id FROM benjaise_sqluser2.SmsContacts WHERE PhoneNumber = ${phone}
-    `;
+    const existing = await prisma.contact.findUnique({
+      where: { phoneNumber: phone },
+      select: { id: true },
+    });
 
-    if (existing.length > 0) {
-      await prisma.$executeRaw`
-        UPDATE benjaise_sqluser2.SmsContacts
-        SET Name = ${trimmedName}, UpdatedAt = ${now}
-        WHERE PhoneNumber = ${phone}
-      `;
+    if (existing) {
+      // updateMany matches UPDATE: a missing row is not an error.
+      await prisma.contact.updateMany({
+        where: { phoneNumber: phone },
+        data: { name: trimmedName, updatedAt: now },
+      });
     } else {
-      await prisma.$executeRaw`
-        INSERT INTO benjaise_sqluser2.SmsContacts (PhoneNumber, Name, UpdatedAt)
-        VALUES (${phone}, ${trimmedName}, ${now})
-      `;
+      await prisma.contact.create({
+        data: { phoneNumber: phone, name: trimmedName, updatedAt: now },
+      });
     }
 
     return NextResponse.json({ phoneNumber: phone, name: trimmedName });
@@ -66,9 +65,7 @@ export async function DELETE(request: NextRequest) {
     const { phone } = await request.json();
     if (!phone) return NextResponse.json({ error: 'phone required' }, { status: 400 });
 
-    await prisma.$executeRaw`
-      DELETE FROM benjaise_sqluser2.SmsContacts WHERE PhoneNumber = ${phone}
-    `;
+    await prisma.contact.deleteMany({ where: { phoneNumber: phone } });
     return NextResponse.json({ ok: true });
   } catch (error) {
     const msg = error instanceof Error ? error.message : String(error);

@@ -11,9 +11,8 @@ export async function DELETE(
     if (!session?.user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
     const { id } = await params;
-    await prisma.$executeRaw`
-      DELETE FROM benjaise_sqluser2.SmsTemplates WHERE Id = ${Number(id)}
-    `;
+    // deleteMany matches DELETE: a missing id still returns ok.
+    await prisma.smsTemplate.deleteMany({ where: { id: Number(id) } });
     return NextResponse.json({ ok: true });
   } catch (error) {
     const msg = error instanceof Error ? error.message : String(error);

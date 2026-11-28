@@ -7,11 +7,10 @@ export async function GET() {
     const session = await auth();
     if (!session?.user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-    const templates = await prisma.$queryRaw<{ id: number; title: string; body: string; sortOrder: number }[]>`
-      SELECT Id as id, Title as title, Body as body, SortOrder as sortOrder
-      FROM benjaise_sqluser2.SmsTemplates
-      ORDER BY SortOrder ASC, Id ASC
-    `;
+    const templates = await prisma.smsTemplate.findMany({
+      select: { id: true, title: true, body: true, sortOrder: true },
+      orderBy: [{ sortOrder: 'asc' }, { id: 'asc' }],
+    });
     return NextResponse.json(templates);
   } catch (error) {
     const msg = error instanceof Error ? error.message : String(error);
@@ -30,18 +29,12 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'title and body required' }, { status: 400 });
     }
 
-    await prisma.$executeRaw`
-      INSERT INTO benjaise_sqluser2.SmsTemplates (Title, Body, SortOrder)
-      VALUES (${title.trim()}, ${body.trim()}, 0)
-    `;
+    const created = await prisma.smsTemplate.create({
+      data: { title: title.trim(), body: body.trim(), sortOrder: 0 },
+      select: { id: true, title: true, body: true, sortOrder: true },
+    });
 
-    const created = await prisma.$queryRaw<{ id: number; title: string; body: string; sortOrder: number }[]>`
-      SELECT TOP 1 Id as id, Title as title, Body as body, SortOrder as sortOrder
-      FROM benjaise_sqluser2.SmsTemplates
-      ORDER BY Id DESC
-    `;
-
-    return NextResponse.json(created[0], { status: 201 });
+    return NextResponse.json(created, { status: 201 });
   } catch (error) {
     const msg = error instanceof Error ? error.message : String(error);
     console.error('POST /api/sms/templates error:', error);
